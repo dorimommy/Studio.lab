@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Studio.lab",
+  "version": "1.0",
+  "description": "Studio.lab — performance optimizer & content bypass for Google AI Studio.",
+  "permissions": [
+    "storage"
+  ],
+  "icons": {
+    "16": "images/16.png",
+    "64": "images/64.png",
+    "128": "images/128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "images/16.png",
+      "64": "images/64.png",
+      "128": "images/128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "modules/registry.js",
+        "modules/bypass-new.js",
+        "modules/bypass-old.js",
+        "modules/optimizer-smart.js",
+        "modules/optimizer-hard.js",
+        "modules/scroll-bottom.js",
+        "modules/word-counter.js",
+        "modules/banner-remover.js",
+        "content.js"
+      ],
+      "css": [
+        "sl-panel.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/Banner.png"
+      ],
+      "matches": [
+        "https://aistudio.google.com/*"
+      ]
+    }
+  ]
+}
