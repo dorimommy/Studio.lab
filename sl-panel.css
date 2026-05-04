@@ -785,12 +785,16 @@
 }
 
 .sl-word-counter {
-  margin-left: 8px;
+  margin-left: 0;
   color: var(--color-v3-text-var, #8c8c8c);
   font-family: Inter, sans-serif;
   font-size: 11px;
   font-weight: 400;
   transition: color 0.2s ease;
+}
+
+.sl-word-counter::before {
+  content: '\00A0\2022\00A0';
 }
 
 /* ── Scroll to Bottom Button ──────────────────────────────────────
@@ -802,11 +806,11 @@ ms-prompt-box {
 .sl-scroll-bottom-btn {
   position: absolute;
   bottom: 100%;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--color-v3-surface-container-high, #252525);
   border: 1px solid var(--color-v3-outline-var, #262626);
@@ -816,8 +820,7 @@ ms-prompt-box {
   justify-content: center;
   cursor: pointer;
   z-index: 9999999 !important;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .sl-scroll-bottom-btn.visible {
@@ -828,13 +831,11 @@ ms-prompt-box {
 .sl-scroll-bottom-btn:hover {
   background-color: var(--color-v3-surface-container-highest, #2a2a2a);
   border-color: var(--color-v3-outline, #444);
-  color: #fff;
-  transform: translateX(-50%) translateY(-2px);
 }
 
 .sl-scroll-bottom-btn .sl-icon {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
   stroke: none;
 }

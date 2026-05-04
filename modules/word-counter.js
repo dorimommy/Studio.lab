@@ -108,31 +108,34 @@
     let text = '';
 
     if (isModel) {
-      const contentEl = turnNode.querySelector('.turn-content');
-      if (contentEl) {
-        const clone = contentEl.cloneNode(true);
-        // Remove thought chunks, tool calls, buttons, and invisible markdown artifacts
-        clone.querySelectorAll('ms-thought-chunk, expandable-content, .sl-word-counter, button, ms-feedback-buttons, ms-copy-button, style, script, [hidden], .hidden, .hide, .invisible').forEach(el => el.remove());
-        // Sometimes AI Studio has multiple versions of text (rendered/raw). Pick only the visible one.
-        const rendered = clone.querySelector('ms-markdown') || clone;
-        text = rendered.textContent || '';
-      }
+      // Use innerText directly on ms-text-chunk elements for accurate visible text
+      // This avoids double-counting from nested cmark-node textContent
+      const textChunks = turnNode.querySelectorAll('ms-prompt-chunk.text-chunk ms-text-chunk');
+      const parts = [];
+      textChunks.forEach(chunk => {
+        const t = chunk.innerText;
+        if (t) parts.push(t);
+      });
+      text = parts.join('\n');
     } else {
+      // User turn — get visible text from the content area
       const userContent = turnNode.querySelector('.user-query') ||
                           turnNode.querySelector('.prompt-text') ||
-                          turnNode.querySelector('.content-wrapper');
+                          turnNode.querySelector('.content-wrapper') ||
+                          turnNode.querySelector('.turn-content');
       if (userContent) {
-        const clone = userContent.cloneNode(true);
-        clone.querySelectorAll('style, script, [hidden], .hidden, .hide, .invisible').forEach(el => el.remove());
-        text = clone.textContent || '';
+        text = userContent.innerText || '';
       }
     }
 
+    // Normalize whitespace: collapse runs of spaces/tabs but preserve word boundaries
     const trimmed = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-    const words = trimmed ? trimmed.split(' ').filter(w => w.trim().length > 0) : [];
+    // Word count: split by whitespace boundaries
+    const words = trimmed ? trimmed.split(/\s+/).filter(w => w.length > 0) : [];
     const wordsCount = words.length;
-    const charsCount = trimmed.replace(/\s/g, '').length;
+    // Character count: total chars including spaces (matches Word Counter convention)
+    const charsCount = trimmed.length;
 
     if (wordsCount === 0 && charsCount === 0) {
       const existing = header.querySelector('.sl-word-counter');
@@ -147,8 +150,9 @@
       header.appendChild(badge);
     }
 
-    const newContent = `\u00A0\u2022\u00A0${wordsCount} words / ${charsCount} chars`;
-    if (badge.textContent !== newContent) {
+    const newContent = `${wordsCount} words \u2022 ${charsCount} chars`;
+    if (badge.getAttribute('data-content') !== newContent) {
+      badge.setAttribute('data-content', newContent);
       badge.textContent = newContent;
     }
   }

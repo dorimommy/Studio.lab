@@ -19,6 +19,7 @@
     title: 'Native (Angular)',
     subtitle: 'network-level-interceptor',
     icon: 'flash_on',
+    badge: { text: 'Recommended', className: 'new' },
     modeKey: 'bypassMode',
     modeValue: 'angular',
     enabledKey: 'bypassEnabled',

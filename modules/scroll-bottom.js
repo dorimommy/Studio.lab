@@ -65,7 +65,7 @@
       activeScroller.addEventListener('scroll', handleScroll);
     }
 
-    const isGenerating = !!document.querySelector('ms-chat-turn[generating], .generating, ms-chat-turn:last-of-type .typing');
+    const isGenerating = checkIsGenerating();
     if (scrollButton) {
       const wasGenerating = scrollButton.classList.contains('generating');
       if (isGenerating !== wasGenerating) {
@@ -86,7 +86,7 @@
     scrollButton.className = 'sl-scroll-bottom-btn';
     scrollButton.setAttribute('aria-label', 'Scroll to bottom');
     
-    const isGenerating = !!document.querySelector('ms-chat-turn[generating], .generating, ms-chat-turn:last-of-type .typing');
+    const isGenerating = checkIsGenerating();
     scrollButton.classList.toggle('generating', isGenerating);
     updateButtonIcon(isGenerating);
 
@@ -134,6 +134,18 @@
     
     // Always visible if generating, otherwise only when scrolled up
     scrollButton.classList.toggle('visible', isGenerating || distanceFromBottom > 40);
+  }
+
+  function checkIsGenerating() {
+    // Phase 1: "Thinking" shimmer indicator
+    if (document.querySelector('ms-chat-loading-indicator')) return true;
+    // Phase 2: Text is streaming — AI Studio shows a stop/cancel button
+    const promptBox = document.querySelector('ms-prompt-box');
+    if (promptBox) {
+      const stopBtn = promptBox.querySelector('button[aria-label*="top"], button[aria-label*="ancel"]');
+      if (stopBtn) return true;
+    }
+    return false;
   }
 
   function findActiveScroller() {

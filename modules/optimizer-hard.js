@@ -18,7 +18,6 @@
     title: 'Physical (Aggressive)',
     subtitle: 'permanent-memory-cleanup',
     icon: 'delete',
-    badge: { text: 'Deleting', className: 'danger' },
     modeKey: 'optimizerMode',
     modeValue: 'hard',
     enabledKey: 'optimizerEnabled',
