@@ -11,13 +11,9 @@
   const EVENT_NAME = '__aisu_xhrCapture';
 
   let bypassEnabled = true;
+
   window.addEventListener('__aisu_toggle', (e) => {
-    if (bypassEnabled === e.detail) return;
-    bypassEnabled = e.detail;
-    console.log(
-      `%c[Studio.lab] 🛡️ Bypass ${bypassEnabled ? 'ACTIVE ✅' : 'DISABLED ❌'}`,
-      bypassEnabled ? 'color:#66bb6a' : 'color:#ff5252'
-    );
+    bypassEnabled = !!e.detail;
   });
 
   // ── Save originals BEFORE Angular ──────────────────────────────────
@@ -39,6 +35,10 @@
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__aisuUrl = typeof url === 'string' ? url : '';
     this.__aisuIsGen = this.__aisuUrl.includes(URL_MARKER);
+    if (this.__aisuIsGen) {
+      window.__sl_last_was_blocked = false;
+      this.__aisuStartTime = Date.now();
+    }
     return _origOpen.apply(this, arguments);
   };
 
@@ -53,13 +53,20 @@
     let snapTime = 0;
     let didLogSanitize = false;
 
+    let manualStop = false;
+    window.addEventListener('__sl_manual_stop', () => { manualStop = true; });
+
     // ── 1. ABORT BLOCK ───────────────────────────────────────────────
     xhr.abort = function () {
-      if (!bypassEnabled) return _origAbort.apply(xhr, arguments);
-      console.log(
-        '%c[Studio.lab] 🚫 abort() blocked — stream continues',
-        'color:#ff9800;font-weight:bold'
-      );
+      const duration = Date.now() - (this.__aisuStartTime || 0);
+      if (manualStop || duration > 1500) {
+        console.log(`%c[Studio.lab] ℹ️ Allowing abort (manualStop=${manualStop}, duration=${duration}ms)`, 'color:#4fc3f7');
+        manualStop = false;
+        return _origAbort.apply(this, arguments);
+      }
+
+      console.log('%c[Studio.lab] 🚫 abort() blocked — preserving stream', 'color:#ff9800;font-weight:bold');
+      return; 
     };
 
     // ── 2. RESPONSE SANITIZATION ─────────────────────────────────────
@@ -75,6 +82,9 @@
               '%c[Studio.lab] ✅ Block signal neutralized — text preserved',
               'color:#66bb6a;font-weight:bold'
             );
+            window.__sl_last_was_blocked = true;
+            // Signal to other modules that content was blocked
+            window.dispatchEvent(new CustomEvent('__sl_content_blocked'));
           }
           return clean;
         },

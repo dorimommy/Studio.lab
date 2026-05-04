@@ -10,6 +10,9 @@
   let intervalId = null;
   let scrollButton = null;
   let activeScroller = null;
+  let generationObserver = null;
+  let lastObservedTurn = null;
+  let isGenerating = false;
 
   window.StudioLab.registerModule({
     id: 'scroll-bottom',
@@ -35,6 +38,7 @@
     onRouteChange() {
       scrollButton = null;
       activeScroller = null;
+      stopGenerationObserver();
     }
   });
 
@@ -65,14 +69,8 @@
       activeScroller.addEventListener('scroll', handleScroll);
     }
 
-    const isGenerating = checkIsGenerating();
-    if (scrollButton) {
-      const wasGenerating = scrollButton.classList.contains('generating');
-      if (isGenerating !== wasGenerating) {
-        scrollButton.classList.toggle('generating', isGenerating);
-        updateButtonIcon(isGenerating);
-      }
-    }
+    // Watch the last ms-chat-turn for Angular content mutations
+    watchLastTurn();
 
     handleScroll();
   }
@@ -85,10 +83,7 @@
     scrollButton.type = 'button';
     scrollButton.className = 'sl-scroll-bottom-btn';
     scrollButton.setAttribute('aria-label', 'Scroll to bottom');
-    
-    const isGenerating = checkIsGenerating();
-    scrollButton.classList.toggle('generating', isGenerating);
-    updateButtonIcon(isGenerating);
+    updateButtonIcon(false);
 
     anchor.appendChild(scrollButton);
 
@@ -102,9 +97,9 @@
     });
   }
 
-  function updateButtonIcon(isGenerating) {
+  function updateButtonIcon(generating) {
     if (!scrollButton) return;
-    if (isGenerating) {
+    if (generating) {
       scrollButton.innerHTML = `
         <div class="sl-dots">
           <span></span>
@@ -127,25 +122,90 @@
       return;
     }
 
-    const isGenerating = scrollButton.classList.contains('generating');
     const distanceFromBottom = activeScroller.scrollHeight -
       activeScroller.scrollTop -
       activeScroller.clientHeight;
-    
-    // Always visible if generating, otherwise only when scrolled up
-    scrollButton.classList.toggle('visible', isGenerating || distanceFromBottom > 40);
+
+    // Only visible when scrolled away from bottom — generation only affects the icon
+    scrollButton.classList.toggle('visible', distanceFromBottom > 40);
   }
 
-  function checkIsGenerating() {
-    // Phase 1: "Thinking" shimmer indicator
-    if (document.querySelector('ms-chat-loading-indicator')) return true;
-    // Phase 2: Text is streaming — AI Studio shows a stop/cancel button
-    const promptBox = document.querySelector('ms-prompt-box');
-    if (promptBox) {
-      const stopBtn = promptBox.querySelector('button[aria-label*="top"], button[aria-label*="ancel"]');
-      if (stopBtn) return true;
+  /* ── Native generation detection via MutationObserver ──────────── */
+
+  function watchLastTurn() {
+    const turns = document.querySelectorAll('ms-chat-turn');
+    if (!turns.length) return;
+
+    const lastTurn = turns[turns.length - 1];
+    if (lastTurn === lastObservedTurn) return;
+
+    stopGenerationObserver();
+    lastObservedTurn = lastTurn;
+
+    // Also check for ms-chat-loading-indicator (Thinking phase)
+    const hasThinking = !!lastTurn.querySelector('ms-chat-loading-indicator');
+    setGenerating(hasThinking);
+
+    generationObserver = new MutationObserver((mutations) => {
+      const hasThinking = !!lastObservedTurn.querySelector('ms-chat-loading-indicator');
+      let hasContentChange = false;
+
+      for (const m of mutations) {
+        if (m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
+          // Skip mutations in non-content areas (actions bar, tooltips, footer)
+          const target = m.target;
+          if (target.closest && (
+            target.closest('.actions-container') ||
+            target.closest('.turn-footer') ||
+            target.closest('.hover-or-edit')
+          )) continue;
+
+          // Ignore our own injected elements
+          const isOurs = Array.from(m.addedNodes).every(n =>
+            n.nodeType === 1 && n.className && typeof n.className === 'string' && n.className.startsWith('sl-')
+          );
+          if (!isOurs) {
+            hasContentChange = true;
+            break;
+          }
+        }
+      }
+
+      if (hasThinking || hasContentChange) {
+        setGenerating(true);
+        clearTimeout(generationObserver._stopTimer);
+        generationObserver._stopTimer = setTimeout(() => {
+          const stillThinking = !!(lastObservedTurn && lastObservedTurn.querySelector('ms-chat-loading-indicator'));
+          if (!stillThinking) setGenerating(false);
+        }, 2000);
+      }
+    });
+
+    // Only observe the content area, not action buttons/tooltips
+    const contentArea = lastTurn.querySelector('.virtual-scroll-container') || lastTurn;
+    generationObserver.observe(contentArea, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  function stopGenerationObserver() {
+    if (generationObserver) {
+      clearTimeout(generationObserver._stopTimer);
+      generationObserver.disconnect();
+      generationObserver = null;
     }
-    return false;
+    lastObservedTurn = null;
+    setGenerating(false);
+  }
+
+  function setGenerating(value) {
+    if (isGenerating === value) return;
+    isGenerating = value;
+    if (scrollButton) {
+      scrollButton.classList.toggle('generating', value);
+      updateButtonIcon(value);
+    }
   }
 
   function findActiveScroller() {
