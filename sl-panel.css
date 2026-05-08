@@ -866,62 +866,6 @@ ms-prompt-box {
   0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
   40% { transform: scale(1.0); opacity: 1; }
 }
-/* ── Continue Generation Button ──────────────────────────────────────
-   Placed at the bottom of the turn content. Native ms-button-primary style. */
-.sl-continue-btn {
-  position: absolute !important;
-  bottom: 0 !important;
-  right: 16px !important; /* Справа під плашкою */
-  transform: translateY(50%) !important; /* По центру нижньої лінії по Y */
-  z-index: 100 !important;
-  
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  height: 32px !important;
-  padding: 0 16px !important;
-  border-radius: 16px !important;
-  cursor: pointer !important;
-  
-  /* Нейтральний стиль (як інші кнопки Studio.lab) */
-  background-color: var(--color-v3-surface-container-high, #252525) !important;
-  color: var(--color-v3-text, #d4d4d4) !important;
-  border: 1px solid var(--color-v3-outline-var, #262626) !important;
-  
-  font-family: Inter, "Google Sans", sans-serif !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  transition: filter 0.2s ease, opacity 0.2s ease !important;
-  box-shadow: none !important;
-}
-
-.sl-continue-btn:hover {
-  filter: brightness(1.2) !important;
-}
-
-.sl-continue-btn:disabled {
-  opacity: 0.5 !important;
-  cursor: not-allowed !important;
-}
-
-/* --- Continue Generation Real-time Stitching --- */
-
-.sl-continue-hidden {
-  display: none !important;
-}
-
-ms-chat-turn.sl-realtime-stitch .turn-header,
-ms-chat-turn.sl-realtime-stitch .author-label,
-ms-chat-turn.sl-realtime-stitch ms-avatar,
-ms-chat-turn.sl-realtime-stitch .actions-container {
-  display: none !important;
-}
-
-ms-chat-turn.sl-realtime-stitch .chat-turn-container {
-  margin-top: -16px !important;
-  padding-top: 0 !important;
-}
-
 @media screen and (max-width: 640px) {
   .sl-overlay {
     padding: 0;

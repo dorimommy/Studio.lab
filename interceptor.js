@@ -35,10 +35,6 @@
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__aisuUrl = typeof url === 'string' ? url : '';
     this.__aisuIsGen = this.__aisuUrl.includes(URL_MARKER);
-    if (this.__aisuIsGen) {
-      window.__sl_last_was_blocked = false;
-      this.__aisuStartTime = Date.now();
-    }
     return _origOpen.apply(this, arguments);
   };
 
@@ -53,18 +49,8 @@
     let snapTime = 0;
     let didLogSanitize = false;
 
-    let manualStop = false;
-    window.addEventListener('__sl_manual_stop', () => { manualStop = true; });
-
-    // ── 1. ABORT BLOCK ───────────────────────────────────────────────
+    // ── 1. ABORT BLOCK (Core Bypass Feature) ─────────────────────────
     xhr.abort = function () {
-      const duration = Date.now() - (this.__aisuStartTime || 0);
-      if (manualStop || duration > 1500) {
-        console.log(`%c[Studio.lab] ℹ️ Allowing abort (manualStop=${manualStop}, duration=${duration}ms)`, 'color:#4fc3f7');
-        manualStop = false;
-        return _origAbort.apply(this, arguments);
-      }
-
       console.log('%c[Studio.lab] 🚫 abort() blocked — preserving stream', 'color:#ff9800;font-weight:bold');
       return; 
     };
@@ -82,9 +68,6 @@
               '%c[Studio.lab] ✅ Block signal neutralized — text preserved',
               'color:#66bb6a;font-weight:bold'
             );
-            window.__sl_last_was_blocked = true;
-            // Signal to other modules that content was blocked
-            window.dispatchEvent(new CustomEvent('__sl_content_blocked'));
           }
           return clean;
         },
@@ -107,7 +90,7 @@
       });
     }
 
-    // ── 3. Snap for content.js fallback ──────────────────────────────
+    // ── 3. Snap for fallback ─────────────────────────────────────────
     xhr.addEventListener('readystatechange', function () {
       if (this.readyState === 3) {
         const raw = _nativeRT ? _nativeRT.call(this) : '';

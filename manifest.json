@@ -45,6 +45,7 @@
         "modules/scroll-bottom.js",
         "modules/word-counter.js",
         "modules/banner-remover.js",
+        "modules/photo-grid.js",
         "content.js"
       ],
       "css": [
