@@ -12,192 +12,118 @@
   let dialogObserver = null;
 
   const CSS = `
-    /* --- 1. Grid System (Virtual Scroll Safe) --- */
+    /* --- 1. Safe Flex Architecture (INSIDE the turn, total stability) --- */
     
-    .cdk-virtual-scroll-content-wrapper {
+    /* Замість того, щоб ламати скроллер, ми робимо flex-сітку всередині самого повідомлення */
+    ms-chat-turn .chunk-container {
       display: flex !important;
       flex-wrap: wrap !important;
-      align-content: flex-start !important;
-      font-size: 14px !important;
+      gap: 8px !important;
+      align-items: flex-start !important;
     }
 
-    /* Force Media Turns to flow in a flex grid */
-    ms-chat-session ms-chat-turn {
-      width: 100% !important;
-      flex: 0 0 100% !important;
-      position: relative !important;
-      top: 0 !important;
-      left: 0 !important;
-      transform: none !important;
-      margin-bottom: 0 !important;
-      box-sizing: border-box !important;
+    /* Базово всі чанки (текст, думки) займають 100% ширини і йдуть останніми */
+    ms-chat-turn .chunk-container > * {
+      flex: 1 1 100% !important;
+      order: 3 !important; 
     }
 
-    /* Break element to separate Images from Files */
-    .sl-grid-break {
-      flex-basis: 100% !important;
-      width: 100% !important;
-      height: 12px !important;
+    /* --- 2. Image Chunk Styling (Strict Uniformity) --- */
+    
+    /* СОРТУВАННЯ: Фотки отримують order: 1 (будуть першими) */
+    ms-chat-turn .chunk-container > *:has(ms-image-chunk) {
+      order: 1 !important;
+      flex: 0 0 auto !important;
+      width: 160px !important;
+      height: 160px !important;
+      padding: 0 !important;
+      margin: 0 !important;
     }
 
-    /* Image Grid Widths */
-    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-      width: 16.66% !important;
-      flex: 0 0 16.66% !important;
-      padding: 3px !important;
-    }
-
-    /* File Grid Widths */
-    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-      width: 33.33% !important;
-      flex: 0 0 33.33% !important;
-      padding: 5px !important;
-    }
-
-    /* Adaptive Grid (1024px and Tablet) */
-    @media (max-width: 1300px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-        width: 25% !important;
-        flex: 0 0 25% !important;
-      }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-        width: 50% !important;
-        flex: 0 0 50% !important;
-      }
-    }
-
-    /* Adaptive Grid: Mobile (2/1) */
-    @media (max-width: 800px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-        width: 50% !important;
-        flex: 0 0 50% !important;
-      }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-        width: 100% !important;
-        flex: 0 0 100% !important;
-      }
-    }
-
-    /* Break element for row separation */
-    .sl-grid-break {
-      flex-basis: 100% !important;
-      width: 100% !important;
-      height: 1px !important;
-    }
-
-    /* --- 2. Image Chunk Styling --- */
     ms-image-chunk {
-      aspect-ratio: 1 / 1 !important;
+      display: block !important;
       width: 100% !important;
       height: 100% !important;
-      display: block !important;
+      aspect-ratio: 1 / 1 !important;
       border-radius: 12px !important;
       overflow: hidden !important;
       background: var(--color-v3-surface-container-high) !important;
-      cursor: pointer !important;
-      position: relative !important;
+
+      & .image-container, & img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        display: block !important;
+      }
     }
 
-    ms-image-chunk .image-container, 
-    ms-image-chunk img {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important; /* FIXED: Fill the square */
-      display: block !important;
-    }
-
-    /* Image Hover Controls */
-    ms-image-chunk .bottom-right-image-controls {
+    .bottom-right-image-controls {
       background: var(--color-v3-surface-container-high) !important;
-      border-radius: 16px !important;
+      border-radius: 12px !important;
       bottom: 8px !important;
       right: 8px !important;
       display: none;
-      gap: 6px !important;
+      gap: 4px !important;
       position: absolute !important;
       padding: 4px !important;
-      z-index: 10 !important;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+      z-index: 20 !important;
     }
 
     ms-image-chunk:hover .bottom-right-image-controls {
       display: flex !important;
     }
 
-    /* Disable custom controls on Mobile/Touch to prevent interference */
     @media (pointer: coarse) {
-      ms-image-chunk .bottom-right-image-controls {
-        display: none !important;
-      }
+      .bottom-right-image-controls { display: none !important; }
     }
 
-    /* --- 3. File Chunk Styling (Plate View) --- */
+    /* --- 3. File Chunk Styling --- */
+    
+    /* СОРТУВАННЯ: Файли отримують order: 2 (будуть після фоток, але перед текстом) */
+    ms-chat-turn .chunk-container > *:has(ms-file-chunk) {
+      order: 2 !important;
+      flex: 0 0 auto !important;
+      width: calc(33.33% - 12px) !important;
+      min-width: 280px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
     ms-file-chunk {
-      display: flex !important;
+      display: block !important;
       width: 100% !important;
       background: var(--color-v3-surface-container-high) !important;
       border-radius: 12px !important;
       cursor: pointer !important;
-      transition: background 0.2s !important;
-    }
-
-    ms-file-chunk:hover {
-      background: var(--color-v3-surface-container-highest) !important;
-    }
-
-    ms-file-chunk .preview-container {
-      display: none !important;
-    }
-
-    ms-file-chunk .file-chunk-container {
-      padding: 10px 14px !important;
-      display: flex !important;
-      flex-direction: row !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      width: 100% !important;
+      
+      &:hover { background: var(--color-v3-surface-container-highest) !important; }
+      .preview-container { display: none !important; }
+      
+      .file-chunk-container {
+        padding: 10px 14px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        gap: 6px !important;
+        box-sizing: border-box !important;
+      }
     }
 
     ms-file-chunk .file-chunk-container > div:first-child {
       display: flex !important;
       align-items: center !important;
-      gap: 10px !important;
+      gap: 6px !important;
       flex: 1 !important;
+      min-width: 0 !important;
       overflow: hidden !important;
     }
 
     ms-file-chunk .file-icon {
+      margin: 0 !important;
       font-size: 20px !important;
       color: var(--color-v3-primary) !important;
-    }
-
-    ms-file-chunk .name {
-      font-family: 'Google Sans', Inter, sans-serif !important;
-      font-size: 14px !important;
-      font-weight: 500 !important;
-      color: var(--color-v3-text) !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-    }
-
-    ms-file-chunk .token-count {
-      font-size: 12px !important;
-      color: var(--color-v3-text-var) !important;
-      margin-left: 12px !important;
-    }
-
-    /* Control buttons styling */
-    ms-image-chunk .bottom-right-image-controls button[ms-button] {
-      width: 28px !important;
-      height: 28px !important;
-      border-radius: 50% !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      background: transparent !important;
-      border: none !important;
-      transition: background 0.2s !important;
+      flex-shrink: 0 !important;
     }
 
     ms-image-chunk .bottom-right-image-controls button[ms-button]:hover {
@@ -205,16 +131,16 @@
     }
 
     /* --- 4. Enhanced Image View (Strictly Scoped Parity) --- */
+    /* Твої стилі для модалки залишені без змін */
     
-    /* 60% Dark tint ONLY for our specific backdrop class injected via JS */
     .cdk-overlay-backdrop.sl-backdrop-tint {
       background-color: rgba(0, 0, 0, 0.6) !important;
     }
 
-    /* Scoped Pane overrides */
     .cdk-overlay-pane:has(ms-view-media-dialog) {
       width: 100vw !important;
       height: 100vh !important;
+      height: 100dvh !important;
       max-width: 100vw !important;
       max-height: 100vh !important;
       position: fixed !important;
@@ -228,7 +154,6 @@
       transition: none !important;
     }
 
-    /* Scoped Dialog Container overrides */
     .cdk-overlay-pane:has(ms-view-media-dialog) mat-dialog-container, 
     .cdk-overlay-pane:has(ms-view-media-dialog) .mat-mdc-dialog-container,
     .cdk-overlay-pane:has(ms-view-media-dialog) .mat-mdc-dialog-inner-container,
@@ -257,12 +182,11 @@
       --mat-dialog-transition-duration: 0ms !important;
     }
 
-    /* Interactive elements */
     ms-view-media-dialog header.shared-dialog-header,
     ms-view-media-dialog .main-media-item,
     ms-view-media-dialog .actions,
     .sl-back-button,
-    ms-view-media-dialog main { /* Main needs pointer events for the click-to-close JS */
+    ms-view-media-dialog main { 
       pointer-events: auto !important;
     }
 
@@ -280,7 +204,6 @@
       z-index: 100 !important;
     }
 
-    /* Back button: Use native button styling */
     .sl-back-button {
       margin-right: 8px !important;
       color: var(--color-v3-text) !important;
@@ -290,9 +213,7 @@
       cursor: pointer !important;
     }
 
-    .sl-back-button .google-symbols {
-      font-size: 24px !important; /* Match right-side icons */
-    }
+    .sl-back-button .google-symbols { font-size: 24px !important; }
 
     ms-view-media-dialog header .text {
       font-family: 'Google Sans', Inter, sans-serif !important;
@@ -300,26 +221,18 @@
       font-weight: 500 !important;
       color: var(--color-v3-text) !important;
       flex: 1 !important;
-      margin-left: 4px !important; /* Tighten spacing */
     }
 
-    /* Native sizing for all header icons */
     ms-view-media-dialog header button .material-symbols-outlined {
       font-size: 24px !important;
     }
 
-    /* Fix for Hover Controls Buttons */
     ms-image-chunk .bottom-right-image-controls button[ms-button] {
       width: 28px !important;
       height: 28px !important;
       transition: background 0.2s !important;
     }
 
-    ms-image-chunk .bottom-right-image-controls button[ms-button]:hover {
-      background-color: var(--color-v3-hover) !important;
-    }
-
-    /* Main Area: Centering and Click-to-close target */
     ms-view-media-dialog main {
       justify-content: center !important;
       align-items: center !important;
@@ -340,45 +253,30 @@
     }
   `;
 
+  // Сучасний підхід до ініціалізації модалки (без дублювання подій)
   function injectHeaderElements() {
     const dialog = document.querySelector('ms-view-media-dialog');
-    if (!dialog) return;
+    // Використовуємо dataset, щоб не переініціалізовувати модалку 10 разів на секунду
+    if (!dialog || dialog.dataset.slInjected) return;
 
-    // 1. Precise Backdrop Tinting (Target only this dialog's backdrop)
+    // 1. Точне затемнення фону
     const pane = dialog.closest('.cdk-overlay-pane');
-    if (pane && pane.previousElementSibling && pane.previousElementSibling.classList.contains('cdk-overlay-backdrop')) {
-      pane.previousElementSibling.classList.add('sl-backdrop-tint');
+    const backdrop = pane?.previousElementSibling;
+    if (backdrop?.classList.contains('cdk-overlay-backdrop')) {
+      backdrop.classList.add('sl-backdrop-tint');
     }
 
-    const header = dialog.querySelector('header.shared-dialog-header');
-    if (!header || header.querySelector('.sl-back-button')) return;
-
-    // 1. Create Back Button (Native Style)
-    const backBtn = document.createElement('button');
-    backBtn.setAttribute('ms-button', '');
-    backBtn.setAttribute('variant', 'icon-borderless');
-    backBtn.className = 'sl-back-button ms-button-borderless ms-button-icon';
-    backBtn.innerHTML = '<span class="google-symbols material-symbols-outlined">arrow_back</span>';
-    
-    backBtn.onclick = (e) => {
-      e.stopPropagation();
-      const closeBtn = dialog.querySelector('button[aria-label="Close"]');
-      if (closeBtn) closeBtn.click();
-    };
-
-    // 2. Click-to-close on empty space
+    // 2. Закриття по кліку на порожній простір (сучасний Event Listener)
     const main = dialog.querySelector('main');
-    if (main && !main.dataset.slListener) {
-      main.onclick = (e) => {
+    if (main) {
+      main.addEventListener('click', (e) => {
         if (e.target === main) {
-          const closeBtn = dialog.querySelector('button[aria-label="Close"]');
-          if (closeBtn) closeBtn.click();
+          dialog.querySelector('button[aria-label="Close"]')?.click();
         }
-      };
-      main.dataset.slListener = 'true';
+      });
     }
 
-    header.prepend(backBtn);
+    dialog.dataset.slInjected = 'true';
   }
 
   window.StudioLab.registerModule({
@@ -406,41 +304,21 @@
     setupObserver() {
       if (dialogObserver) dialogObserver.disconnect();
 
-      dialogObserver = new MutationObserver((mutations) => {
-      const enabled = !!(ctxRef && ctxRef.state.mediaViewEnabled);
-      if (!enabled) return;
+      dialogObserver = new MutationObserver(() => {
+        if (!ctxRef?.state.mediaViewEnabled) return;
 
-      // 1. Inject Header Elements for Dialog
-      injectHeaderElements();
-
-      // 2. Logic to Separate Image Rows from File Rows
-      const container = document.querySelector('ms-chat-session .cdk-virtual-scroll-content-wrapper');
-      if (container) {
-        const turns = Array.from(container.querySelectorAll('ms-chat-turn'));
-        
-        // Remove old breaks first
-        container.querySelectorAll('.sl-grid-break').forEach(b => b.remove());
-
-        for (let i = 0; i < turns.length - 1; i++) {
-          const currentIsImage = !!turns[i].querySelector('ms-image-chunk');
-          const nextIsFile = !!turns[i+1].querySelector('ms-file-chunk');
-          const currentIsFile = !!turns[i].querySelector('ms-file-chunk');
-          const nextIsImage = !!turns[i+1].querySelector('ms-image-chunk');
-
-          if ((currentIsImage && nextIsFile) || (currentIsFile && nextIsImage)) {
-            const breaker = document.createElement('div');
-            breaker.className = 'sl-grid-break';
-            turns[i].after(breaker);
-          }
+        // Швидка перевірка, чи взагалі існує діалог, щоб не навантажувати процесор
+        if (document.querySelector('ms-view-media-dialog')) {
+          injectHeaderElements();
         }
-      }
-    });
+      });
 
+      // Слухаємо тільки додавання нових нодів, щоб не реагувати на кожну зміну тексту
       dialogObserver.observe(document.body, { childList: true, subtree: true });
     },
     updateStyles() {
-      const enabled = !!(ctxRef && ctxRef.state.mediaViewEnabled);
-      
+      const enabled = !!ctxRef?.state.mediaViewEnabled;
+
       if (enabled) {
         if (!styleEl) {
           styleEl = document.createElement('style');
@@ -448,14 +326,10 @@
           styleEl.textContent = CSS;
           document.head.appendChild(styleEl);
         }
-      } else {
-        if (styleEl) {
-          styleEl.remove();
-          styleEl = null;
-        }
+      } else if (styleEl) {
+        styleEl.remove();
+        styleEl = null;
       }
     }
   });
 })();
-
-
