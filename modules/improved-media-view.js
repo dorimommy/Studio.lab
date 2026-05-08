@@ -18,80 +18,69 @@
       display: flex !important;
       flex-wrap: wrap !important;
       align-content: flex-start !important;
-      font-size: 14px !important;
     }
 
-    /* Force Media Turns to flow in a flex grid */
-    ms-chat-session ms-chat-turn {
+    ms-chat-turn {
       width: 100% !important;
       flex: 0 0 100% !important;
       position: relative !important;
       top: 0 !important;
       left: 0 !important;
       transform: none !important;
-      margin-bottom: 0 !important;
+      margin: 0 !important;
       box-sizing: border-box !important;
     }
 
-    /* Break element to separate Images from Files */
+    /* Force Media Grid regardless of hidden text chunks */
+    ms-chat-turn:has(ms-image-chunk) {
+      width: 16.66% !important;
+      flex: 0 0 16.66% !important;
+      padding: 3px !important;
+    }
+    ms-chat-turn:has(ms-file-chunk) {
+      width: 33.33% !important;
+      flex: 0 0 33.33% !important;
+      padding: 5px !important;
+    }
+
+    /* Adaptive Grid: Medium/1024px */
+    @media (max-width: 1300px) {
+      ms-chat-turn:has(ms-image-chunk) { width: 25% !important; flex: 0 0 25% !important; }
+      ms-chat-turn:has(ms-file-chunk) { width: 50% !important; flex: 0 0 50% !important; }
+    }
+
+    /* Adaptive Grid: Mobile */
+    @media (max-width: 800px) {
+      ms-chat-turn:has(ms-image-chunk) { width: 50% !important; flex: 0 0 50% !important; }
+      ms-chat-turn:has(ms-file-chunk) { width: 100% !important; flex: 0 0 100% !important; }
+    }
+
+    /* Row Break element */
     .sl-grid-break {
       flex-basis: 100% !important;
       width: 100% !important;
       height: 12px !important;
     }
 
-    /* Image Grid Widths */
-    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-      width: 16.66% !important;
-      flex: 0 0 16.66% !important;
-      padding: 3px !important;
-    }
-
-    /* File Grid Widths */
-    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-      width: 33.33% !important;
-      flex: 0 0 33.33% !important;
-      padding: 5px !important;
-    }
-
-    /* Adaptive Grid (1024px and Tablet) */
-    @media (max-width: 1300px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-        width: 25% !important;
-        flex: 0 0 25% !important;
-      }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-        width: 50% !important;
-        flex: 0 0 50% !important;
-      }
-    }
-
-    /* Mobile Adaptive */
-    @media (max-width: 800px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-        width: 50% !important;
-        flex: 0 0 50% !important;
-      }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-        width: 100% !important;
-        flex: 0 0 100% !important;
-      }
-    }
-
     /* --- 2. Image Chunk Styling --- */
     ms-image-chunk {
       aspect-ratio: 1 / 1 !important;
       width: 100% !important;
+      height: 100% !important;
       display: block !important;
       border-radius: 12px !important;
       overflow: hidden !important;
       background: var(--color-v3-surface-container-high) !important;
       cursor: pointer !important;
-      transition: background 0.2s !important;
+      position: relative !important;
     }
 
-    ms-image-chunk:hover {
-      background: var(--color-v3-surface-container-highest) !important;
+    ms-image-chunk .image-container, 
+    ms-image-chunk img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      display: block !important;
     }
 
     /* Image Hover Controls */
@@ -104,7 +93,7 @@
       gap: 6px !important;
       position: absolute !important;
       padding: 4px !important;
-      z-index: 5 !important;
+      z-index: 10 !important;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
     }
 
@@ -112,17 +101,8 @@
       display: flex !important;
     }
 
-    /* Mobile/Touch Controls optimization */
     @media (pointer: coarse) {
-      ms-image-chunk .bottom-right-image-controls {
-        display: flex !important; /* Always show on touch */
-        background: rgba(var(--color-v3-surface-container-high-rgb), 0.9) !important;
-        padding: 6px !important;
-      }
-      ms-image-chunk .bottom-right-image-controls button[ms-button] {
-        width: 36px !important; /* Larger hit area for fingers */
-        height: 36px !important;
-      }
+      ms-image-chunk .bottom-right-image-controls { display: none !important; }
     }
 
     /* --- 3. File Chunk Styling (Plate View) --- */
