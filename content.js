@@ -62,7 +62,8 @@
     autoKeep: true,
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
-    bannerRemoverEnabled: true
+    bannerRemoverEnabled: true,
+    mediaViewEnabled: true
   };
 
   const moduleApi = window.StudioLab || {};
@@ -142,6 +143,7 @@
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;
     state.wordCounterEnabled = !!state.wordCounterEnabled;
     state.bannerRemoverEnabled = !!state.bannerRemoverEnabled;
+    state.mediaViewEnabled = !!state.mediaViewEnabled;
   }
 
   function snapshotState() {
