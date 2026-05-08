@@ -12,39 +12,66 @@
   let dialogObserver = null;
 
   const CSS = `
-    /* --- 1. Gallery Grid (6 items per row) --- */
-    ms-chat-session ms-autoscroll-container > div > div {
-      display: flex !important;
-      flex-direction: row !important;
-      flex-wrap: wrap !important;
-      align-items: flex-start !important;
-      align-content: flex-start !important;
-      padding-bottom: 24px !important;
+    /* --- 1. Grid System (Virtual Scroll Safe) --- */
+    
+    /* Make the container allow flowing elements */
+    .cdk-virtual-scroll-content-wrapper {
+      display: block !important;
+      font-size: 0 !important; /* Kill inline-block gaps */
     }
 
     ms-chat-turn {
-      width: 100% !important;
-      flex: 0 0 100% !important;
+      font-size: 14px !important; /* Restore font size for turns */
     }
 
-    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-      width: 16.66% !important;
-      flex: 0 0 16.66% !important;
-      padding: 0 !important;
+    /* Force Media Turns to flow in a grid */
+    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)),
+    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+      display: inline-block !important;
+      position: relative !important;
+      top: 0 !important;
+      left: 0 !important;
+      transform: none !important;
+      vertical-align: top !important;
+      margin: 0 !important;
+      padding: 2px !important;
       box-sizing: border-box !important;
     }
 
-    /* --- 2. Image Chunk Grid Previews --- */
+    /* Column Widths */
+    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+      width: 16.66% !important;
+    }
+
+    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+      width: 33.33% !important;
+    }
+
+    /* Mobile Adaptive */
+    @media (max-width: 1024px) {
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) { width: 25% !important; }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) { width: 50% !important; }
+    }
+    @media (max-width: 600px) {
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) { width: 50% !important; }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) { width: 100% !important; }
+    }
+
+    /* --- 2. Image Chunk Styling --- */
     ms-image-chunk {
       aspect-ratio: 1 / 1 !important;
       width: 100% !important;
-      height: auto !important;
       display: block !important;
-      border-radius: 8px !important;
+      border-radius: 12px !important;
       overflow: hidden !important;
       background: var(--color-v3-surface-container-high) !important;
-      border: 1px solid var(--color-v3-outline-var) !important;
+      border: 1px solid transparent !important; /* Removed 'horrible' border */
       cursor: pointer !important;
+      transition: background 0.2s !important;
+    }
+
+    ms-image-chunk:hover {
+      background: var(--color-v3-surface-container-highest) !important;
     }
 
     ms-image-chunk .image-container {
@@ -53,46 +80,103 @@
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      position: relative !important;
     }
 
-    ms-image-chunk img.loaded-image {
+    ms-image-chunk img {
       width: 100% !important;
       height: 100% !important;
       object-fit: cover !important;
-      margin: 0 !important;
     }
 
-    /* --- 3. Native Hover Controls (Matched to user's CSS) --- */
+    /* Image Hover Controls */
     ms-image-chunk .bottom-right-image-controls {
       background: var(--color-v3-surface-container-high) !important;
       border-radius: 16px !important;
       bottom: 6px !important;
       right: 6px !important;
-      display: flex !important;
+      display: none;
       gap: 4px !important;
       position: absolute !important;
-      padding: 4px !important;
-      opacity: 0 !important;
-      transition: opacity 0.15s ease-in-out !important;
-      pointer-events: all !important;
-      box-shadow: var(--v3-shadow-md) !important;
+      padding: 2px !important;
+      z-index: 5 !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
     }
 
     ms-image-chunk:hover .bottom-right-image-controls {
-      opacity: 1 !important;
+      display: flex !important;
     }
 
-    /* Native button look for hover controls */
+    /* --- 3. File Chunk Styling (Plate View) --- */
+    ms-file-chunk {
+      display: flex !important;
+      width: 100% !important;
+      background: var(--color-v3-surface-container-high) !important;
+      border-radius: 12px !important;
+      cursor: pointer !important;
+      transition: background 0.2s !important;
+    }
+
+    ms-file-chunk:hover {
+      background: var(--color-v3-surface-container-highest) !important;
+    }
+
+    ms-file-chunk .preview-container {
+      display: none !important;
+    }
+
+    ms-file-chunk .file-chunk-container {
+      padding: 10px 14px !important;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      width: 100% !important;
+    }
+
+    ms-file-chunk .file-chunk-container > div:first-child {
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      flex: 1 !important;
+      overflow: hidden !important;
+    }
+
+    ms-file-chunk .file-icon {
+      font-size: 20px !important;
+      color: var(--color-v3-primary) !important;
+    }
+
+    ms-file-chunk .name {
+      font-family: 'Google Sans', Inter, sans-serif !important;
+      font-size: 14px !important;
+      font-weight: 500 !important;
+      color: var(--color-v3-text) !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    ms-file-chunk .token-count {
+      font-size: 12px !important;
+      color: var(--color-v3-text-var) !important;
+      margin-left: 12px !important;
+    }
+
+    /* Control buttons styling */
     ms-image-chunk .bottom-right-image-controls button[ms-button] {
+      width: 28px !important;
+      height: 28px !important;
       border-radius: 50% !important;
-      aspect-ratio: 1/1 !important;
-      padding: 0 !important;
-      width: 32px !important;
-      height: 32px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
       background: transparent !important;
       border: none !important;
-      color: var(--color-v3-text) !important;
+      transition: background 0.2s !important;
+    }
+
+    ms-image-chunk .bottom-right-image-controls button[ms-button]:hover {
+      background: var(--color-v3-hover) !important;
     }
 
     /* --- 4. Enhanced Image View (Strictly Scoped Parity) --- */
