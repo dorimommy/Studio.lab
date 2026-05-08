@@ -18,48 +18,71 @@
       display: flex !important;
       flex-wrap: wrap !important;
       align-content: flex-start !important;
+      font-size: 14px !important;
     }
 
-    ms-chat-turn {
+    /* Force Media Turns to flow in a flex grid */
+    ms-chat-session ms-chat-turn {
       width: 100% !important;
       flex: 0 0 100% !important;
       position: relative !important;
       top: 0 !important;
       left: 0 !important;
       transform: none !important;
-      margin: 0 !important;
+      margin-bottom: 0 !important;
       box-sizing: border-box !important;
     }
 
-    /* Force Media Grid regardless of hidden text chunks */
-    ms-chat-turn:has(ms-image-chunk) {
+    /* Break element to separate Images from Files */
+    .sl-grid-break {
+      flex-basis: 100% !important;
+      width: 100% !important;
+      height: 12px !important;
+    }
+
+    /* Image Grid Widths */
+    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
       width: 16.66% !important;
       flex: 0 0 16.66% !important;
       padding: 3px !important;
     }
-    ms-chat-turn:has(ms-file-chunk) {
+
+    /* File Grid Widths */
+    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
       width: 33.33% !important;
       flex: 0 0 33.33% !important;
       padding: 5px !important;
     }
 
-    /* Adaptive Grid: Medium/1024px */
+    /* Adaptive Grid (1024px and Tablet) */
     @media (max-width: 1300px) {
-      ms-chat-turn:has(ms-image-chunk) { width: 25% !important; flex: 0 0 25% !important; }
-      ms-chat-turn:has(ms-file-chunk) { width: 50% !important; flex: 0 0 50% !important; }
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+        width: 25% !important;
+        flex: 0 0 25% !important;
+      }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+        width: 50% !important;
+        flex: 0 0 50% !important;
+      }
     }
 
-    /* Adaptive Grid: Mobile */
+    /* Adaptive Grid: Mobile (2/1) */
     @media (max-width: 800px) {
-      ms-chat-turn:has(ms-image-chunk) { width: 50% !important; flex: 0 0 50% !important; }
-      ms-chat-turn:has(ms-file-chunk) { width: 100% !important; flex: 0 0 100% !important; }
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+        width: 50% !important;
+        flex: 0 0 50% !important;
+      }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+      }
     }
 
-    /* Row Break element */
+    /* Break element for row separation */
     .sl-grid-break {
       flex-basis: 100% !important;
       width: 100% !important;
-      height: 12px !important;
+      height: 1px !important;
     }
 
     /* --- 2. Image Chunk Styling --- */
@@ -79,7 +102,7 @@
     ms-image-chunk img {
       width: 100% !important;
       height: 100% !important;
-      object-fit: cover !important;
+      object-fit: cover !important; /* FIXED: Fill the square */
       display: block !important;
     }
 
@@ -101,8 +124,11 @@
       display: flex !important;
     }
 
+    /* Disable custom controls on Mobile/Touch to prevent interference */
     @media (pointer: coarse) {
-      ms-image-chunk .bottom-right-image-controls { display: none !important; }
+      ms-image-chunk .bottom-right-image-controls {
+        display: none !important;
+      }
     }
 
     /* --- 3. File Chunk Styling (Plate View) --- */
