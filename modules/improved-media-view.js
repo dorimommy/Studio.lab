@@ -14,47 +14,68 @@
   const CSS = `
     /* --- 1. Grid System (Virtual Scroll Safe) --- */
     
-    /* Make the container allow flowing elements */
     .cdk-virtual-scroll-content-wrapper {
-      display: block !important;
-      font-size: 0 !important; /* Kill inline-block gaps */
+      display: flex !important;
+      flex-wrap: wrap !important;
+      align-content: flex-start !important;
+      font-size: 14px !important;
     }
 
-    ms-chat-turn {
-      font-size: 14px !important; /* Restore font size for turns */
-    }
-
-    /* Force Media Turns to flow in a grid */
-    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)),
-    ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
-      display: inline-block !important;
+    /* Force Media Turns to flow in a flex grid */
+    ms-chat-session ms-chat-turn {
+      width: 100% !important;
+      flex: 0 0 100% !important;
       position: relative !important;
       top: 0 !important;
       left: 0 !important;
       transform: none !important;
-      vertical-align: top !important;
-      margin: 0 !important;
-      padding: 2px !important;
+      margin-bottom: 0 !important;
       box-sizing: border-box !important;
     }
 
-    /* Column Widths */
-    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
-      width: 16.66% !important;
+    /* Break element to separate Images from Files */
+    .sl-grid-break {
+      flex-basis: 100% !important;
+      width: 100% !important;
+      height: 12px !important;
     }
 
+    /* Image Grid Widths */
+    ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+      width: 16.66% !important;
+      flex: 0 0 16.66% !important;
+      padding: 3px !important;
+    }
+
+    /* File Grid Widths */
     ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
       width: 33.33% !important;
+      flex: 0 0 33.33% !important;
+      padding: 5px !important;
+    }
+
+    /* Adaptive Grid (1024px and Tablet) */
+    @media (max-width: 1300px) {
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+        width: 25% !important;
+        flex: 0 0 25% !important;
+      }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+        width: 50% !important;
+        flex: 0 0 50% !important;
+      }
     }
 
     /* Mobile Adaptive */
-    @media (max-width: 1024px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) { width: 25% !important; }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) { width: 50% !important; }
-    }
-    @media (max-width: 600px) {
-      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) { width: 50% !important; }
-      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) { width: 100% !important; }
+    @media (max-width: 800px) {
+      ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)) {
+        width: 50% !important;
+        flex: 0 0 50% !important;
+      }
+      ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)) {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+      }
     }
 
     /* --- 2. Image Chunk Styling --- */
@@ -65,7 +86,6 @@
       border-radius: 12px !important;
       overflow: hidden !important;
       background: var(--color-v3-surface-container-high) !important;
-      border: 1px solid transparent !important; /* Removed 'horrible' border */
       cursor: pointer !important;
       transition: background 0.2s !important;
     }
@@ -74,36 +94,35 @@
       background: var(--color-v3-surface-container-highest) !important;
     }
 
-    ms-image-chunk .image-container {
-      width: 100% !important;
-      height: 100% !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-    }
-
-    ms-image-chunk img {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-    }
-
     /* Image Hover Controls */
     ms-image-chunk .bottom-right-image-controls {
       background: var(--color-v3-surface-container-high) !important;
       border-radius: 16px !important;
-      bottom: 6px !important;
-      right: 6px !important;
+      bottom: 8px !important;
+      right: 8px !important;
       display: none;
-      gap: 4px !important;
+      gap: 6px !important;
       position: absolute !important;
-      padding: 2px !important;
+      padding: 4px !important;
       z-index: 5 !important;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
     }
 
     ms-image-chunk:hover .bottom-right-image-controls {
       display: flex !important;
+    }
+
+    /* Mobile/Touch Controls optimization */
+    @media (pointer: coarse) {
+      ms-image-chunk .bottom-right-image-controls {
+        display: flex !important; /* Always show on touch */
+        background: rgba(var(--color-v3-surface-container-high-rgb), 0.9) !important;
+        padding: 6px !important;
+      }
+      ms-image-chunk .bottom-right-image-controls button[ms-button] {
+        width: 36px !important; /* Larger hit area for fingers */
+        height: 36px !important;
+      }
     }
 
     /* --- 3. File Chunk Styling (Plate View) --- */
@@ -382,15 +401,34 @@
       if (dialogObserver) dialogObserver.disconnect();
 
       dialogObserver = new MutationObserver((mutations) => {
-        const enabled = !!(ctxRef && ctxRef.state.mediaViewEnabled);
-        if (!enabled) return;
+      const enabled = !!(ctxRef && ctxRef.state.mediaViewEnabled);
+      if (!enabled) return;
 
-        for (const mutation of mutations) {
-          if (mutation.addedNodes.length) {
-            injectHeaderElements();
+      // 1. Inject Header Elements for Dialog
+      injectHeaderElements();
+
+      // 2. Logic to Separate Image Rows from File Rows
+      const container = document.querySelector('ms-chat-session .cdk-virtual-scroll-content-wrapper');
+      if (container) {
+        const turns = Array.from(container.querySelectorAll('ms-chat-turn'));
+        
+        // Remove old breaks first
+        container.querySelectorAll('.sl-grid-break').forEach(b => b.remove());
+
+        for (let i = 0; i < turns.length - 1; i++) {
+          const currentIsImage = !!turns[i].querySelector('ms-image-chunk');
+          const nextIsFile = !!turns[i+1].querySelector('ms-file-chunk');
+          const currentIsFile = !!turns[i].querySelector('ms-file-chunk');
+          const nextIsImage = !!turns[i+1].querySelector('ms-image-chunk');
+
+          if ((currentIsImage && nextIsFile) || (currentIsFile && nextIsImage)) {
+            const breaker = document.createElement('div');
+            breaker.className = 'sl-grid-break';
+            turns[i].after(breaker);
           }
         }
-      });
+      }
+    });
 
       dialogObserver.observe(document.body, { childList: true, subtree: true });
     },
