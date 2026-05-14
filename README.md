@@ -1,63 +1,72 @@
-# Studio.lab — Better AI Studio
+# Studio.lab
 
-A browser extension that fixes the two biggest pain points in Google AI Studio: content filter interruptions that silently discard generated text, and progressive UI collapse that makes long sessions unusable.
+An unofficial performance optimizer and content bypass extension for Google AI Studio. 
 
-> Unofficial. Not affiliated with Google.
+Google AI Studio currently suffers from two significant architectural limitations during extended usage: 
+1) Aggressive client-side content filters that discard already-generated text via `xhr.abort()`.
+2) Lack of DOM virtualization, leading to severe memory leaks and UI latency as conversation threads grow.
 
----
+Studio.lab resolves these issues by intercepting network requests before framework initialization and implementing custom memory management routines, transforming the platform into a stable environment for long-context workflows.
+
+## Core Features
+
+### 1. Content Filter Bypass
+When the native backend flags a response, the client executes an abort signal, replacing the output with a warning and permanently deleting the received payload.
+*   **Network-Level Interception (Default):** Hooks into the `XMLHttpRequest` prototype in the `MAIN` execution world before Angular loads. It suppresses the `abort()` call and sanitizes the Server-Sent Events (SSE) stream in real-time, modifying violation codes to standard completion flags. The framework renders the output naturally without UI flicker.
+*   **DOM Restoration (Fallback):** A `MutationObserver` monitors the DOM for blocked states and restores the captured raw markdown payload via simulated native UI input events.
+
+### 2. Memory & DOM Optimization
+Native AI Studio retains all historical chat nodes (markdown, code blocks, listeners) in active memory, causing rapid performance degradation.
+*   **Buffered Mode (Smart):** Implements pseudo-virtualization. It continuously detaches off-screen conversational nodes from the DOM while maintaining their state in isolated memory. Nodes are seamlessly reattached upon upward scroll triggers.
+*   **Physical Mode (Hard):** Enforces a strict numerical limit on rendered turns. Exceeding the threshold triggers permanent deletion of older nodes from the session memory. 
+*   Both modes support automated threshold enforcement to prevent manual intervention during generation.
+
+### 3. Interface Modules
+*   **Improved Media View:** Replaces the default attachment layout with a scoped, native-parity CSS grid and introduces a full-screen media viewer with proper layering and interaction.
+*   **Real-time Analytics:** Injects non-blocking character and word counters directly into rendered turns via localized mutation observers.
+*   **Workspace Decluttering:** Automatically suppresses intrusive promotional elements, such as "Upgrade" and "Quota Exceeded" banners.
+*   **Contextual Navigation:** Implements a dynamic scroll-to-bottom utility that monitors container offsets and generation states, appearing only when required.
+
+## System Architecture
+
+The extension operates without build tools or external dependencies. It relies on a decoupled architecture where a core shell orchestrates isolated feature modules.
+
+.
+├── manifest.json
+├── background.js
+├── interceptor.js
+├── content.js
+├── sl-panel.css
+└── modules/
+    ├── registry.js
+    └── [feature-modules].js
+
+*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to ensure `XMLHttpRequest` is patched before the host application initializes. Communicates with the isolated world via `CustomEvent`.
+*   **`content.js`**: Operates in the `ISOLATED` world. Functions as the primary controller. It handles state persistence (`chrome.storage.local`), injects the native-styled control panel into the host sidebar, and triggers the module lifecycle.
+*   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
+*   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object (ID, UI descriptors, lifecycle hooks like `init` and `onStateChange`) with the central `registry.js`.
 
 ## Installation
 
-1. Download or clone this repository.
-2. Open `chrome://extensions` (or `edge://extensions`).
-3. Enable **Developer Mode**.
-4. Click **Load unpacked** → select the repository folder.
-5. Go to [aistudio.google.com](https://aistudio.google.com) — the Studio.lab card appears in the right sidebar below System Instructions.
+1. Clone or download the source code of this repository.
+2. Open your Chromium-based browser and navigate to `chrome://extensions` (or `edge://extensions`).
+3. Toggle **Developer mode** in the top right corner.
+4. Click **Load unpacked** and select the extracted project directory.
+5. Navigate to or refresh `aistudio.google.com`. The Studio.lab configuration panel will be accessible in the right sidebar below the System Instructions module.
 
-No build step. No dependencies.
+## Privacy and Security
 
----
-
-## Content Bypass
-
-When Google's backend content filter triggers, AI Studio calls `xhr.abort()` on the active stream and throws away whatever the model already generated — replacing it with a red "Content Blocked" banner. The text existed. It traveled to your browser. The client deleted it.
-
-Studio.lab patches the XHR layer before Angular loads, so it intercepts the raw response before the framework ever sees it.
-
-**Intercept mode (recommended).** Rewrites the `finishReason` field in real time as the SSE stream comes in — violation code `8` becomes normal stop code `1`. Angular concludes the model finished naturally and renders the full output. Abort suppression runs alongside: `xhr.abort()` is replaced with a no-op on each generation request, keeping the stream alive through the full response. No flicker, no banner, no data loss.
-
-**Restore mode (legacy).** A MutationObserver watches for the blocked-state DOM structure and reverses it after the fact by simulating Edit → Paste → Save. Less elegant — you'll see the block render briefly before it's replaced — but works as a fallback.
-
-**Important:** Studio.lab recovers text the server generated but the client discarded. It can't recover text the server never produced. If generation stopped at token 400, you get 400 tokens. For complete outputs, send "continue" and stitch the parts manually.
-
----
-
-## Chat Optimizer
-
-AI Studio doesn't virtualize its conversation list. Every turn — rendered markdown, code blocks, components, listeners — stays fully alive in the DOM forever. Past 60–80 turns this becomes a real problem: stuttering scroll, laggy input, ballooning memory.
-
-**Buffered mode.** Detaches old turns from the DOM when they leave the viewport, reattaches them instantly when you scroll back. The conversation history stays intact; only the rendering overhead disappears.
-
-**Physical mode.** Permanently removes old turns. Maximum performance for very long sessions where you don't need to scroll back. Not reversible within the session.
-
-Both modes support an **Auto-Limit** — set a turn threshold and the optimizer enforces it automatically as the chat grows.
-
----
-
-## Everything Else
-
-**Settings panel** injects natively into the AI Studio sidebar and persists all state across navigations and browser restarts.
-
-**Scroll to Bottom button** anchors to the prompt input box, auto-detects the active scroll container, and only appears when you're actually scrolled away from the bottom.
-
----
-
-## Privacy
-
-No data leaves your browser. No analytics, no telemetry, no external requests. The only permission declared is `storage`, used exclusively for saving your settings locally. The source is fully open and unobfuscated.
-
----
+Studio.lab is built with strict adherence to local-only execution:
+*   Zero external dependencies, trackers, or analytics.
+*   Zero outbound network requests.
+*   State is maintained exclusively via local browser storage.
+*   The source code is provided completely unobfuscated for comprehensive security auditing.
 
 ## Support
 
-[**Monobank Jar**](https://send.monobank.ua/jar/ARDckyv3B4) — if Studio.lab saves your workflow from the content blocked grind.
+[![Support Studio.lab](images/Banner.png)](https://ko-fi.com/astierdoriana)
+
+If this extension ensures your workflow continuity and mitigates data loss, consider supporting the development through Ko-Fi. 
+
+---
+Disclaimer: Studio.lab is an unofficial modification. It is not affiliated with, endorsed by, or connected to Google LLC or Google AI Studio.
