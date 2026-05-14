@@ -63,7 +63,7 @@
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
     bannerRemoverEnabled: true,
-    mediaViewEnabled: true
+    mediaViewEnabled: false
   };
 
   const moduleApi = window.StudioLab || {};
@@ -91,6 +91,10 @@
   let searchQuery = '';
   let lastLocalSave = '';
 
+  // Start critical UI watchers immediately
+  waitForSidebar();
+  startRouteWatcher();
+
   chrome.storage.local.get([STORAGE_KEY], (data) => {
     if (data && data[STORAGE_KEY]) {
       Object.assign(state, data[STORAGE_KEY]);
@@ -99,8 +103,7 @@
 
     initialized = true;
     initModules();
-    waitForSidebar();
-    startRouteWatcher();
+    refreshLiveStats();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -208,39 +211,62 @@
 
   function waitForSidebar() {
     const tryInject = () => {
-      const anchor = document.querySelector('ms-system-instructions-panel');
-      if (!anchor) return false;
+      if (document.querySelector('.sl-sidebar-btn')) return true;
 
-      const existing = document.querySelector('.sl-sidebar-btn');
-      if (existing) {
-        injected = true;
-        return true;
-      }
+      // Use the exact selectors provided by the user
+      const anchor = document.querySelector('ms-system-instructions-panel') || 
+                     document.querySelector('ms-model-selector') ||
+                     document.querySelector('.selector-container.field-group') ||
+                     document.querySelector('ms-run-settings');
+
+      if (!anchor) return false;
 
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'sl-sidebar-btn';
       card.setAttribute('aria-label', 'Studio.lab Settings');
+      card.style.margin = '12px 0';
       card.innerHTML = `
         <div class="title-container">
           <span class="title">Studio.lab</span>
         </div>
         <span class="subtitle">Performance, bypass and workspace modules</span>
       `;
-      card.addEventListener('click', openModal);
+      card.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openModal();
+      });
 
-      anchor.insertAdjacentElement('afterend', card);
+      // Inject after the component or at the top of the container
+      if (anchor.tagName.startsWith('MS-')) {
+        anchor.insertAdjacentElement('afterend', card);
+      } else {
+        anchor.prepend(card);
+      }
+
       injected = true;
       return true;
     };
 
-    if (injected && document.querySelector('.sl-sidebar-btn')) return;
+    // Run immediately and then via observer/polling
+    if (tryInject()) return;
 
-    const observer = new MutationObserver(() => {
-      if (tryInject()) observer.disconnect();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    tryInject();
+    if (!window._slSidebarObserver) {
+      window._slSidebarObserver = new MutationObserver(() => {
+        if (!document.querySelector('.sl-sidebar-btn')) tryInject();
+      });
+      window._slSidebarObserver.observe(document.documentElement, { 
+        childList: true, 
+        subtree: true 
+      });
+    }
+
+    let attempts = 0;
+    const poll = setInterval(() => {
+      attempts++;
+      if (tryInject() || attempts > 60) clearInterval(poll);
+    }, 1000);
   }
 
   function openModal() {

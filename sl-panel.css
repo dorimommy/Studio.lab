@@ -91,6 +91,10 @@
   background-color: var(--color-v3-accent-3, #ff7b7b);
 }
 
+.badge.beta .badge-dot {
+  background-color: #ffd700;
+}
+
 /* ── Modal overlay ──────────────────────────────────────────────── */
 .sl-overlay {
   position: fixed;
