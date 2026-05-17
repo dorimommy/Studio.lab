@@ -31,7 +31,6 @@ Native AI Studio retains all historical chat nodes (markdown, code blocks, liste
 
 The extension operates without build tools or external dependencies. It relies on a decoupled architecture where a core shell orchestrates isolated feature modules.
 
-.
 ├── manifest.json
 ├── background.js
 ├── interceptor.js
