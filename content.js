@@ -63,7 +63,7 @@
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
     bannerRemoverEnabled: true,
-    mediaViewEnabled: false
+    modernWebChatEnabled: false
   };
 
   const moduleApi = window.StudioLab || {};
@@ -146,7 +146,7 @@
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;
     state.wordCounterEnabled = !!state.wordCounterEnabled;
     state.bannerRemoverEnabled = !!state.bannerRemoverEnabled;
-    state.mediaViewEnabled = !!state.mediaViewEnabled;
+    state.modernWebChatEnabled = !!state.modernWebChatEnabled;
   }
 
   function snapshotState() {

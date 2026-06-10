@@ -31,11 +31,50 @@
   );
   const _nativeR = _rDesc && _rDesc.get;
 
-  // ── Patch open ─────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // MODEL OVERRIDE — the DIRECT SIGNAL approach
+  // Content script sets the model via CustomEvent, interceptor swaps
+  // the model in the XHR URL. No clicks, no Angular hacks.
+  // ═══════════════════════════════════════════════════════════════════
+  let overrideModelId = null;
+
+  window.addEventListener('__sl_setModel', (e) => {
+    const id = e.detail && e.detail.modelId;
+    if (id) {
+      overrideModelId = id;
+      console.log(
+        '%c[Studio.lab] 🔄 Model override set: ' + id,
+        'color:#87a9ff;font-weight:bold'
+      );
+    }
+  });
+
+  // Clear override when user manually changes model via native UI
+  window.addEventListener('__sl_clearModelOverride', () => {
+    overrideModelId = null;
+  });
+
+  // ── Patch open (with model override) ──────────────────────────────
+  // Replacing the original patched open with one that supports model override
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__aisuUrl = typeof url === 'string' ? url : '';
-    this.__aisuIsGen = this.__aisuUrl.includes(URL_MARKER);
-    return _origOpen.apply(this, arguments);
+    let finalUrl = typeof url === 'string' ? url : '';
+
+    // Apply model override to GenerateContent requests
+    if (overrideModelId && finalUrl.includes(URL_MARKER)) {
+      finalUrl = finalUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+      console.log(
+        '%c[Studio.lab] 🔄 Model swapped in request: ' + overrideModelId,
+        'color:#87a9ff'
+      );
+    }
+
+    this.__aisuUrl = finalUrl;
+    this.__aisuIsGen = finalUrl.includes(URL_MARKER);
+
+    // Call original open with potentially modified URL
+    const args = Array.from(arguments);
+    args[1] = finalUrl;
+    return _origOpen.apply(this, args);
   };
 
   // ── Patch send ─────────────────────────────────────────────────────
@@ -169,8 +208,25 @@
     return raw.slice(0, 50000);
   }
 
+  // ── Thought deletion (MAIN world, no inline script needed) ────────
+  window.addEventListener('__sl_deleteThought', () => {
+    const chunk = document.querySelector('.sl-delete-target');
+    if (!chunk) return;
+    chunk.classList.remove('sl-delete-target');
+
+    const deleteBtn = Array.from(chunk.querySelectorAll('button')).find(btn => {
+      const icon = btn.querySelector('.material-symbols-outlined, .google-symbols');
+      const iconText = icon ? icon.textContent.trim().toLowerCase() : '';
+      return iconText === 'close' || iconText === 'delete' || iconText === 'clear' ||
+             btn.getAttribute('aria-label')?.toLowerCase().includes('delete') ||
+             btn.getAttribute('aria-label')?.toLowerCase().includes('remove');
+    });
+    if (deleteBtn) deleteBtn.click();
+  });
+
   console.log(
     '%c[Studio.lab] ⚡ Angular Bypass active (MAIN world)',
     'color:#87a9ff;font-weight:bold;font-size:12px'
   );
 })();
+
