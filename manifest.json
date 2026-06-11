@@ -42,6 +42,7 @@
         "modules/bypass-old.js",
         "modules/optimizer-smart.js",
         "modules/optimizer-hard.js",
+        "modules/chat-export.js",
         "modules/scroll-bottom.js",
         "modules/word-counter.js",
         "modules/banner-remover.js",

@@ -83,6 +83,12 @@
       return _origSend.apply(this, arguments);
     }
 
+    if (body && typeof body === 'string') {
+      window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
+        detail: body
+      }));
+    }
+
     const xhr = this;
     let snap = '';
     let snapTime = 0;
