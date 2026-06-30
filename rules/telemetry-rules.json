@@ -2,72 +2,132 @@
   {
     "id": 1,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||play.google.com/log",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["xmlhttprequest", "ping", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
     }
   },
   {
     "id": 2,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||region1.google-analytics.com",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["xmlhttprequest", "ping", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
     }
   },
-
   {
     "id": 4,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||aistudio.google.com/_/MakerSuite/cspreport",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["xmlhttprequest", "ping", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
     }
   },
   {
     "id": 5,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||apis.google.com/js/gen_204",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["xmlhttprequest", "ping", "image", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "image",
+        "other"
+      ]
     }
   },
   {
     "id": 6,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||www.google.com/images/cleardot.gif",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["image", "ping", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "image",
+        "ping",
+        "other"
+      ]
     }
   },
   {
     "id": 7,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||www.googletagmanager.com",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["script", "xmlhttprequest", "ping", "image", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "image",
+        "other"
+      ]
     }
   },
   {
     "id": 8,
     "priority": 1,
-    "action": { "type": "block" },
+    "action": {
+      "type": "block"
+    },
     "condition": {
       "urlFilter": "||www.google-analytics.com",
-      "initiatorDomains": ["aistudio.google.com"],
-      "resourceTypes": ["script", "xmlhttprequest", "ping", "image", "other"]
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "image",
+        "other"
+      ]
     }
   }
 ]
