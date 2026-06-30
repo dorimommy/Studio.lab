@@ -79,17 +79,21 @@
 
   // ── Patch send ─────────────────────────────────────────────────────
   XMLHttpRequest.prototype.send = function (body) {
-    if (!this.__aisuIsGen) {
+    if (!this.__aisuIsGen && !this.__aisuIsBenefit) {
       return _origSend.apply(this, arguments);
     }
 
-    if (body && typeof body === 'string') {
+    if (this.__aisuIsGen && body && typeof body === 'string') {
       window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
         detail: body
       }));
     }
 
     const xhr = this;
+        // (Spoofing removed by user request)
+    if (this.__aisuIsBenefit || this.__aisuIsRestrict) {
+      return _origSend.apply(this, arguments);
+    }
     let snap = '';
     let snapTime = 0;
     let didLogSanitize = false;
@@ -230,8 +234,126 @@
     if (deleteBtn) deleteBtn.click();
   });
 
+  // ═══════════════════════════════════════════════════════════════════
+  // TELEMETRY BLOCKER — MAIN world fetch() intercept for logging
+  // The actual blocking is done by declarativeNetRequest rules, but
+  // this intercept lets us COUNT and LOG blocked requests for the UI.
+  // ═══════════════════════════════════════════════════════════════════
+  const TELEMETRY_PATTERNS = [
+    'play.google.com/log',
+    'google-analytics.com/g/collect',
+    'google-analytics.com/analytics.js',
+    'googletagmanager.com/gtm.js',
+    'googletagmanager.com/gtag',
+    '/cspreport/',
+    'gen_204',
+    'cleardot.gif'
+  ];
+
+  function isTelemetryUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    for (let i = 0; i < TELEMETRY_PATTERNS.length; i++) {
+      if (url.includes(TELEMETRY_PATTERNS[i])) return true;
+    }
+    return false;
+  }
+
+  // Intercept fetch() for telemetry logging AND spoofing
+  const _origFetch = window.fetch;
+  window.fetch = async function (input, init) {
+    const url = typeof input === 'string' ? input
+      : (input && input.url) ? input.url : '';
+    if (isTelemetryUrl(url)) {
+      window.dispatchEvent(new CustomEvent('__sl_telemetryBlocked', {
+        detail: { url, method: (init && init.method) || 'GET', ts: Date.now() }
+      }));
+    }
+    
+    const response = await _origFetch.apply(this, arguments);
+
+    // SPOOF FETCH RESPONSES (BenefitTier & UserRestrictions)
+    if (url.includes('GetAiStudioBenefitTier') || url.includes('GetUserRestrictions')) {
+      const clone = response.clone();
+      const text = await clone.text();
+      let spoofedText = text;
+      // (Spoofing removed by user request)
+      if (spoofedText !== text) {
+        return new Response(spoofedText, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+      }
+    }
+
+    return response;
+  };
+
+  // Also intercept XHR for telemetry logging (play.google.com uses XHR)
+  const _origXhrOpen = _origOpen; // saved earlier
+  XMLHttpRequest.prototype.open = (function (prevOpen) {
+    return function (method, url) {
+      const finalUrl = typeof url === 'string' ? url : '';
+
+      // Model override logic (preserved from above)
+      let processedUrl = finalUrl;
+      if (overrideModelId && processedUrl.includes(URL_MARKER)) {
+        processedUrl = processedUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+        console.log(
+          '%c[Studio.lab] 🔄 Model swapped in request: ' + overrideModelId,
+          'color:#87a9ff'
+        );
+      }
+
+      // Telemetry detection
+      if (isTelemetryUrl(processedUrl)) {
+        window.dispatchEvent(new CustomEvent('__sl_telemetryBlocked', {
+          detail: { url: processedUrl, method, ts: Date.now() }
+        }));
+      }
+
+      this.__aisuUrl = processedUrl;
+      this.__aisuIsGen = processedUrl.includes(URL_MARKER);
+      this.__aisuIsBenefit = processedUrl.includes('GetAiStudioBenefitTier');
+      this.__aisuIsRestrict = processedUrl.includes('GetUserRestrictions');
+
+      const args = Array.from(arguments);
+      args[1] = processedUrl;
+      return _origXhrOpen.apply(this, args);
+    };
+  })(XMLHttpRequest.prototype.open);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BUILD INFO DATA BRIDGE — sends runtime data to content script
+  // ═══════════════════════════════════════════════════════════════════
+  function emitBuildInfo() {
+    try {
+      const toggles = window._F_toggles_default_MakerSuite || null;
+      const scripts = document.querySelectorAll('script[src*="boq-makersuite"]');
+      let buildId = null;
+      if (scripts.length > 0) {
+        const src = scripts[0].src;
+        const match = src.match(/k=boq-makersuite\.MakerSuite\.[^/]+/);
+        if (match) buildId = match[0].replace('k=boq-makersuite.MakerSuite.', '');
+      }
+      window.dispatchEvent(new CustomEvent('__sl_buildInfo', {
+        detail: { toggles, buildId, ts: Date.now() }
+      }));
+    } catch (_) {}
+  }
+
+  // Emit build info once DOM is ready
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(emitBuildInfo, 2000);
+  } else {
+    window.addEventListener('DOMContentLoaded', () => setTimeout(emitBuildInfo, 2000));
+  }
+
+  // Also re-emit on request from content script
+  window.addEventListener('__sl_requestBuildInfo', emitBuildInfo);
+
   console.log(
-    '%c[Studio.lab] ⚡ Angular Bypass active (MAIN world)',
+    '%c[Studio.lab] ⚡ Angular Bypass + Telemetry Shield active (MAIN world)',
     'color:#87a9ff;font-weight:bold;font-size:12px'
   );
 })();

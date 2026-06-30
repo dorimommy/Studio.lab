@@ -4,8 +4,16 @@
   "version": "1.0",
   "description": "Studio.lab — performance optimizer & content bypass for Google AI Studio.",
   "permissions": [
-    "storage"
+    "storage",
+    "declarativeNetRequest"
   ],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "telemetry_blocker",
+      "enabled": true,
+      "path": "rules/telemetry-rules.json"
+    }]
+  },
   "icons": {
     "16": "images/16.png",
     "64": "images/64.png",
@@ -47,6 +55,7 @@
         "modules/word-counter.js",
         "modules/banner-remover.js",
         "modules/modern-web-chat.js",
+        "modules/telemetry-blocker.js",
         "content.js"
       ],
       "css": [
