@@ -55,7 +55,6 @@
 
   const DEFAULT_STATE = {
     bypassEnabled: true,
-    bypassMode: 'angular',
     optimizerEnabled: false,
     optimizerMode: 'smart',
     keepLast: 15,
@@ -136,7 +135,6 @@
   }
 
   function normalizeState() {
-    if (!['angular', 'dom'].includes(state.bypassMode)) state.bypassMode = 'angular';
     if (!['smart', 'hard'].includes(state.optimizerMode)) state.optimizerMode = 'smart';
 
     state.keepLast = Math.max(2, parseInt(state.keepLast, 10) || 15);
@@ -171,13 +169,17 @@
       lastLocalSave = JSON.stringify(state);
       chrome.storage.local.set({ [STORAGE_KEY]: state });
     } catch (_) {
-      console.warn('[Studio.lab] Extension context invalidated. Hard refresh AI Studio.');
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Extension context invalidated. Hard refresh AI Studio.', 'warn');
     }
   }
 
   function initModules() {
     modules.forEach((module) => {
-      if (typeof module.init === 'function') module.init(ctx);
+      if (typeof module.init === 'function') {
+        try { module.init(ctx); } catch (e) {
+          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} init: ` + e, 'error');
+        }
+      }
     });
     notifyModules(null);
   }
@@ -185,14 +187,20 @@
   function notifyModules(prevState) {
     modules.forEach((module) => {
       if (typeof module.onStateChange === 'function') {
-        module.onStateChange(ctx, prevState);
+        try { module.onStateChange(ctx, prevState); } catch (e) {
+          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} onStateChange: ` + e, 'error');
+        }
       }
     });
   }
 
   function notifyRouteChange() {
     modules.forEach((module) => {
-      if (typeof module.onRouteChange === 'function') module.onRouteChange(ctx);
+      if (typeof module.onRouteChange === 'function') {
+        try { module.onRouteChange(ctx); } catch (e) {
+          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} onRouteChange: ` + e, 'error');
+        }
+      }
     });
   }
 
@@ -205,7 +213,7 @@
       notifyRouteChange();
       waitForSidebar();
       refreshLiveStats();
-      console.log('[Studio.lab] SPA navigation detected. Module state refreshed.');
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('SPA navigation detected. Module state refreshed.', 'info');
     }, 500);
   }
 
@@ -213,11 +221,15 @@
     const tryInject = () => {
       if (document.querySelector('.sl-sidebar-btn')) return true;
 
-      // Use the exact selectors provided by the user
-      const anchor = document.querySelector('ms-system-instructions-panel') || 
-                     document.querySelector('ms-model-selector') ||
-                     document.querySelector('.selector-container.field-group') ||
-                     document.querySelector('ms-run-settings');
+      const selectors = (window.StudioLab && window.StudioLab.SELECTORS) 
+        ? window.StudioLab.SELECTORS.SIDEBAR_ANCHORS 
+        : ['ms-system-instructions-panel', 'ms-model-selector', '.selector-container.field-group', 'ms-run-settings'];
+
+      let anchor = null;
+      for (const sel of selectors) {
+        anchor = document.querySelector(sel);
+        if (anchor) break;
+      }
 
       if (!anchor) return false;
 
@@ -263,10 +275,32 @@
     }
 
     let attempts = 0;
+    const maxAttempts = 10; // 10 seconds health check
     const poll = setInterval(() => {
       attempts++;
-      if (tryInject() || attempts > 60) clearInterval(poll);
+      if (tryInject()) {
+        clearInterval(poll);
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(poll);
+        showHealthCheckWarning();
+      }
     }, 1000);
+  }
+
+  function showHealthCheckWarning() {
+    if (document.querySelector('.sl-health-check-toast')) return;
+    const toast = document.createElement('div');
+    toast.className = 'sl-health-check-toast';
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:sans-serif;font-size:14px;display:flex;align-items:center;gap:12px;';
+    toast.innerHTML = `
+      <span>⚠️ Можливо, Google оновив інтерфейс. Деякі функції Studio.lab можуть не працювати.</span>
+      <button style="background:none;border:none;color:#fff;cursor:pointer;padding:4px;" aria-label="Close">✕</button>
+    `;
+    toast.querySelector('button').addEventListener('click', () => toast.remove());
+    document.body.appendChild(toast);
+    setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 15000);
   }
 
   function openModal() {
@@ -672,7 +706,10 @@
   }
 
   function getTurnCount() {
-    return document.querySelectorAll('ms-chat-turn').length;
+    const sel = (window.StudioLab && window.StudioLab.SELECTORS) 
+      ? window.StudioLab.SELECTORS.CHAT_TURN 
+      : 'ms-chat-turn';
+    return document.querySelectorAll(sel).length;
   }
 
   function escHandler(event) {
@@ -695,8 +732,7 @@
     return String(value).replace(/["\\]/g, '\\$&');
   }
 
-  console.log(
-    `%c[Studio.lab] v${VERSION} shell loaded (${modules.length} modules)`,
-    'color:#87a9ff;font-weight:bold;font-size:12px'
-  );
+  if (window.StudioLab && window.StudioLab.log) {
+    window.StudioLab.log(`v${VERSION} shell loaded (${modules.length} modules)`, 'info');
+  }
 })();

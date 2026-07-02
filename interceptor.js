@@ -247,7 +247,11 @@
     'googletagmanager.com/gtag',
     '/cspreport/',
     'gen_204',
-    'cleardot.gif'
+    'generate_204',
+    'cleardot.gif',
+    'feedback-pa.clients6.google.com',
+    'google.com/pagead/',
+    'google.com/measurement/'
   ];
 
   function isTelemetryUrl(url) {
@@ -263,11 +267,10 @@
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input
       : (input && input.url) ? input.url : '';
-    if (isTelemetryUrl(url)) {
-      window.dispatchEvent(new CustomEvent('__sl_telemetryBlocked', {
-        detail: { url, method: (init && init.method) || 'GET', ts: Date.now() }
-      }));
-    }
+    const isTelemetry = isTelemetryUrl(url);
+    window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
+      detail: { url, method: (init && init.method) || 'GET', ts: Date.now(), isTelemetry }
+    }));
     
     const response = await _origFetch.apply(this, arguments);
 
@@ -306,11 +309,10 @@
       }
 
       // Telemetry detection
-      if (isTelemetryUrl(processedUrl)) {
-        window.dispatchEvent(new CustomEvent('__sl_telemetryBlocked', {
-          detail: { url: processedUrl, method, ts: Date.now() }
-        }));
-      }
+      const isTelemetry = isTelemetryUrl(processedUrl);
+      window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
+        detail: { url: processedUrl, method, ts: Date.now(), isTelemetry }
+      }));
 
       this.__aisuUrl = processedUrl;
       this.__aisuIsGen = processedUrl.includes(URL_MARKER);

@@ -930,3 +930,74 @@ ms-prompt-box {
     flex-wrap: wrap;
   }
 }
+/* ── Gallery Styles ──────────────────────────────────────────────── */
+.sl-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.sl-gallery-empty {
+  color: var(--color-v3-text-var, #8c8c8c);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--color-v3-surface-container, #1c1c1c);
+  border-radius: 12px;
+  border: 1px dashed var(--color-v3-outline-var, #262626);
+}
+
+.sl-gallery-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-v3-surface-container-high, #252525);
+  border: 1px solid var(--color-v3-outline-var, #262626);
+}
+
+.sl-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sl-gallery-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sl-gallery-item:hover .sl-gallery-overlay {
+  opacity: 1;
+}
+
+.sl-gallery-btn {
+  background: var(--color-v3-surface-container-highest, #323232);
+  color: var(--color-v3-text, #e3e3e3);
+  border: 1px solid var(--color-v3-outline, #404040);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-family: 'Google Sans', Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.sl-gallery-btn:hover {
+  background: var(--color-v3-hover, #404040);
+  border-color: var(--color-v3-text-var, #8c8c8c);
+}
+

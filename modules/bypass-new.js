@@ -20,11 +20,9 @@
     subtitle: 'network-level-interceptor',
     icon: 'flash_on',
     badge: { text: 'Recommended', className: 'new' },
-    modeKey: 'bypassMode',
-    modeValue: 'angular',
-    enabledKey: 'bypassEnabled',
+    stateKey: 'bypassEnabled',
     defaults: {
-      bypassMode: 'angular'
+      bypassEnabled: true
     },
     details: [
       { icon: 'flash_on', text: 'Intercepts and sanitizes responses before Angular processes them.' },
@@ -41,7 +39,7 @@
   });
 
   function syncToggle(state) {
-    const enabled = !!(state.bypassEnabled && state.bypassMode === 'angular');
+    const enabled = !!state.bypassEnabled;
     window.dispatchEvent(new CustomEvent('__aisu_toggle', { detail: enabled }));
   }
 })();

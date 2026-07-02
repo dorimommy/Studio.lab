@@ -7,12 +7,11 @@
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
   let ctxRef = null;
-  let intervalId = null;
   let scrollButton = null;
   let activeScroller = null;
-  let generationObserver = null;
-  let lastObservedTurn = null;
+  let resizeObserver = null;
   let isGenerating = false;
+  let generatingTimeout = null;
 
   window.StudioLab.registerModule({
     id: 'scroll-bottom',
@@ -36,9 +35,13 @@
       if (!isActive() && scrollButton) scrollButton.classList.remove('visible');
     },
     onRouteChange() {
-      scrollButton = null;
+      if (scrollButton) {
+        scrollButton.remove();
+        scrollButton = null;
+      }
       activeScroller = null;
-      stopGenerationObserver();
+      stopResizeObserver();
+      setTimeout(start, 500); // re-init on route change
     }
   });
 
@@ -47,9 +50,42 @@
   }
 
   function start() {
-    if (intervalId) return;
-    intervalId = setInterval(tick, 1000);
+    if (resizeObserver) return;
+    
+    // Initial check
     tick();
+
+    // Use ResizeObserver instead of setInterval/MutationObserver
+    resizeObserver = new ResizeObserver((entries) => {
+      if (!isActive()) return;
+      
+      // If content height changes rapidly, we assume generation
+      setGenerating(true);
+      clearTimeout(generatingTimeout);
+      generatingTimeout = setTimeout(() => setGenerating(false), 2000);
+      
+      tick();
+    });
+
+    const scroller = findActiveScroller();
+    if (scroller) {
+      activeScroller = scroller;
+      activeScroller.addEventListener('scroll', handleScroll, { passive: true });
+      // Observe the content inside scroller
+      const content = scroller.firstElementChild || scroller;
+      resizeObserver.observe(content);
+    }
+  }
+
+  function stopResizeObserver() {
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
+    if (activeScroller) {
+      activeScroller.removeEventListener('scroll', handleScroll);
+    }
+    setGenerating(false);
   }
 
   function tick() {
@@ -62,21 +98,12 @@
       createButton();
     }
 
-    const scroller = findActiveScroller();
-    if (scroller && scroller !== activeScroller) {
-      if (activeScroller) activeScroller.removeEventListener('scroll', handleScroll);
-      activeScroller = scroller;
-      activeScroller.addEventListener('scroll', handleScroll);
-    }
-
-    // Watch the last ms-chat-turn for Angular content mutations
-    watchLastTurn();
-
     handleScroll();
   }
 
   function createButton() {
-    const anchor = document.querySelector('ms-prompt-box');
+    const promptSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.PROMPT_BOX : 'ms-prompt-box';
+    const anchor = document.querySelector(promptSel);
     if (!anchor || document.querySelector('.sl-scroll-bottom-btn')) return;
 
     scrollButton = document.createElement('button');
@@ -130,74 +157,7 @@
     scrollButton.classList.toggle('visible', distanceFromBottom > 40);
   }
 
-  /* ── Native generation detection via MutationObserver ──────────── */
 
-  function watchLastTurn() {
-    const turns = document.querySelectorAll('ms-chat-turn');
-    if (!turns.length) return;
-
-    const lastTurn = turns[turns.length - 1];
-    if (lastTurn === lastObservedTurn) return;
-
-    stopGenerationObserver();
-    lastObservedTurn = lastTurn;
-
-    // Also check for ms-chat-loading-indicator (Thinking phase)
-    const hasThinking = !!lastTurn.querySelector('ms-chat-loading-indicator');
-    setGenerating(hasThinking);
-
-    generationObserver = new MutationObserver((mutations) => {
-      const hasThinking = !!lastObservedTurn.querySelector('ms-chat-loading-indicator');
-      let hasContentChange = false;
-
-      for (const m of mutations) {
-        if (m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0)) {
-          // Skip mutations in non-content areas (actions bar, tooltips, footer)
-          const target = m.target;
-          if (target.closest && (
-            target.closest('.actions-container') ||
-            target.closest('.turn-footer') ||
-            target.closest('.hover-or-edit')
-          )) continue;
-
-          // Ignore our own injected elements
-          const isOurs = Array.from(m.addedNodes).every(n =>
-            n.nodeType === 1 && n.className && typeof n.className === 'string' && n.className.startsWith('sl-')
-          );
-          if (!isOurs) {
-            hasContentChange = true;
-            break;
-          }
-        }
-      }
-
-      if (hasThinking || hasContentChange) {
-        setGenerating(true);
-        clearTimeout(generationObserver._stopTimer);
-        generationObserver._stopTimer = setTimeout(() => {
-          const stillThinking = !!(lastObservedTurn && lastObservedTurn.querySelector('ms-chat-loading-indicator'));
-          if (!stillThinking) setGenerating(false);
-        }, 2000);
-      }
-    });
-
-    // Only observe the content area, not action buttons/tooltips
-    const contentArea = lastTurn.querySelector('.virtual-scroll-container') || lastTurn;
-    generationObserver.observe(contentArea, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  function stopGenerationObserver() {
-    if (generationObserver) {
-      clearTimeout(generationObserver._stopTimer);
-      generationObserver.disconnect();
-      generationObserver = null;
-    }
-    lastObservedTurn = null;
-    setGenerating(false);
-  }
 
   function setGenerating(value) {
     if (isGenerating === value) return;
@@ -209,7 +169,8 @@
   }
 
   function findActiveScroller() {
-    const turns = document.querySelectorAll('ms-chat-turn');
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    const turns = document.querySelectorAll(turnSel);
     if (turns.length > 0) {
       let node = turns[turns.length - 1].parentElement;
       while (node && node !== document.body) {
@@ -218,7 +179,8 @@
       }
     }
 
-    const autoscroll = document.querySelector('ms-autoscroll-container');
+    const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
+    const autoscroll = document.querySelector(autoSel);
     if (!autoscroll) return null;
 
     return Array.from(autoscroll.querySelectorAll('div'))

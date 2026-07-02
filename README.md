@@ -2,48 +2,22 @@
 
 An unofficial performance optimizer and content bypass extension for Google AI Studio. 
 
-Google AI Studio currently suffers from two significant architectural limitations during extended usage: 
-1) Aggressive client-side content filters that discard already-generated text via `xhr.abort()`.
-2) Lack of DOM virtualization, leading to severe memory leaks and UI latency as conversation threads grow.
+Studio.lab resolves critical platform limitations—such as client-side content filter aborts and DOM memory leaks—by intercepting network requests before framework initialization and implementing custom memory management routines. This transforms Google AI Studio into a highly stable environment for long-context workflows.
 
-Studio.lab resolves these issues by intercepting network requests before framework initialization and implementing custom memory management routines, transforming the platform into a stable environment for long-context workflows.
+## Features & Version History
 
-## Core Features
+All features, including bypass mechanisms, DOM virtualization, UI improvements, and telemetry blocking, are tracked and documented in the changelog.
 
-### 1. Content Filter Bypass
-When the native backend flags a response, the client executes an abort signal, replacing the output with a warning and permanently deleting the received payload.
-*   **Network-Level Interception (Default):** Hooks into the `XMLHttpRequest` prototype in the `MAIN` execution world before Angular loads. It suppresses the `abort()` call and sanitizes the Server-Sent Events (SSE) stream in real-time, modifying violation codes to standard completion flags. The framework renders the output naturally without UI flicker.
-*   **DOM Restoration (Fallback):** A `MutationObserver` monitors the DOM for blocked states and restores the captured raw markdown payload via simulated native UI input events.
-
-### 2. Memory & DOM Optimization
-Native AI Studio retains all historical chat nodes (markdown, code blocks, listeners) in active memory, causing rapid performance degradation.
-*   **Buffered Mode (Smart):** Implements pseudo-virtualization. It continuously detaches off-screen conversational nodes from the DOM while maintaining their state in isolated memory. Nodes are seamlessly reattached upon upward scroll triggers.
-*   **Physical Mode (Hard):** Enforces a strict numerical limit on rendered turns. Exceeding the threshold triggers permanent deletion of older nodes from the session memory. 
-*   Both modes support automated threshold enforcement to prevent manual intervention during generation.
-
-### 3. Interface Modules
-*   **Improved Media View:** Replaces the default attachment layout with a scoped, native-parity CSS grid and introduces a full-screen media viewer with proper layering and interaction.
-*   **Real-time Analytics:** Injects non-blocking character and word counters directly into rendered turns via localized mutation observers.
-*   **Workspace Decluttering:** Automatically suppresses intrusive promotional elements, such as "Upgrade" and "Quota Exceeded" banners.
-*   **Contextual Navigation:** Implements a dynamic scroll-to-bottom utility that monitors container offsets and generation states, appearing only when required.
+👉 **[See CHANGELOG.md](CHANGELOG.md) for a complete list of features and version history.**
 
 ## System Architecture
 
 The extension operates without build tools or external dependencies. It relies on a decoupled architecture where a core shell orchestrates isolated feature modules.
 
-├── manifest.json
-├── background.js
-├── interceptor.js
-├── content.js
-├── sl-panel.css
-└── modules/
-    ├── registry.js
-    └── [feature-modules].js
-
-*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to ensure `XMLHttpRequest` is patched before the host application initializes. Communicates with the isolated world via `CustomEvent`.
-*   **`content.js`**: Operates in the `ISOLATED` world. Functions as the primary controller. It handles state persistence (`chrome.storage.local`), injects the native-styled control panel into the host sidebar, and triggers the module lifecycle.
+*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to patch `XMLHttpRequest` and `fetch` before the host application initializes. It handles telemetry blocking, payload spoofing, and abort neutralization.
+*   **`content.js`**: Operates in the `ISOLATED` world. Functions as the primary controller. It handles state persistence, injects the native-styled control panel into the host sidebar, and triggers the module lifecycle inside safe error boundaries.
 *   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
-*   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object (ID, UI descriptors, lifecycle hooks like `init` and `onStateChange`) with the central `registry.js`.
+*   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object with the central `registry.js`.
 
 ## Installation
 
@@ -68,4 +42,4 @@ Studio.lab is built with strict adherence to local-only execution:
 If this extension ensures your workflow continuity and mitigates data loss, consider supporting the development through Ko-Fi. 
 
 ---
-Disclaimer: Studio.lab is an unofficial modification. It is not affiliated with, endorsed by, or connected to Google LLC or Google AI Studio.
+*Disclaimer: Studio.lab is an unofficial modification. It is not affiliated with, endorsed by, or connected to Google LLC or Google AI Studio.*

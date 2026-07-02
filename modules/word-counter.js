@@ -56,7 +56,8 @@
         const targets = new Set();
         mutations.forEach((mutation) => {
           const target = mutation.target;
-          const turn = target && target.closest ? target.closest('ms-chat-turn') : null;
+          const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+          const turn = target && target.closest ? target.closest(turnSel) : null;
           if (turn) targets.add(turn);
         });
 
@@ -87,7 +88,8 @@
   }
 
   function updateAllTurns() {
-    document.querySelectorAll('ms-chat-turn').forEach(updateTurnWordCount);
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    document.querySelectorAll(turnSel).forEach(updateTurnWordCount);
   }
 
   function removeCounters() {
@@ -110,14 +112,16 @@
     if (!header && isModel) {
       // Thinking turn above might hold the author-label
       const prev = turnNode.previousElementSibling;
-      if (prev && prev.tagName === 'MS-CHAT-TURN') {
+      const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+      if (prev && prev.tagName === turnSel.toUpperCase()) {
         header = prev.querySelector('.author-label');
       }
     }
     if (!header) return;
 
     // Extract text ONLY from ms-text-chunk — works for both user and model turns
-    const textChunks = turnNode.querySelectorAll('ms-prompt-chunk.text-chunk ms-text-chunk');
+    const textSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.TEXT_CHUNK : 'ms-text-chunk';
+    const textChunks = turnNode.querySelectorAll(textSel);
     const parts = [];
     textChunks.forEach(chunk => {
       const t = chunk.innerText;

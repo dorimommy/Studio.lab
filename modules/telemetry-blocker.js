@@ -29,7 +29,7 @@
     ],
     init(ctx) {
       ctxRef = ctx;
-      window.addEventListener('__sl_telemetryBlocked', this.handleBlockedEvent.bind(this));
+      window.addEventListener('__sl_networkRequest', this.handleNetworkEvent.bind(this));
     },
     onStateChange(ctx, prev) {
       if (ctx.state.telemetryBlockerEnabled) {
@@ -42,14 +42,18 @@
         }
       }
     },
-    handleBlockedEvent(e) {
+    handleNetworkEvent(e) {
       const enabled = !!(ctxRef && ctxRef.state.telemetryBlockerEnabled);
       if (!enabled) return;
       
-      const { url, method } = e.detail || {};
+      const { url, method, isTelemetry } = e.detail || {};
       if (url) {
-        blockedCount++;
-        console.log('%c[Studio.lab] 🛡️ Telemetry blocked: ' + method + ' ' + url, 'color:#ef5350');
+        if (isTelemetry) {
+          blockedCount++;
+          console.log('%c[Studio.lab] 🛡️ Telemetry blocked: ' + method + ' ' + url, 'color:#ef5350');
+        } else {
+          console.log('%c[Studio.lab] 🟡 Network Request: ' + method + ' ' + url, 'color:#ffca28');
+        }
       }
     }
   });

@@ -21,8 +21,35 @@
       .sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 
+  const SELECTORS = {
+    CHAT_TURN: 'ms-chat-turn',
+    THOUGHT_CHUNK: 'ms-thought-chunk',
+    TEXT_CHUNK: '.text-chunk, ms-text-chunk',
+    PROMPT_BOX: 'ms-prompt-box',
+    AUTOSCROLL_CONTAINER: 'ms-autoscroll-container',
+    LOADING_INDICATOR: 'ms-chat-loading-indicator',
+    SIDEBAR_ANCHORS: [
+      'ms-system-instructions-panel',
+      'ms-model-selector',
+      '.selector-container.field-group',
+      'ms-run-settings'
+    ]
+  };
+
+  function log(message, type = 'info') {
+    const colors = {
+      info: 'color:#87a9ff;font-weight:bold',
+      success: 'color:#66bb6a;font-weight:bold',
+      warn: 'color:#ffca28;font-weight:bold',
+      error: 'color:#ef5350;font-weight:bold'
+    };
+    console.log(`%c[Studio.lab] ${message}`, colors[type] || colors.info);
+  }
+
   window.StudioLab = Object.assign(window.StudioLab || {}, {
     registerModule,
-    getModules
+    getModules,
+    SELECTORS,
+    log
   });
 })();

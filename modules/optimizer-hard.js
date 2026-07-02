@@ -31,6 +31,12 @@
       { icon: 'delete', text: 'Permanently removes old messages from the active browser session.' },
       { icon: 'speed', text: 'Useful for extremely long chats where history scrolling is not needed.' }
     ],
+    init(ctx) {
+      sync(ctx);
+    },
+    onStateChange(ctx) {
+      sync(ctx);
+    },
     renderControls(ctx) {
       const turnCount = ctx.getTurnCount();
       const max = Math.max(turnCount + 10, 50);
@@ -111,12 +117,47 @@
     }
   });
 
+  let intervalId = null;
+
   function isSelected(state) {
     return state.optimizerEnabled && state.optimizerMode === 'hard';
   }
 
+  function sync(ctx) {
+    if (isSelected(ctx.state)) start();
+    else stop();
+  }
+
+  function start() {
+    if (intervalId) return;
+    
+    // Inject fast-render CSS to prevent lag on initial load
+    let style = document.getElementById('sl-fast-render-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sl-fast-render-style';
+      style.textContent = `
+        ms-chat-turn {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 500px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  function stop() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    const style = document.getElementById('sl-fast-render-style');
+    if (style) style.remove();
+  }
+
   function applyHardCleanup(ctx) {
-    const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    const turns = Array.from(document.querySelectorAll(turnSel));
     if (!turns.length) return;
 
     const keep = ctx.state.autoKeep

@@ -472,7 +472,7 @@
   function modifyPlusMenu() {
     const contents = document.querySelectorAll('.mat-mdc-menu-content:not([data-sl-injected])');
     if (contents.length > 0) {
-        console.log('[ModernWebChat] Found ' + contents.length + ' uninjected menu contents');
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + contents.length + ' uninjected menu contents', 'info');
     }
     
     contents.forEach(content => {
@@ -480,12 +480,12 @@
         const driveBtn = content.querySelector('.drive-file-menu-item');
         if (!driveBtn) return; // Silent return for other menus
 
-        console.log('[ModernWebChat] Target + menu container detected. Injecting...');
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Target + menu container detected. Injecting...', 'info');
         content.dataset.slInjected = 'true';
         
         // Find all items in this specific menu
         const allItems = Array.from(content.querySelectorAll('button[mat-menu-item], button.mat-mdc-menu-item, button[role="menuitem"]'));
-        console.log('[ModernWebChat] Found ' + allItems.length + ' core items inside the menu');
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + allItems.length + ' core items inside the menu', 'info');
 
         const itemsToMove = [];
         let insertAfterNode = driveBtn; // We will insert our stuff after the core items
@@ -495,13 +495,13 @@
                 item.classList.contains('youtube-video-menu-item') || 
                 item.classList.contains('sample-media-picker-menu-item')) {
                 itemsToMove.push(item);
-                console.log('[ModernWebChat] Queued for submenu: ' + item.className);
+                if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Queued for submenu: ' + item.className, 'info');
             } else {
                 insertAfterNode = item; // Keep updating to the last kept item
             }
         });
 
-        console.log('[ModernWebChat] Total items to move to submenu: ' + itemsToMove.length);
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Total items to move to submenu: ' + itemsToMove.length, 'info');
 
         if (itemsToMove.length > 0) {
             const otherWrapper = document.createElement('div');
@@ -546,9 +546,9 @@
                 e.preventDefault();
                 e.stopPropagation(); // Keep main menu open
             };
-            console.log('[ModernWebChat] Submenu created and injected successfully.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Submenu created and injected successfully.', 'success');
         } else {
-            console.log('[ModernWebChat] WARNING: No items found to move to submenu.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('No items found to move to submenu.', 'warn');
         }
 
         // Add Divider
@@ -560,12 +560,12 @@
         divider.style.display = 'block';
         divider.style.margin = '4px 0';
         content.appendChild(divider);
-        console.log('[ModernWebChat] Divider added.');
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
 
         // Add Tools
         const nativeTools = document.querySelector('ms-prompt-box-tools button') || document.querySelector('.prompt-box-tools button');
         if (nativeTools) {
-            console.log('[ModernWebChat] Found native Tools button, adding proxy to menu.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding proxy to menu.', 'info');
             const toolsBtn = document.createElement('button');
             toolsBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
             toolsBtn.innerHTML = `
@@ -577,13 +577,13 @@
             toolsBtn.onclick = () => { nativeTools.click(); };
             content.appendChild(toolsBtn);
         } else {
-            console.log('[ModernWebChat] Native Tools button NOT FOUND in DOM.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
         }
 
         // Add Paid API
         const nativeKey = document.querySelector('ms-paid-api-key-button button') || document.querySelector('.paid-api-key-button');
         if (nativeKey) {
-            console.log('[ModernWebChat] Found native Paid API Key button, adding proxy to menu.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
             const keyBtn = document.createElement('button');
             keyBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
             keyBtn.innerHTML = `
@@ -597,7 +597,7 @@
             };
             content.appendChild(keyBtn);
         } else {
-            console.log('[ModernWebChat] Native Paid API Key button NOT FOUND in DOM.');
+            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Paid API Key button NOT FOUND in DOM.', 'warn');
         }
     });
   }
@@ -607,16 +607,19 @@
   // ══════════════════════════════════════════════════════════════════
 
   function autoDeleteThoughts() {
-    const chunks = document.querySelectorAll('ms-thought-chunk');
+    const thoughtSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.THOUGHT_CHUNK : 'ms-thought-chunk';
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    const chunks = document.querySelectorAll(thoughtSel);
     chunks.forEach(chunk => {
       if (chunk.dataset.slDeleted === 'true') return;
       // Find the parent turn
-      const turn = chunk.closest('ms-chat-turn');
+      const turn = chunk.closest(turnSel);
       if (!turn) return;
       // Only delete if there's visible content AFTER the thought (text-chunk or image-chunk)
       const turnContent = turn.querySelector('.turn-content');
       if (!turnContent) return;
-      const hasVisibleContent = turnContent.querySelector('ms-text-chunk, ms-image-chunk');
+      const textSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.TEXT_CHUNK : 'ms-text-chunk';
+      const hasVisibleContent = turnContent.querySelector(`${textSel}, ms-image-chunk`);
       if (!hasVisibleContent) return; // Response hasn't started yet, keep thoughts visible
       chunk.dataset.slDeleted = 'true';
       chunk.classList.add('sl-delete-target');
@@ -671,7 +674,7 @@
     // Already relocated?
     if (toolsBar.parentElement === buttonsRow) return;
 
-    console.log('[ModernWebChat] Relocating enabled-tools bar into buttons-row.');
+    if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Relocating enabled-tools bar into buttons-row.', 'info');
     buttonsRow.appendChild(toolsBar);
   }
 

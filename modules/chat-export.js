@@ -15,13 +15,14 @@
     try {
       if (e.detail) {
         lastPayload = JSON.parse(e.detail);
-        console.log(
-          '%c[Studio.lab] 📦 Chat payload captured (' + (lastPayload[1] ? lastPayload[1].length : '?') + ' turns)',
-          'color:#87a9ff'
-        );
+        if (window.StudioLab && window.StudioLab.log) {
+          window.StudioLab.log('📦 Chat payload captured (' + (lastPayload[1] ? lastPayload[1].length : '?') + ' turns)', 'info');
+        }
       }
     } catch (err) {
-      console.warn('[Studio.lab] Failed to parse request payload for export', err);
+      if (window.StudioLab && window.StudioLab.log) {
+        window.StudioLab.log('Failed to parse request payload for export', 'warn');
+      }
     }
   });
 

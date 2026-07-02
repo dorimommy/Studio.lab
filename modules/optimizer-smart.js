@@ -70,18 +70,36 @@
     if (intervalId) return;
     intervalId = setInterval(applySmartOptimizer, 600);
     applySmartOptimizer();
+    
+    // Inject fast-render CSS to prevent lag on initial load
+    let style = document.getElementById('sl-fast-render-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sl-fast-render-style';
+      style.textContent = `
+        ms-chat-turn {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 500px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }
 
   function stop() {
     if (!intervalId) return;
     clearInterval(intervalId);
     intervalId = null;
+    
+    const style = document.getElementById('sl-fast-render-style');
+    if (style) style.remove();
   }
 
   function applySmartOptimizer() {
     if (!isActive()) return;
 
-    const turns = Array.from(document.querySelectorAll('ms-chat-turn'));
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    const turns = Array.from(document.querySelectorAll(turnSel));
     if (!turns.length) return;
 
     const keep = getKeepCount();
@@ -95,9 +113,10 @@
       lastKnownTurnCount = turns.length;
     }
 
+    const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
     const scroller = findScroller(turns[0]) ||
-      document.querySelector('ms-autoscroll-container div') ||
-      document.querySelector('ms-autoscroll-container');
+      document.querySelector(`${autoSel} div`) ||
+      document.querySelector(autoSel);
     if (!scroller) return;
 
     const isAtBottom = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) <= 600;
@@ -176,14 +195,16 @@
     userStartedReading = false;
 
     const banner = document.querySelector('.sl-load-banner');
-    const anchor = detachedParent ? detachedParent.querySelector('ms-chat-turn') : null;
-    const scroller = findScroller(anchor || document.querySelector('ms-chat-turn')) ||
-      document.querySelector('ms-autoscroll-container div') ||
-      document.querySelector('ms-autoscroll-container');
+    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+    const anchor = detachedParent ? detachedParent.querySelector(turnSel) : null;
+    const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
+    const scroller = findScroller(anchor || document.querySelector(turnSel)) ||
+      document.querySelector(`${autoSel} div`) ||
+      document.querySelector(autoSel);
 
     if (!detachedTurns.length || !detachedParent) {
       if (banner) banner.remove();
-      lastKnownTurnCount = document.querySelectorAll('ms-chat-turn').length;
+      lastKnownTurnCount = document.querySelectorAll(turnSel).length;
       return;
     }
 
@@ -205,7 +226,7 @@
       else detachedParent.appendChild(turn);
     });
 
-    lastKnownTurnCount = document.querySelectorAll('ms-chat-turn').length;
+    lastKnownTurnCount = document.querySelectorAll(turnSel).length;
 
     const fixScrollOffset = () => {
       if (!scroller || !anchor) return;

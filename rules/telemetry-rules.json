@@ -129,5 +129,80 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 9,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||aistudio.google.com/generate_204",
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "image",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 10,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||feedback-pa.clients6.google.com",
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "script",
+        "sub_frame",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 11,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||www.google.com/pagead/",
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 12,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||www.google.com/measurement/",
+      "initiatorDomains": [
+        "aistudio.google.com"
+      ],
+      "resourceTypes": [
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
+    }
   }
 ]
