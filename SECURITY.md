@@ -4,11 +4,6 @@
 
 Studio.lab is a community-driven project. We always recommend using the latest available version from the `main` branch to ensure you have the most up-to-date performance improvements and security patches.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.5.x   | :white_check_mark: |
-| < 1.5.0 | :x:                |
-
 ## Reporting a Vulnerability
 
 Because Studio.lab operates entirely locally within your browser and does not connect to any external third-party servers, the attack surface is extremely minimal. All user data, configuration, and state are strictly contained within `chrome.storage.local`.
