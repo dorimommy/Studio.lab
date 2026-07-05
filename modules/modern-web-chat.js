@@ -704,7 +704,6 @@
     order: 40,
     title: 'Modern Web Chat',
     subtitle: 'Gemini-style input bar & media gallery',
-    badge: { text: 'New', className: 'new' },
     icon: 'forum',
     stateKey: 'modernWebChatEnabled',
     defaults: { modernWebChatEnabled: false },

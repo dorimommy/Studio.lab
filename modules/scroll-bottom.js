@@ -12,10 +12,11 @@
   let resizeObserver = null;
   let isGenerating = false;
   let generatingTimeout = null;
+  let startRetryTimeout = null;
 
   window.StudioLab.registerModule({
     id: 'scroll-bottom',
-    group: 'modules',
+    group: 'tweaks',
     order: 10,
     title: 'Scroll to Bottom Button',
     subtitle: 'jump-back-down-control',
@@ -41,6 +42,7 @@
       }
       activeScroller = null;
       stopResizeObserver();
+      clearTimeout(startRetryTimeout);
       setTimeout(start, 500); // re-init on route change
     }
   });
@@ -52,6 +54,13 @@
   function start() {
     if (resizeObserver) return;
     
+    const scroller = findActiveScroller();
+    if (!scroller) {
+      clearTimeout(startRetryTimeout);
+      startRetryTimeout = setTimeout(start, 1000);
+      return;
+    }
+
     // Initial check
     tick();
 
@@ -67,14 +76,11 @@
       tick();
     });
 
-    const scroller = findActiveScroller();
-    if (scroller) {
-      activeScroller = scroller;
-      activeScroller.addEventListener('scroll', handleScroll, { passive: true });
-      // Observe the content inside scroller
-      const content = scroller.firstElementChild || scroller;
-      resizeObserver.observe(content);
-    }
+    activeScroller = scroller;
+    activeScroller.addEventListener('scroll', handleScroll, { passive: true });
+    // Observe the content inside scroller
+    const content = scroller.firstElementChild || scroller;
+    resizeObserver.observe(content);
   }
 
   function stopResizeObserver() {

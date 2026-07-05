@@ -27,7 +27,6 @@
     title: 'Buffered (Safe)',
     subtitle: 'auto-detach-on-overflow',
     icon: 'storage',
-    badge: { text: 'Recommended', className: 'new' },
     modeKey: 'optimizerMode',
     modeValue: 'smart',
     enabledKey: 'optimizerEnabled',

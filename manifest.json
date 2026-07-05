@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Studio.lab",
-  "version": "1.5",
-  "description": "Studio.lab — performance optimizer & content bypass for Google AI Studio.",
+  "version": "1.6",
+  "description": "Unofficial performance optimizer, bypass, and workspace extension for Google AI Studio.",
   "permissions": [
     "storage",
     "declarativeNetRequest"

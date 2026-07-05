@@ -397,6 +397,16 @@
   border-color: transparent;
 }
 
+.sl-module-item:has(.sl-mode-row.selected) {
+  background-color: var(--color-v3-surface-container-highest, #2a2a2a);
+  border-radius: 12px;
+}
+
+.sl-module-item:has(.sl-mode-row.selected) .sl-mode-row.selected {
+  background-color: transparent;
+  border-color: transparent;
+}
+
 /* ── Row internals (matches native .row-header, .model-title, etc.) ─ */
 .sl-mode-row .row-header {
   display: flex;

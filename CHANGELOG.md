@@ -1,5 +1,13 @@
 # Studio.lab Changelog
 
+## v1.6-release
+**Settings UI Overhaul & UX Polish**
+* **Redesigned:** Settings Menu Tabs. Completely restructured the settings modal into logical categories (`Injection`, `Tweaks`, `Modules`, `Info`), making it much easier to distinguish between core network interceptors, minor UI enhancements, and major features.
+* **Redesigned:** Info Tab. The "About" section was rebuilt from the ground up using a modern, card-based layout that perfectly matches the native Google AI Studio aesthetics. It now clearly presents active modules, privacy details (local storage, zero telemetry), and structured community links.
+* **Enhanced:** Visual Polish & Accessibility. Fixed low-contrast text issues by strictly adopting native CSS color variables (`--color-v3-text`). Removed unnecessary and cluttered badges ("New", "Recommended") from the module list.
+* **Fixed:** Module Selection States. Action-oriented modules (like Chat Export) now correctly highlight the entire card component uniformly, with fully responsive, edge-to-edge action buttons.
+* **Changed:** The version number displayed in the UI is now dynamically fetched directly from `manifest.json`, eliminating hardcoded values and ensuring it's always accurate.
+
 ## v1.5-release
 **Major Refactoring & Stability Update**
 * **Added:** Centralized DOM Selectors Map (`window.StudioLab.SELECTORS`). All DOM querying is now abstracted into a single configuration, significantly improving resilience against Google UI changes.

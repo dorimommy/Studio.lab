@@ -12,7 +12,7 @@
 
   window.StudioLab.registerModule({
     id: 'word-counter',
-    group: 'modules',
+    group: 'tweaks',
     order: 20,
     title: 'Word Counter',
     subtitle: 'real-time-turn-stats',

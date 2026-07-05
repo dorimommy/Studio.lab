@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0';
+  const VERSION = chrome.runtime.getManifest().version;
   const STORAGE_KEY = 'slState';
   const ICONS = {
     bolt: '<path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/>',
@@ -29,27 +29,41 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/>'
   };
 
+  const TABS = [
+    { id: 'all', label: 'All' },
+    { id: 'injection', label: 'Injection' },
+    { id: 'tweaks', label: 'Tweaks' },
+    { id: 'modules', label: 'Modules' },
+    { id: 'info', label: 'Info' }
+  ];
+
   const GROUPS = [
     {
       id: 'bypass',
-      tab: 'Bypass',
+      tabId: 'injection',
       title: 'CONTENT BYPASS',
       description: 'Bypass content filters and blocked response streams.',
       enabledKey: 'bypassEnabled'
     },
     {
       id: 'optimizer',
-      tab: 'Optimization',
+      tabId: 'injection',
       title: 'CHAT OPTIMIZER',
       description: 'Remove old chat turns from memory to eliminate UI lag.',
       enabledKey: 'optimizerEnabled',
       showTurnCounter: true
     },
     {
+      id: 'tweaks',
+      tabId: 'tweaks',
+      title: 'TWEAKS',
+      description: 'Small improvements for the interface.'
+    },
+    {
       id: 'modules',
-      tab: 'Modules',
+      tabId: 'modules',
       title: 'MODULES',
-      description: 'Extra UI features to enhance AI Studio experience.'
+      description: 'Extra features to enhance AI Studio experience.'
     }
   ];
 
@@ -337,9 +351,7 @@
   }
 
   function renderDialog() {
-    const tabs = renderTabButton('all', 'All') + GROUPS
-      .map(group => renderTabButton(group.id, group.tab))
-      .join('') + renderTabButton('info', 'Info');
+    const tabs = TABS.map(t => renderTabButton(t.id, t.label)).join('');
 
     return `
       <div class="sl-dialog" role="dialog" aria-modal="true" aria-label="Studio.lab Settings">
@@ -386,10 +398,10 @@
   function renderGroupTab(group) {
     const groupModules = modules.filter(module => module.group === group.id);
     const isDisabled = group.enabledKey && !state[group.enabledKey];
-    const activeClass = (activeTab === group.id || activeTab === 'all') ? 'active' : '';
+    const activeClass = (activeTab === group.tabId || activeTab === 'all') ? 'active' : '';
 
     return `
-      <div class="sl-tab-content ${activeClass}" data-sl-tab-content="${group.id}" role="tabpanel">
+      <div class="sl-tab-content ${activeClass}" data-sl-tab-content="${group.tabId}" role="tabpanel">
         <div class="sl-section" data-sl-section="${group.id}">
           <div class="sl-header-row">
             <div class="sl-header-text">
@@ -497,16 +509,42 @@
           <div class="sl-header-row">
             <div class="sl-header-text">
               <div class="sl-section-title">ABOUT STUDIO.LAB</div>
-              <div class="sl-section-desc">Unofficial extension for Google AI Studio.</div>
+              <div class="sl-section-desc">Unofficial extension for Google AI Studio. v${VERSION}</div>
             </div>
           </div>
           <div class="sl-info-body">
-            <p><strong>Studio.lab v${VERSION}</strong> runs feature logic from modular files.</p>
-            <ul class="sl-info-list">
-              <li>${renderIcon('check_circle', 'detail')}<span>Modules loaded: ${html(loadedModules || 'none')}</span></li>
-              <li>${renderIcon('check_circle', 'detail')}<span>Settings are saved locally with Chrome storage.</span></li>
-              <li>${renderIcon('check_circle', 'detail')}<span>No analytics or external requests are used by Studio.lab.</span></li>
-            </ul>
+            <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+              <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">Active Modules</p>
+              <div style="color: var(--color-v3-text); font-size: 13px; line-height: 1.6;">
+                ${html(loadedModules || 'none')}
+              </div>
+            </div>
+            <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                ${renderIcon('storage', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">Settings are saved locally with Chrome storage.</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                ${renderIcon('visibility_off', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">Zero analytics or external requests.</span>
+              </div>
+            </div>
+            <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px;">
+              <p style="margin: 0 0 12px 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">Community & Updates</p>
+              <a href="https://reddit.com/r/GoogleAIStudio/" target="_blank" rel="noreferrer" style="color: var(--color-v3-text); text-decoration: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--color-v3-surface-container-highest); border-radius: 8px; margin-bottom: 8px;">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; flex-shrink: 0; fill: #FF4500;"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.688-.561-1.25-1.25-1.25zm-2.75 3.846c-1.353 0-2.457-.34-2.827-.811-.08-.101-.064-.249.037-.329.1-.08.246-.064.327.037.233.294 1.134.603 2.463.603 1.329 0 2.23-.309 2.463-.603.081-.101.228-.117.328-.037.101.08.118.228.038.329-.37.471-1.474.811-2.827.811z"/></svg>
+                <span style="font-size: 13px; font-weight: 500;">r/GoogleAIStudio</span>
+              </a>
+              <a href="https://github.com/dorimommy/Studio.lab" target="_blank" rel="noreferrer" style="color: var(--color-v3-text); text-decoration: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--color-v3-surface-container-highest); border-radius: 8px; margin-bottom: 8px;">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; flex-shrink: 0; fill: var(--color-v3-text);"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                <span style="font-size: 13px; font-weight: 500;">Source code</span>
+              </a>
+              <div style="border-top: 1px solid var(--color-v3-outline-var); margin: 12px 0; padding-top: 12px;">
+                <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">Useful Links</p>
+              </div>
+              <a href="https://reddit.com/r/GeminiAI/" target="_blank" rel="noreferrer" style="color: var(--color-v3-text); text-decoration: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--color-v3-surface-container-highest); border-radius: 8px;">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; flex-shrink: 0; fill: #FF4500;"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.688-.561-1.25-1.25-1.25zm-2.75 3.846c-1.353 0-2.457-.34-2.827-.811-.08-.101-.064-.249.037-.329.1-.08.246-.064.327.037.233.294 1.134.603 2.463.603 1.329 0 2.23-.309 2.463-.603.081-.101.228-.117.328-.037.101.08.118.228.038.329-.37.471-1.474.811-2.827.811z"/></svg>
+                <span style="font-size: 13px; font-weight: 500;">r/GeminiAI</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -600,6 +638,7 @@
   }
 
   function isModuleSelected(module) {
+    if (module.alwaysSelected) return true;
     if (module.modeKey) return state[module.modeKey] === module.modeValue;
     if (module.stateKey) return !!state[module.stateKey];
     return false;

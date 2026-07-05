@@ -109,11 +109,11 @@
     order: 5,
     title: 'Chat Export',
     subtitle: 'Export complete context to Markdown or JSON.',
-    badge: { text: 'New', className: 'new' },
+    alwaysSelected: true,
     renderControls: () => `
-      <div class="sl-controls-row" style="padding: 12px; padding-top: 0; gap: 8px; display: flex;">
+      <div class="sl-controls-row" style="padding: 0 12px 12px; gap: 8px; display: flex; width: 100%; box-sizing: border-box;">
         <button type="button" class="sl-apply-btn" id="sl-export-md" style="flex: 1;">Export Markdown</button>
-        <button type="button" class="sl-apply-btn" id="sl-export-json" style="flex: 1; background: var(--color-v3-surface-container-highest, #333); color: var(--color-v3-text, #d4d4d4);">Export JSON</button>
+        <button type="button" class="sl-apply-btn" id="sl-export-json" style="flex: 1;">Export JSON</button>
       </div>
     `,
     bindControls: (modalEl) => {

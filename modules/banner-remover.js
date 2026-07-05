@@ -24,7 +24,7 @@
 
   window.StudioLab.registerModule({
     id: 'banner-remover',
-    group: 'modules',
+    group: 'tweaks',
     order: 30,
     title: 'Paid Banner Remover',
     subtitle: 'clean-interface',
