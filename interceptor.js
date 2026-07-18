@@ -7,6 +7,261 @@
 (function () {
   'use strict';
 
+  function injectInvisibleCSS() {
+    let style = document.getElementById('sl-invisible-css');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'sl-invisible-css';
+      style.textContent = `
+        .cdk-overlay-container, 
+        .cdk-global-overlay-wrapper, 
+        .cdk-overlay-backdrop, 
+        .cdk-overlay-pane,
+        mat-dialog-container {
+           opacity: 0.0001 !important;
+           pointer-events: none !important;
+           transition: none !important;
+           animation: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+      style.disabled = true;
+    }
+  }
+
+  function toggleInvisibleDOM(hide) {
+    injectInvisibleCSS();
+    const style = document.getElementById('sl-invisible-css');
+    if (style) {
+      style.disabled = !hide;
+    }
+  }
+
+  window.addEventListener('__sl_captureProfile', (e) => {
+    const eventId = e.detail && e.detail.eventId;
+    if (!eventId) return;
+
+    const profile = {};
+    const modelSelect = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
+    if (modelSelect) profile.model = modelSelect.textContent.trim();
+
+    const tempInput = document.querySelector('ms-temperature-slider input');
+    if (tempInput) profile.temperature = parseFloat(tempInput.value);
+
+    if (!profile.model) profile.model = 'gemini-1.5-pro';
+
+    const toolToggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle');
+    const toolsState = [];
+    toolToggles.forEach(t => {
+       const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
+       const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
+       const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
+       
+       let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
+       if (name) toolsState.push({ name, checked: !!isChecked });
+    });
+    profile.tools = toolsState;
+
+    window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: profile }));
+  });
+
+  window.addEventListener('__sl_syncLibrary', (e) => {
+    const eventId = e.detail && e.detail.eventId;
+    if (!eventId) return;
+
+    try {
+      const stored = localStorage.getItem('aistudio_all_system_instructions');
+      let libraryItems = [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        
+        if (Array.isArray(parsed)) {
+          libraryItems = parsed.map((item, idx) => {
+            const rawText = typeof item === 'string' ? item : (item.text || item.instruction || item.content || JSON.stringify(item));
+            const rawTitle = typeof item === 'string' ? null : (item.title || item.name || item.displayName);
+            const promptText = rawText ? rawText.trim() : '';
+            const displayTitle = rawTitle ? rawTitle.trim() : (promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''));
+            return {
+              text: displayTitle,
+              instructionText: promptText,
+              id: idx.toString()
+            };
+          }).filter(opt => opt.instructionText !== '');
+        } else if (typeof parsed === 'object') {
+           Object.values(parsed).forEach((item, idx) => {
+             const rawText = typeof item === 'string' ? item : (item.text || item.instruction || item.content || JSON.stringify(item));
+             const rawTitle = typeof item === 'string' ? null : (item.title || item.name || item.displayName);
+             const promptText = rawText ? rawText.trim() : '';
+             const displayTitle = rawTitle ? rawTitle.trim() : (promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''));
+             if (promptText !== '') {
+               libraryItems.push({
+                  text: displayTitle,
+                  instructionText: promptText,
+                  id: idx.toString()
+               });
+             }
+           });
+        }
+      }
+      
+      window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: libraryItems }));
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: { error: 'Failed to read from localStorage: ' + err.message } }));
+    }
+  });
+
+  window.addEventListener('__sl_applyProfile', (e) => {
+    const eventId = e.detail && e.detail.eventId;
+    const profile = e.detail && e.detail.profile;
+    if (!eventId || !profile) return;
+
+    // Check if the required UI components have rendered
+    const modelBtn = document.querySelector('ms-model-selector button.model-selector-card');
+    const sysBtn = document.querySelector('ms-system-instructions-panel button');
+    if (!modelBtn || !sysBtn) {
+       window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: { error: 'Not ready' } }));
+       return;
+    }
+
+    let appliedRunSettings = true;
+    toggleInvisibleDOM(true);
+
+    function waitFor(selector, callback, maxAttempts = 30) {
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        const el = document.querySelectorAll(selector);
+        if (el.length > 0 || attempts >= maxAttempts) {
+           clearInterval(interval);
+           callback(el.length > 0 ? el : null);
+        }
+      }, 50);
+    }
+
+    function waitForDisappear(selector, callback, maxAttempts = 30) {
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        const el = document.querySelectorAll(selector);
+        if (el.length === 0 || attempts >= maxAttempts) {
+           clearInterval(interval);
+           callback();
+        }
+      }, 50);
+    }
+
+    function applyModel(next) {
+      if (!profile.model) return next();
+      const currentModelEl = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
+      if (currentModelEl && currentModelEl.textContent.trim() === profile.model) return next();
+
+      modelBtn.click();
+
+      waitFor('mat-dialog-container button.content-button', (optionsNodeList) => {
+         const options = optionsNodeList ? Array.from(optionsNodeList) : [];
+         const optionToClick = options.find(opt => opt.textContent.includes(profile.model));
+         
+         if (optionToClick) {
+            optionToClick.click();
+         }
+         
+         setTimeout(() => {
+             const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
+             if (closeBtn) closeBtn.click();
+             else {
+                const backdrop = document.querySelector('.cdk-overlay-backdrop');
+                if (backdrop) backdrop.click();
+             }
+             waitForDisappear('mat-dialog-container', next);
+         }, 100);
+      });
+    }
+
+    function applySystemInstruction(next) {
+      if (!profile.systemInstructions) return next();
+      
+      const inlineTextarea = document.querySelector('ms-system-instructions textarea');
+      if (inlineTextarea && inlineTextarea.offsetParent !== null) {
+         inlineTextarea.value = profile.systemInstructions;
+         inlineTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+         return next();
+      }
+
+      const btn = document.querySelector('ms-system-instructions-panel button');
+      if (!btn) return next();
+      btn.click();
+
+      waitFor('mat-dialog-container textarea', (textareas) => {
+         if (!textareas) {
+            const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
+            if (closeBtn) closeBtn.click();
+            else {
+               const backdrop = document.querySelector('.cdk-overlay-backdrop');
+               if (backdrop) backdrop.click();
+            }
+            waitForDisappear('mat-dialog-container', next);
+            return;
+         }
+
+         const ta = textareas[0];
+         ta.value = profile.systemInstructions;
+         ta.dispatchEvent(new Event('input', { bubbles: true }));
+
+         setTimeout(() => {
+            const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
+            if (closeBtn) closeBtn.click();
+            else {
+               const panelBackdrop = document.querySelector('.cdk-overlay-backdrop');
+               if (panelBackdrop) panelBackdrop.click();
+            }
+            waitForDisappear('mat-dialog-container', next);
+         }, 100);
+      });
+    }
+
+    function applyTools(next) {
+      if (!profile.tools || !profile.tools.length) return next();
+      
+      const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle');
+      
+      let i = 0;
+      function nextToggle() {
+         if (i >= toggles.length) return next();
+         
+         const t = toggles[i];
+         const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
+         const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
+         let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
+         
+         const savedState = profile.tools.find(x => x.name === name);
+         if (savedState) {
+            const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
+            if (!!isChecked !== savedState.checked) {
+               const btn = t.querySelector('button');
+               if (btn) btn.click();
+            }
+         }
+         i++;
+         setTimeout(nextToggle, 50);
+      }
+      
+      nextToggle();
+    }
+
+    applyModel(() => {
+       applySystemInstruction(() => {
+          applyTools(() => {
+             setTimeout(() => {
+                toggleInvisibleDOM(false);
+                window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: appliedRunSettings }));
+             }, 100);
+          });
+       });
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+
   const URL_MARKER = 'GenerateContent';
   const EVENT_NAME = '__aisu_xhrCapture';
 

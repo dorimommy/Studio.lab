@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Studio.lab",
-  "version": "1.6",
+  "version": "1.7",
   "description": "Unofficial performance optimizer, bypass, and workspace extension for Google AI Studio.",
   "permissions": [
     "storage",
@@ -54,9 +54,10 @@
         "modules/chat-export.js",
         "modules/scroll-bottom.js",
         "modules/word-counter.js",
-        "modules/banner-remover.js",
         "modules/modern-web-chat.js",
         "modules/telemetry-blocker.js",
+        "modules/ui-cleaner.js",
+        "modules/default-profile.js",
         "content.js"
       ],
       "css": [

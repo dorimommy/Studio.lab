@@ -388,8 +388,12 @@
   font-family: Inter, sans-serif;
 }
 
-.sl-mode-row:hover {
+.sl-mode-row:not(.static):hover {
   background-color: var(--color-v3-surface-container-highest, #2a2a2a);
+}
+
+.sl-mode-row.static {
+  cursor: default;
 }
 
 .sl-mode-row.selected {

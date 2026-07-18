@@ -472,133 +472,133 @@
   function modifyPlusMenu() {
     const contents = document.querySelectorAll('.mat-mdc-menu-content:not([data-sl-injected])');
     if (contents.length > 0) {
-        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + contents.length + ' uninjected menu contents', 'info');
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + contents.length + ' uninjected menu contents', 'info');
     }
-    
+
     contents.forEach(content => {
-        // Find the native Drive button to verify this is the + menu
-        const driveBtn = content.querySelector('.drive-file-menu-item');
-        if (!driveBtn) return; // Silent return for other menus
+      // Find the native Drive button to verify this is the + menu
+      const driveBtn = content.querySelector('.drive-file-menu-item');
+      if (!driveBtn) return; // Silent return for other menus
 
-        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Target + menu container detected. Injecting...', 'info');
-        content.dataset.slInjected = 'true';
-        
-        // Find all items in this specific menu
-        const allItems = Array.from(content.querySelectorAll('button[mat-menu-item], button.mat-mdc-menu-item, button[role="menuitem"]'));
-        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + allItems.length + ' core items inside the menu', 'info');
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Target + menu container detected. Injecting...', 'info');
+      content.dataset.slInjected = 'true';
 
-        const itemsToMove = [];
-        let insertAfterNode = driveBtn; // We will insert our stuff after the core items
+      // Find all items in this specific menu
+      const allItems = Array.from(content.querySelectorAll('button[mat-menu-item], button.mat-mdc-menu-item, button[role="menuitem"]'));
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + allItems.length + ' core items inside the menu', 'info');
 
-        allItems.forEach(item => {
-            if (item.classList.contains('camera-menu-item') || 
-                item.classList.contains('youtube-video-menu-item') || 
-                item.classList.contains('sample-media-picker-menu-item')) {
-                itemsToMove.push(item);
-                if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Queued for submenu: ' + item.className, 'info');
-            } else {
-                insertAfterNode = item; // Keep updating to the last kept item
-            }
-        });
+      const itemsToMove = [];
+      let insertAfterNode = driveBtn; // We will insert our stuff after the core items
 
-        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Total items to move to submenu: ' + itemsToMove.length, 'info');
+      allItems.forEach(item => {
+        if (item.classList.contains('camera-menu-item') ||
+          item.classList.contains('youtube-video-menu-item') ||
+          item.classList.contains('sample-media-picker-menu-item')) {
+          itemsToMove.push(item);
+          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Queued for submenu: ' + item.className, 'info');
+        } else {
+          insertAfterNode = item; // Keep updating to the last kept item
+        }
+      });
 
-        if (itemsToMove.length > 0) {
-            const otherWrapper = document.createElement('div');
-            otherWrapper.className = 'sl-hover-wrapper';
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Total items to move to submenu: ' + itemsToMove.length, 'info');
 
-            const otherBtn = document.createElement('button');
-            otherBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-            otherBtn.innerHTML = `
+      if (itemsToMove.length > 0) {
+        const otherWrapper = document.createElement('div');
+        otherWrapper.className = 'sl-hover-wrapper';
+
+        const otherBtn = document.createElement('button');
+        otherBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
+        otherBtn.innerHTML = `
                 <span class="mat-mdc-menu-item-text" style="display:flex; align-items:center; width:100%;">
                     <span class="start-icon material-symbols-outlined notranslate">more_horiz</span>
                     <span style="flex:1;">Other uploads</span>
                     <span class="material-symbols-outlined" style="font-size:18px; opacity:0.7;">chevron_right</span>
                 </span>
             `;
-            
-            const submenu = document.createElement('div');
-            submenu.className = 'sl-custom-submenu';
-            submenu.style.minWidth = '200px';
-            submenu.style.background = 'var(--mdc-menu-container-color, #282a2c)';
-            submenu.style.borderRadius = '8px';
-            submenu.style.boxShadow = '0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12)';
-            submenu.style.flexDirection = 'column';
-            submenu.style.zIndex = '1000';
 
-            const submenuContent = document.createElement('div');
-            submenuContent.className = 'mat-mdc-menu-content';
-            submenu.appendChild(submenuContent);
+        const submenu = document.createElement('div');
+        submenu.className = 'sl-custom-submenu';
+        submenu.style.minWidth = '200px';
+        submenu.style.background = 'var(--mdc-menu-container-color, #282a2c)';
+        submenu.style.borderRadius = '8px';
+        submenu.style.boxShadow = '0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12)';
+        submenu.style.flexDirection = 'column';
+        submenu.style.zIndex = '1000';
 
-            // Move the secondary items into the submenu
-            itemsToMove.forEach(item => {
-                submenuContent.appendChild(item);
-                item.style.display = 'flex'; 
-            });
+        const submenuContent = document.createElement('div');
+        submenuContent.className = 'mat-mdc-menu-content';
+        submenu.appendChild(submenuContent);
 
-            otherWrapper.appendChild(otherBtn);
-            otherWrapper.appendChild(submenu);
+        // Move the secondary items into the submenu
+        itemsToMove.forEach(item => {
+          submenuContent.appendChild(item);
+          item.style.display = 'flex';
+        });
 
-            // Insert 'Other uploads' right after the last primary item (e.g. Record Audio)
-            content.insertBefore(otherWrapper, insertAfterNode.nextSibling);
+        otherWrapper.appendChild(otherBtn);
+        otherWrapper.appendChild(submenu);
 
-            otherBtn.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // Keep main menu open
-            };
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Submenu created and injected successfully.', 'success');
-        } else {
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('No items found to move to submenu.', 'warn');
-        }
+        // Insert 'Other uploads' right after the last primary item (e.g. Record Audio)
+        content.insertBefore(otherWrapper, insertAfterNode.nextSibling);
 
-        // Add Divider
-        const divider = document.createElement('mat-divider');
-        divider.setAttribute('role', 'separator');
-        divider.style.borderTopColor = 'var(--mat-divider-color, rgba(255,255,255,0.12))';
-        divider.style.borderTopWidth = '1px';
-        divider.style.borderTopStyle = 'solid';
-        divider.style.display = 'block';
-        divider.style.margin = '4px 0';
-        content.appendChild(divider);
-        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
+        otherBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // Keep main menu open
+        };
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Submenu created and injected successfully.', 'success');
+      } else {
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('No items found to move to submenu.', 'warn');
+      }
 
-        // Add Tools
-        const nativeTools = document.querySelector('ms-prompt-box-tools button') || document.querySelector('.prompt-box-tools button');
-        if (nativeTools) {
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding proxy to menu.', 'info');
-            const toolsBtn = document.createElement('button');
-            toolsBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-            toolsBtn.innerHTML = `
+      // Add Divider
+      const divider = document.createElement('mat-divider');
+      divider.setAttribute('role', 'separator');
+      divider.style.borderTopColor = 'var(--mat-divider-color, rgba(255,255,255,0.12))';
+      divider.style.borderTopWidth = '1px';
+      divider.style.borderTopStyle = 'solid';
+      divider.style.display = 'block';
+      divider.style.margin = '4px 0';
+      content.appendChild(divider);
+      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
+
+      // Add Tools
+      const nativeTools = document.querySelector('ms-prompt-box-tools button') || document.querySelector('.prompt-box-tools button');
+      if (nativeTools) {
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding proxy to menu.', 'info');
+        const toolsBtn = document.createElement('button');
+        toolsBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
+        toolsBtn.innerHTML = `
                 <span class="mat-mdc-menu-item-text">
                     <span class="start-icon material-symbols-outlined notranslate">widgets</span>
                     <span>Tools</span>
                 </span>
             `;
-            toolsBtn.onclick = () => { nativeTools.click(); };
-            content.appendChild(toolsBtn);
-        } else {
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
-        }
+        toolsBtn.onclick = () => { nativeTools.click(); };
+        content.appendChild(toolsBtn);
+      } else {
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
+      }
 
-        // Add Paid API
-        const nativeKey = document.querySelector('ms-paid-api-key-button button') || document.querySelector('.paid-api-key-button');
-        if (nativeKey) {
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
-            const keyBtn = document.createElement('button');
-            keyBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-            keyBtn.innerHTML = `
+      // Add Paid API
+      const nativeKey = document.querySelector('ms-paid-api-key-button button') || document.querySelector('.paid-api-key-button');
+      if (nativeKey) {
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
+        const keyBtn = document.createElement('button');
+        keyBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
+        keyBtn.innerHTML = `
                 <span class="mat-mdc-menu-item-text">
                     <span class="start-icon material-symbols-outlined notranslate">key</span>
                     <span>Link a paid API</span>
                 </span>
             `;
-            keyBtn.onclick = () => {
-                nativeKey.click();
-            };
-            content.appendChild(keyBtn);
-        } else {
-            if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Paid API Key button NOT FOUND in DOM.', 'warn');
-        }
+        keyBtn.onclick = () => {
+          nativeKey.click();
+        };
+        content.appendChild(keyBtn);
+      } else {
+        if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Paid API Key button NOT FOUND in DOM.', 'warn');
+      }
     });
   }
 

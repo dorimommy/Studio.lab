@@ -1,5 +1,12 @@
 # Studio.lab Changelog
 
+## v1.7-release
+**Two New Modules Added**
+* **Added:** `Default Profile` module. A highly requested feature that completely automates your workspace initialization.
+  * *Environment Auto-Apply:* Seamlessly auto-applies your preferred Model, System Instructions, and Toolset immediately upon opening a new chat.
+  * *Native Library Integration:* Securely reads your saved System Instructions directly from Google's native storage, accurately displaying your custom Instruction Titles in the interface.
+* **Added:** `UI Cleaner` module. A dedicated toggle to remove unnecessary interface elements, including quota limit banners, hallucination disclaimers, feedback buttons, and inline code suggestions.
+
 ## v1.6-release
 **Settings UI Overhaul & UX Polish**
 * **Redesigned:** Settings Menu Tabs. Completely restructured the settings modal into logical categories (`Injection`, `Tweaks`, `Modules`, `Info`), making it much easier to distinguish between core network interceptors, minor UI enhancements, and major features.

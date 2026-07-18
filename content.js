@@ -60,6 +60,13 @@
       description: 'Small improvements for the interface.'
     },
     {
+      id: 'cleaner',
+      tabId: 'tweaks',
+      title: 'UI CLEANER',
+      description: 'Hide unused elements and declutter the interface.',
+      enabledKey: 'cleanerEnabled'
+    },
+    {
       id: 'modules',
       tabId: 'modules',
       title: 'MODULES',
@@ -75,8 +82,8 @@
     autoKeep: true,
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
-    bannerRemoverEnabled: true,
-    modernWebChatEnabled: false
+    modernWebChatEnabled: false,
+    cleanerEnabled: false
   };
 
   const moduleApi = window.StudioLab || {};
@@ -157,8 +164,8 @@
     state.autoKeep = !!state.autoKeep;
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;
     state.wordCounterEnabled = !!state.wordCounterEnabled;
-    state.bannerRemoverEnabled = !!state.bannerRemoverEnabled;
     state.modernWebChatEnabled = !!state.modernWebChatEnabled;
+    state.cleanerEnabled = !!state.cleanerEnabled;
   }
 
   function snapshotState() {
@@ -463,8 +470,12 @@
       `
       : '';
 
+    const tag = module.alwaysSelected ? 'div' : 'button';
+    const typeAttr = module.alwaysSelected ? '' : 'type="button"';
+    const staticClass = module.alwaysSelected ? 'static' : '';
+
     return `
-      <button type="button" class="sl-mode-row ${isSelected ? 'selected' : ''}" data-sl-module-id="${html(module.id)}">
+      <${tag} ${typeAttr} class="sl-mode-row ${isSelected ? 'selected' : ''} ${staticClass}" data-sl-module-id="${html(module.id)}">
         <div class="row-header">
           <div class="row-header-text">
             <div class="model-title">
@@ -475,7 +486,7 @@
           </div>
         </div>
         ${details}
-      </button>
+      </${tag}>
     `;
   }
 
