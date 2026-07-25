@@ -19,6 +19,8 @@ The extension operates without build tools or external dependencies. It relies o
 *   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
 *   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object with the central `registry.js`.
 
+![Architecture Banner](images/Architecture-banner.png)
+
 ## Installation
 
 1. Clone or download the source code of this repository.
