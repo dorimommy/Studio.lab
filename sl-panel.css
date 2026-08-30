@@ -1015,3 +1015,97 @@ ms-prompt-box {
   border-color: var(--color-v3-text-var, #8c8c8c);
 }
 
+/* ── Text Formatter — toolbar styles managed by text-formatter.js ── */
+/* Link dialog styles below are shared via sl-panel.css */
+
+/* Custom Link Modal Overlay & Dialog */
+.sl-link-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  animation: slFadeIn 0.15s ease-out;
+}
+
+.sl-link-modal {
+  background: var(--color-v3-surface-container-high, #1e1e1e);
+  border: 1px solid var(--color-v3-outline, #383838);
+  border-radius: 16px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.sl-field-group label {
+  display: block;
+  font-family: 'Google Sans', Inter, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-v3-text-var, #9aa0a6);
+  margin-bottom: 6px;
+}
+
+.sl-dialog-input {
+  width: 100%;
+  background: var(--color-v3-surface-container-highest, #282828);
+  border: 1px solid var(--color-v3-outline-var, #3c4043);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: 'Google Sans', Inter, sans-serif;
+  font-size: 14px;
+  color: var(--color-v3-text, #e8eaed);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.sl-dialog-input:focus {
+  border-color: #8ab4f8;
+  box-shadow: 0 0 0 1px #8ab4f8;
+}
+
+.sl-link-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.sl-btn-primary, .sl-btn-secondary {
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-family: 'Google Sans', Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.sl-btn-primary {
+  background: #8ab4f8;
+  color: #171717;
+}
+
+.sl-btn-primary:hover {
+  background: #9bbdf9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sl-btn-secondary {
+  background: var(--color-v3-surface-container-highest, #2e2e2e);
+  color: var(--color-v3-text, #e8eaed);
+  border: 1px solid var(--color-v3-outline-var, #3c4043);
+}
+
+.sl-btn-secondary:hover {
+  background: var(--color-v3-hover, #3c3c3c);
+}
+
+
+

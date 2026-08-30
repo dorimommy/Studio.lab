@@ -293,6 +293,14 @@
         order: -1 !important;
         margin-right: 8px !important;
     }
+    ms-add-media-button > button {
+        border-radius: 12px !important;
+        background: transparent !important;
+        border: 1px solid #333 !important;
+    }
+    ms-add-media-button > button:hover {
+        background: #1f1f1f !important;
+    }
 
     /* Enabled tools bar sits right after + */
     ms-prompt-box .buttons-row > ms-horizontal-scroll.enabled-tool-container {
@@ -313,7 +321,7 @@
     ms-stt-button { 
         order: 2 !important; 
         margin-left: auto !important; 
-        margin-right: 12px !important; 
+        margin-right: 8px !important; 
     }
     ms-run-button { 
         order: 3 !important; 
@@ -463,6 +471,25 @@
         display: none !important;
         opacity: 0 !important;
     }
+
+    /* Fix scroll-to-bottom button elevation above footer overlay */
+    ms-scroll-to-bottom,
+    ms-scroll-to-bottom-button,
+    ms-chat-scroll-to-bottom,
+    .scroll-to-bottom,
+    .scroll-to-bottom-button,
+    .scroll-bottom-button,
+    footer button:has(mat-icon[fonticon*="arrow"]),
+    footer button:has(mat-icon[fonticon="south"]) {
+        z-index: 999 !important;
+        position: relative !important;
+        opacity: 1 !important;
+        filter: none !important;
+    }
+    ms-chat-bottom-overlay {
+        z-index: 1 !important;
+        pointer-events: none !important;
+    }
   `;
 
   // ══════════════════════════════════════════════════════════════════
@@ -540,7 +567,11 @@
         otherWrapper.appendChild(submenu);
 
         // Insert 'Other uploads' right after the last primary item (e.g. Record Audio)
-        content.insertBefore(otherWrapper, insertAfterNode.nextSibling);
+        if (insertAfterNode && insertAfterNode.parentNode) {
+          insertAfterNode.after(otherWrapper);
+        } else {
+          content.appendChild(otherWrapper);
+        }
 
         otherBtn.onclick = (e) => {
           e.preventDefault();
@@ -732,17 +763,22 @@
     },
     updateStyles() {
       const on = !!(ctxRef && ctxRef.state.modernWebChatEnabled);
+      let el = styleEl || document.getElementById('sl-modern-web-chat-styles');
       if (on) {
-        if (!styleEl) {
-          styleEl = document.createElement('style');
-          styleEl.id = 'sl-modern-web-chat-styles';
-          styleEl.textContent = CSS;
-          document.head.appendChild(styleEl);
+        if (!el) {
+          el = document.createElement('style');
+          el.id = 'sl-modern-web-chat-styles';
+          document.head.appendChild(el);
         }
+        el.textContent = CSS;
+        styleEl = el;
         modifyPlusMenu();
         autoDeleteThoughts();
       } else {
-        if (styleEl) { styleEl.remove(); styleEl = null; }
+        if (el) el.remove();
+        const existing = document.getElementById('sl-modern-web-chat-styles');
+        if (existing) existing.remove();
+        styleEl = null;
         cleanup();
       }
     }

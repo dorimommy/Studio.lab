@@ -86,10 +86,10 @@
   }
 
   function stop() {
-    if (!intervalId) return;
-    clearInterval(intervalId);
-    intervalId = null;
-    
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
     const style = document.getElementById('sl-fast-render-style');
     if (style) style.remove();
   }

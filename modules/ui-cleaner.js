@@ -17,13 +17,21 @@
       subtitle: 'clean-interface-tips',
       icon: 'edit',
       css: `
+        ms-zero-state .grid-views-content,
+        ms-zero-state ms-model-grid,
+        ms-zero-state ms-model-grid .category-grid > .category-card:first-child,
+        ms-zero-state ms-model-grid .category-card:first-child,
         ms-zero-state ms-model-category-grid > div:first-child { display: none !important; }
         ms-zero-state ms-button-toggle { display: none !important; }
-        ms-zero-state h1.carousel-title {
+        ms-zero-state .carousel-title,
+        ms-zero-state h1.carousel-title,
+        ms-zero-state h2.carousel-title {
           visibility: hidden !important;
           position: relative !important;
         }
-        ms-zero-state h1.carousel-title::after {
+        ms-zero-state .carousel-title::after,
+        ms-zero-state h1.carousel-title::after,
+        ms-zero-state h2.carousel-title::after {
           content: var(--sl-welcome-text, "Hello!") !important;
           visibility: visible !important;
           position: absolute !important;
@@ -123,6 +131,7 @@
   }
 
   function updateUserName() {
+    if (!ctxRef || !ctxRef.state.cleanerEnabled || !ctxRef.state.cleanerTips) return false;
     const name = extractUserName();
     if (name && name !== 'There') {
       typeText(name);
@@ -132,20 +141,22 @@
   }
 
   function toggleStyle(id, css, enabled) {
-    let el = styleElements[id];
+    let el = styleElements[id] || document.getElementById('sl-style-' + id);
     if (enabled) {
       if (!el) {
         el = document.createElement('style');
         el.id = 'sl-style-' + id;
-        el.textContent = css;
         document.head.appendChild(el);
-        styleElements[id] = el;
       }
+      el.textContent = css;
+      styleElements[id] = el;
     } else {
       if (el) {
         el.remove();
-        delete styleElements[id];
       }
+      const existing = document.getElementById('sl-style-' + id);
+      if (existing) existing.remove();
+      delete styleElements[id];
     }
   }
 
@@ -179,7 +190,12 @@
           setInterval(updateUserName, 10000);
         }
       },
-      onStateChange() {
+      onStateChange(ctx) {
+        if (ctx) ctxRef = ctx;
+        this.updateVisibility();
+      },
+      onRouteChange(ctx) {
+        if (ctx) ctxRef = ctx;
         this.updateVisibility();
       },
       updateVisibility() {

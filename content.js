@@ -82,6 +82,7 @@
     autoKeep: true,
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
+    textFormatterEnabled: true,
     modernWebChatEnabled: false,
     cleanerEnabled: false
   };
@@ -164,6 +165,7 @@
     state.autoKeep = !!state.autoKeep;
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;
     state.wordCounterEnabled = !!state.wordCounterEnabled;
+    state.textFormatterEnabled = state.textFormatterEnabled !== false;
     state.modernWebChatEnabled = !!state.modernWebChatEnabled;
     state.cleanerEnabled = !!state.cleanerEnabled;
   }

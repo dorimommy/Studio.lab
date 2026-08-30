@@ -1,5 +1,15 @@
 # Studio.lab Changelog
 
+## v2.0-preview-1
+**New Feature: Text Formatter & Minor UI Fixes**
+* **Added:** `Text Formatter` module. A rich markdown formatting suite for prompt editing.
+  * *Formatting Toolbar:* Full inline and floating toolbars with quick action buttons for Bold, Italic, Strikethrough, Headings (H1-H3), Lists (Unordered, Ordered, Task), Blockquotes, Code blocks, and Link insertion.
+  * *Smart Hotkeys & Auto-Lists:* Hotkeys (`Ctrl+B`, `Ctrl+I`, `Ctrl+Shift+X`, `Ctrl+K`) and list continuation on Enter/Tab.
+* **Fixed:** `Modern web chat` module.
+  * *Layout & Alignment:* Standardized bottom button spacing (8px gap) across `+`, `A`, `Grounding`, `Mic`, and `Run` buttons for a clean, symmetrical footer.
+* **Fixed:** `Scroll button` elevation.
+  * *Elevation & Visibility:* Lifted the scroll-to-bottom button above the native footer gradient overlay (`ms-chat-bottom-overlay`), ensuring it remains crisp, un-darkened, and fully interactive.
+
 ## v1.7-release
 **Two New Modules Added**
 * **Added:** `Default Profile` module. A highly requested feature that completely automates your workspace initialization.
