@@ -1,5 +1,21 @@
 # Studio.lab Changelog
 
+## v2.0-preview-2
+**Modern Web Chat Fix & Native Sidebar Card UI Overhaul**
+* **Fixed:** `Modern web chat` module.
+  * *Layout & Button Visibility:* Adapted to Google's layout shift where `ms-add-media-button` was moved inside `.button-row-left`. Flattened button containers using `display: contents` so the `+` button is always crisp, visible, and placed on the far left.
+  * *Bottom Bar Cleanup:* Selectively hides `ms-paid-api-key-button` and `ms-prompt-box-tools > button` from the bottom row while keeping them neatly proxied inside the `+` menu.
+  * *Standardized Order:* Strict Flexbox ordering: `+` (order -2), `Text Formatter` (order -1), `Enabled Tools` (order 0), `Mic` (order 2, margin-left: auto), and `Run` (order 3).
+  * *Trusted Types (CSP) Compliance:* Converted dynamic menu item injections from `innerHTML` to safe native DOM methods (`createElement`, `textContent`), preventing TrustedHTML CSP exceptions.
+* **Redesigned:** Studio.lab Settings Sidebar Card (`.sl-sidebar-btn`).
+  * *Native Design System Match:* Fully matched the aesthetics of Google's native `system-instructions-card` and `model-selector-card`.
+  * *Elevated Surface & Shadows:* Replaced legacy `#252525` background and `#262626` outline border with Google's native `var(--color-v3-surface-container)` (`#1f1f1f`), native borderless style, and elevation shadow variables (`var(--v3-shadow-card)` and `var(--v3-shadow-card-hover)`).
+  * *Spacing & Hierarchy:* Standardized spacing between cards (8px) and matched internal typography: direct `.title` with 8px bottom margin and `.subtitle` with matching line-height and color.
+* **Refactored:** Codebase Cleansing.
+  * *Safe DOM Insertion:* Replaced `innerHTML` in sidebar button creation with native DOM elements.
+  * *Selector Hardening:* Replaced brittle component hash selectors in `ui-cleaner.js` with pattern-matching selectors.
+  * *Dead Code Removal:* Purged obsolete benefit/tier spoofing checks (dev build related code) in `interceptor.js` and unused interval IDs in `optimizer-hard.js`.
+
 ## v2.0-preview-1
 **New Feature: Text Formatter & Minor UI Fixes**
 * **Added:** `Text Formatter` module. A rich markdown formatting suite for prompt editing.

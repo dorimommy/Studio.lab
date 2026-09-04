@@ -260,13 +260,18 @@
       card.type = 'button';
       card.className = 'sl-sidebar-btn';
       card.setAttribute('aria-label', 'Studio.lab Settings');
-      card.style.margin = '12px 0';
-      card.innerHTML = `
-        <div class="title-container">
-          <span class="title">Studio.lab</span>
-        </div>
-        <span class="subtitle">Performance, bypass and workspace modules</span>
-      `;
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'title';
+      titleSpan.textContent = 'Studio.lab';
+
+      const subtitleSpan = document.createElement('span');
+      subtitleSpan.className = 'subtitle';
+      subtitleSpan.textContent = 'Performance, bypass and workspace modules';
+
+      card.appendChild(titleSpan);
+      card.appendChild(subtitleSpan);
+
       card.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();

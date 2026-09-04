@@ -269,20 +269,28 @@
         width: 100% !important;
     }
 
-    /* 1. Hide the native left row entirely since its items are moving into the + menu */
-    ms-prompt-box .button-row-left {
-        opacity: 0 !important;
-        position: absolute !important;
-        pointer-events: none !important;
-        width: 0 !important; height: 0 !important; overflow: hidden !important;
-    }
-
-    /* 2. Flatten the right wrapper so we can reorder + and Mic/Run */
-    ms-prompt-box .button-wrapper {
+    /* 1. Flatten both left and right button wrappers so all buttons become direct flex items */
+    ms-prompt-box .button-row-left,
+    ms-prompt-box .button-wrapper,
+    ms-prompt-box-tools {
         display: contents !important;
     }
 
-    /* 3. Make sure any other random elements in the bottom row are pushed to the right initially */
+    /* 2. Hide native Tools and Paid API buttons from bottom row (accessible via + menu) */
+    ms-paid-api-key-button,
+    ms-prompt-box-tools > button {
+        opacity: 0 !important;
+        position: absolute !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    /* 3. Make sure any other unclassified elements in the bottom row are pushed to the right initially */
     ms-prompt-box .buttons-row > * {
         order: 10 !important;
     }
@@ -290,20 +298,41 @@
     /* 4. Assign specific order to force layout */
     /* Move + to the far left */
     ms-add-media-button {
-        order: -1 !important;
+        order: -2 !important;
         margin-right: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        position: static !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        height: auto !important;
     }
     ms-add-media-button > button {
         border-radius: 12px !important;
         background: transparent !important;
         border: 1px solid #333 !important;
+        height: 32px !important;
+        width: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
     }
     ms-add-media-button > button:hover {
         background: #1f1f1f !important;
     }
 
-    /* Enabled tools bar sits right after + */
-    ms-prompt-box .buttons-row > ms-horizontal-scroll.enabled-tool-container {
+    /* Formatting toggle button (from Text Formatter module) sits right after + */
+    .sl-fmt-toggle {
+        order: -1 !important;
+        margin-right: 8px !important;
+    }
+
+    /* Enabled tools bar sits right after + and formatter */
+    ms-horizontal-scroll.enabled-tool-container {
         order: 0 !important;
         margin-right: 8px !important;
         flex-shrink: 1 !important;
@@ -536,13 +565,27 @@
 
         const otherBtn = document.createElement('button');
         otherBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-        otherBtn.innerHTML = `
-                <span class="mat-mdc-menu-item-text" style="display:flex; align-items:center; width:100%;">
-                    <span class="start-icon material-symbols-outlined notranslate">more_horiz</span>
-                    <span style="flex:1;">Other uploads</span>
-                    <span class="material-symbols-outlined" style="font-size:18px; opacity:0.7;">chevron_right</span>
-                </span>
-            `;
+        const otherWrap = document.createElement('span');
+        otherWrap.className = 'mat-mdc-menu-item-text';
+        otherWrap.style.cssText = 'display:flex; align-items:center; width:100%;';
+
+        const otherIcon = document.createElement('span');
+        otherIcon.className = 'start-icon material-symbols-outlined notranslate';
+        otherIcon.textContent = 'more_horiz';
+
+        const otherLabel = document.createElement('span');
+        otherLabel.style.flex = '1';
+        otherLabel.textContent = 'Other uploads';
+
+        const otherChevron = document.createElement('span');
+        otherChevron.className = 'material-symbols-outlined';
+        otherChevron.style.cssText = 'font-size:18px; opacity:0.7;';
+        otherChevron.textContent = 'chevron_right';
+
+        otherWrap.appendChild(otherIcon);
+        otherWrap.appendChild(otherLabel);
+        otherWrap.appendChild(otherChevron);
+        otherBtn.appendChild(otherWrap);
 
         const submenu = document.createElement('div');
         submenu.className = 'sl-custom-submenu';
@@ -599,12 +642,16 @@
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding proxy to menu.', 'info');
         const toolsBtn = document.createElement('button');
         toolsBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-        toolsBtn.innerHTML = `
-                <span class="mat-mdc-menu-item-text">
-                    <span class="start-icon material-symbols-outlined notranslate">widgets</span>
-                    <span>Tools</span>
-                </span>
-            `;
+        const toolsWrap = document.createElement('span');
+        toolsWrap.className = 'mat-mdc-menu-item-text';
+        const toolsIcon = document.createElement('span');
+        toolsIcon.className = 'start-icon material-symbols-outlined notranslate';
+        toolsIcon.textContent = 'widgets';
+        const toolsLabel = document.createElement('span');
+        toolsLabel.textContent = 'Tools';
+        toolsWrap.appendChild(toolsIcon);
+        toolsWrap.appendChild(toolsLabel);
+        toolsBtn.appendChild(toolsWrap);
         toolsBtn.onclick = () => { nativeTools.click(); };
         content.appendChild(toolsBtn);
       } else {
@@ -617,12 +664,16 @@
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
         const keyBtn = document.createElement('button');
         keyBtn.className = 'mat-mdc-menu-item mat-mdc-focus-indicator';
-        keyBtn.innerHTML = `
-                <span class="mat-mdc-menu-item-text">
-                    <span class="start-icon material-symbols-outlined notranslate">key</span>
-                    <span>Link a paid API</span>
-                </span>
-            `;
+        const keyWrap = document.createElement('span');
+        keyWrap.className = 'mat-mdc-menu-item-text';
+        const keyIcon = document.createElement('span');
+        keyIcon.className = 'start-icon material-symbols-outlined notranslate';
+        keyIcon.textContent = 'key';
+        const keyLabel = document.createElement('span');
+        keyLabel.textContent = 'Link a paid API';
+        keyWrap.appendChild(keyIcon);
+        keyWrap.appendChild(keyLabel);
+        keyBtn.appendChild(keyWrap);
         keyBtn.onclick = () => {
           nativeKey.click();
         };

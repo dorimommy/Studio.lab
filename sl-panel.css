@@ -7,28 +7,29 @@
 .sl-sidebar-btn {
   width: 100%;
   padding: 8px 12px;
-  /* native card padding */
   border-radius: 12px;
-  border: 1px solid var(--color-v3-outline-var, #262626);
-  background: var(--color-v3-surface-container-high, #252525);
+  border: none !important;
+  background: var(--color-v3-surface-container, #1f1f1f) !important;
+  box-shadow: var(--v3-shadow-card, 0px 2px 1px 0px rgba(252,252,252,0), 0px 0px 1px 0px rgba(252,252,252,0.4)) !important;
   text-align: start;
-  transition: background-color .2s ease-in-out, border-color .2s ease-in-out;
+  transition: 0.2s ease-in-out;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* native card doesn’t have a fixed gap, but 4px works well */
+  display: block;
+  box-sizing: border-box;
+  font-family: Inter, sans-serif;
+  margin: 8px 0 0 0 !important;
 }
 
 .sl-sidebar-btn:hover {
-  background-color: var(--color-v3-surface-container-highest, #2a2a2a);
-  border-color: var(--color-v3-outline, #444);
+  border: none !important;
+  background: var(--color-v3-surface-container, #1f1f1f) !important;
+  box-shadow: var(--v3-shadow-card-hover, 0px 3px 6px 0px rgba(27,27,30,0.08), 0px 0px 1px 0px rgba(252,252,252,0.4)) !important;
 }
 
 .sl-sidebar-btn .title {
   color: var(--color-v3-text, #d4d4d4);
   display: block;
-  margin: 0;
+  margin: 0 0 8px 0;
   /* native card title spacing */
   font-family: Inter, sans-serif;
   font-size: 14px;
@@ -48,6 +49,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
+  margin: 0;
 }
 
 /* ── Badge ────────────────────────────────────────────────────────

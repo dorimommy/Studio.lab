@@ -334,21 +334,17 @@
 
   // ── Patch send ─────────────────────────────────────────────────────
   XMLHttpRequest.prototype.send = function (body) {
-    if (!this.__aisuIsGen && !this.__aisuIsBenefit) {
+    if (!this.__aisuIsGen) {
       return _origSend.apply(this, arguments);
     }
 
-    if (this.__aisuIsGen && body && typeof body === 'string') {
+    if (body && typeof body === 'string') {
       window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
         detail: body
       }));
     }
 
     const xhr = this;
-        // (Spoofing removed by user request)
-    if (this.__aisuIsBenefit || this.__aisuIsRestrict) {
-      return _origSend.apply(this, arguments);
-    }
     let snap = '';
     let snapTime = 0;
     let didLogSanitize = false;
@@ -517,7 +513,7 @@
     return false;
   }
 
-  // Intercept fetch() for telemetry logging AND spoofing
+  // Intercept fetch() for telemetry logging
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input
@@ -527,24 +523,7 @@
       detail: { url, method: (init && init.method) || 'GET', ts: Date.now(), isTelemetry }
     }));
     
-    const response = await _origFetch.apply(this, arguments);
-
-    // SPOOF FETCH RESPONSES (BenefitTier & UserRestrictions)
-    if (url.includes('GetAiStudioBenefitTier') || url.includes('GetUserRestrictions')) {
-      const clone = response.clone();
-      const text = await clone.text();
-      let spoofedText = text;
-      // (Spoofing removed by user request)
-      if (spoofedText !== text) {
-        return new Response(spoofedText, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers
-        });
-      }
-    }
-
-    return response;
+    return _origFetch.apply(this, arguments);
   };
 
   // Also intercept XHR for telemetry logging (play.google.com uses XHR)
@@ -571,8 +550,6 @@
 
       this.__aisuUrl = processedUrl;
       this.__aisuIsGen = processedUrl.includes(URL_MARKER);
-      this.__aisuIsBenefit = processedUrl.includes('GetAiStudioBenefitTier');
-      this.__aisuIsRestrict = processedUrl.includes('GetUserRestrictions');
 
       const args = Array.from(arguments);
       args[1] = processedUrl;

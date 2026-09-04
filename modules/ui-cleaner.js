@@ -50,6 +50,10 @@
       css: `
         ms-chat-session ms-opaque-container-485387979-1,
         ms-navbar-v2 ms-opaque-container-485387979,
+        ms-chat-session [class*="opaque-container"],
+        ms-navbar-v2 [class*="opaque-container"],
+        [class*="quota-exceeded"],
+        [class*="upgrade-card"],
         .quota-exceeded-container,
         .upgrade-card-wrapper {
           display: none !important;

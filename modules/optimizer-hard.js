@@ -117,8 +117,6 @@
     }
   });
 
-  let intervalId = null;
-
   function isSelected(state) {
     return state.optimizerEnabled && state.optimizerMode === 'hard';
   }
@@ -129,8 +127,6 @@
   }
 
   function start() {
-    if (intervalId) return;
-    
     // Inject fast-render CSS to prevent lag on initial load
     let style = document.getElementById('sl-fast-render-style');
     if (!style) {
@@ -147,10 +143,6 @@
   }
 
   function stop() {
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
-    }
     const style = document.getElementById('sl-fast-render-style');
     if (style) style.remove();
   }
