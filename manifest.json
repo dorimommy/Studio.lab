@@ -59,6 +59,7 @@
         "modules/telemetry-blocker.js",
         "modules/ui-cleaner.js",
         "modules/default-profile.js",
+        "modules/draft-saver.js",
         "content.js"
       ],
       "css": [

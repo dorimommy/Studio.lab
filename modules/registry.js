@@ -28,6 +28,8 @@
     PROMPT_BOX: 'ms-prompt-box',
     AUTOSCROLL_CONTAINER: 'ms-autoscroll-container',
     LOADING_INDICATOR: 'ms-chat-loading-indicator',
+    OMNIBAR: 'ms-omnibar',
+    OMNIBAR_RESULTS: '#omnibar-results',
     SIDEBAR_ANCHORS: [
       'ms-system-instructions-panel',
       'ms-model-selector',

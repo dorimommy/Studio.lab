@@ -3,6 +3,7 @@
  *
  * Buffered mode detaches old rendered turns and keeps them available through a
  * restore banner. It avoids touching AI Studio's saved chat data.
+ * Fully coordinates with native AI Studio search (Ctrl+Shift+F) and smooth upward scrolling.
  */
 (function () {
   'use strict';
@@ -15,10 +16,9 @@
   let intervalId = null;
   let detachedTurns = [];
   let detachedParent = null;
-  let lastKnownTurnCount = 0;
-  let userForceRestored = false;
-  let userForceRestoredTime = 0;
-  let userStartedReading = false;
+  let pauseUntil = 0;
+  let bottomStayStartTime = 0;
+  let watchersInitialized = false;
 
   window.StudioLab.registerModule({
     id: 'optimizer-smart',
@@ -43,6 +43,10 @@
     init(ctx) {
       ctxRef = ctx;
       sync();
+      if (!watchersInitialized) {
+        setupSearchAndScrollWatchers();
+        watchersInitialized = true;
+      }
     },
     onStateChange() {
       sync();
@@ -58,8 +62,9 @@
   }
 
   function sync() {
-    if (isActive()) start();
-    else {
+    if (isActive()) {
+      start();
+    } else {
       stop();
       restoreDetached();
     }
@@ -67,22 +72,12 @@
 
   function start() {
     if (intervalId) return;
-    intervalId = setInterval(applySmartOptimizer, 600);
+    intervalId = setInterval(applySmartOptimizer, 800);
     applySmartOptimizer();
-    
-    // Inject fast-render CSS to prevent lag on initial load
-    let style = document.getElementById('sl-fast-render-style');
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'sl-fast-render-style';
-      style.textContent = `
-        ms-chat-turn {
-          content-visibility: auto;
-          contain-intrinsic-size: auto 500px;
-        }
-      `;
-      document.head.appendChild(style);
-    }
+
+    // Clean up any legacy intrusive styles
+    const legacyStyle = document.getElementById('sl-fast-render-style');
+    if (legacyStyle) legacyStyle.remove();
   }
 
   function stop() {
@@ -90,12 +85,26 @@
       clearInterval(intervalId);
       intervalId = null;
     }
-    const style = document.getElementById('sl-fast-render-style');
-    if (style) style.remove();
+    const legacyStyle = document.getElementById('sl-fast-render-style');
+    if (legacyStyle) legacyStyle.remove();
+  }
+
+  function isSearchDialogOpen() {
+    const omnibarSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR : 'ms-omnibar';
+    const omnibar = document.querySelector(omnibarSel);
+    if (omnibar && (omnibar.querySelector('.overlay-backdrop') || omnibar.querySelector('.overlay-content'))) {
+      return true;
+    }
+    return !!document.querySelector('.overlay-content[role="dialog"], [aria-label="Command Palette"]');
   }
 
   function applySmartOptimizer() {
     if (!isActive()) return;
+
+    // Never detach if search palette is active or during navigation grace period
+    if (isSearchDialogOpen() || Date.now() < pauseUntil) {
+      return;
+    }
 
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
     const turns = Array.from(document.querySelectorAll(turnSel));
@@ -104,27 +113,30 @@
     const keep = getKeepCount();
     if (turns.length <= keep) return;
 
-    if (turns.length > lastKnownTurnCount) {
-      userForceRestored = false;
-      userStartedReading = false;
-      lastKnownTurnCount = turns.length;
-    } else if (turns.length < lastKnownTurnCount && turns.length > keep) {
-      lastKnownTurnCount = turns.length;
-    }
-
     const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
     const scroller = findScroller(turns[0]) ||
-      document.querySelector(`${autoSel} div`) ||
-      document.querySelector(autoSel);
+      document.querySelector(autoSel) ||
+      document.querySelector(`${autoSel} div`);
     if (!scroller) return;
 
-    const isAtBottom = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) <= 600;
+    // Check if user is at the bottom of the chat
+    const distFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const isAtBottom = distFromBottom <= 250;
 
-    if (userForceRestored && shouldPauseAfterRestore(scroller, isAtBottom)) {
+    if (!isAtBottom) {
+      bottomStayStartTime = 0;
       return;
     }
 
-    if (!isAtBottom) return;
+    // Require the user to stay at the bottom for at least 5 seconds before buffering older turns
+    const now = Date.now();
+    if (bottomStayStartTime === 0) {
+      bottomStayStartTime = now;
+      return;
+    }
+    if (now - bottomStayStartTime < 5000) {
+      return;
+    }
 
     if (!detachedParent && turns[0].parentNode) {
       detachedParent = turns[0].parentNode;
@@ -139,22 +151,140 @@
     if (cutoff > 0) injectLoadBanner();
   }
 
-  function shouldPauseAfterRestore(scroller, isAtBottom) {
-    const now = Date.now();
-    const timeSinceRestore = now - userForceRestoredTime;
+  function setupSearchAndScrollWatchers() {
+    // 1. Keyboard shortcuts: Restore detached turns when native search is triggered
+    // Handles English (KeyF / 'f') and international Cyrillic layouts (where key might be 'а')
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyF' || (e.key && e.key.toLowerCase() === 'f') || e.key === '/')) {
+        pauseUntil = Date.now() + 20000;
+        bottomStayStartTime = 0;
+        if (detachedTurns.length > 0) {
+          restoreDetached();
+        }
+      }
+    }, { capture: true });
 
-    if (timeSinceRestore <= 1500) return true;
-
-    const farFromBottom = scroller.scrollTop < scroller.scrollHeight - scroller.clientHeight - 600;
-    if (farFromBottom) userStartedReading = true;
-
-    if ((userStartedReading && isAtBottom) || (isAtBottom && timeSinceRestore > 3000)) {
-      userForceRestored = false;
-      userStartedReading = false;
-      return false;
+    // 2. Watch for native Command Palette / Omnibar dialog appearing
+    const paletteObserver = new MutationObserver(() => {
+      if (isSearchDialogOpen()) {
+        pauseUntil = Date.now() + 20000;
+        bottomStayStartTime = 0;
+        if (detachedTurns.length > 0) {
+          restoreDetached();
+        }
+      }
+    });
+    if (document.body) {
+      paletteObserver.observe(document.body, { childList: true, subtree: true });
     }
 
-    return true;
+    // 3. Search result selection interceptor (click and Enter)
+    const handleResultSelection = (targetItem) => {
+      if (!targetItem) return;
+
+      // Always restore everything so the turn exists in the DOM for AI Studio's scrollIntoView
+      pauseUntil = Date.now() + 30000;
+      bottomStayStartTime = 0;
+      if (detachedTurns.length > 0) {
+        restoreDetached();
+      }
+
+      // Extract target turn UUID if available from MakerSuiteVeMetadataKey in jslog
+      let targetTurnId = null;
+      const jslog = targetItem.getAttribute('jslog') || '';
+      const metaMatch = jslog.match(/MakerSuiteVeMetadataKey:([^;]+)/);
+      if (metaMatch) {
+        try {
+          const decoded = atob(metaMatch[1]);
+          const idMatch = decoded.match(/chat-result-([A-Fa-f0-9-]+)/);
+          if (idMatch) {
+            targetTurnId = 'turn-' + idMatch[1];
+          }
+        } catch (err) {}
+      }
+
+      // Ensure smooth navigation to target and trigger brief visual highlight
+      const verifyNavigation = (attemptsLeft) => {
+        let targetEl = targetTurnId ? document.getElementById(targetTurnId) : null;
+        if (!targetEl && targetTurnId) {
+          targetEl = document.querySelector(`[id*="${targetTurnId}"]`);
+        }
+
+        if (targetEl) {
+          const rect = targetEl.getBoundingClientRect();
+          // If not currently in top view, smoothly scroll it
+          if (rect.top < 0 || rect.top > 400) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          targetEl.classList.add('sl-turn-highlight');
+          setTimeout(() => targetEl.classList.remove('sl-turn-highlight'), 3000);
+        } else if (attemptsLeft > 0) {
+          setTimeout(() => verifyNavigation(attemptsLeft - 1), 100);
+        }
+      };
+
+      setTimeout(() => verifyNavigation(3), 80);
+    };
+
+    document.addEventListener('click', (e) => {
+      const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
+      const item = e.target.closest(`${resultsSel} .result-item, ${resultsSel} [role="option"]`);
+      if (item) {
+        handleResultSelection(item);
+      }
+    }, { capture: true });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
+        const activeItem = document.querySelector(`${resultsSel} .result-item[aria-selected="true"], ${resultsSel} .result-item:hover, ${resultsSel} [role="option"][aria-selected="true"]`) ||
+          (document.activeElement && document.activeElement.closest(`${resultsSel} .result-item`));
+        if (activeItem) {
+          handleResultSelection(activeItem);
+        }
+      }
+    }, { capture: true });
+
+    // 4. Listen for scroll on chat container to automatically restore when scrolling UP
+    const watchScroller = () => {
+      const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
+      const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
+      const scroller = findScroller(document.querySelector(turnSel)) ||
+        document.querySelector(autoSel) ||
+        document.querySelector(`${autoSel} div`);
+
+      if (!scroller) {
+        setTimeout(watchScroller, 500);
+        return;
+      }
+
+      let lastScrollTop = scroller.scrollTop;
+      scroller.addEventListener('scroll', () => {
+        if (!isActive()) return;
+
+        const currentScrollTop = scroller.scrollTop;
+        const scrollingUp = currentScrollTop < lastScrollTop;
+        lastScrollTop = currentScrollTop;
+
+        const distFromBottom = scroller.scrollHeight - currentScrollTop - scroller.clientHeight;
+        if (distFromBottom > 300) {
+          bottomStayStartTime = 0;
+        }
+
+        if (detachedTurns.length === 0) return;
+
+        // When scrolling up towards history or approaching the top banner, restore all turns seamlessly
+        if (currentScrollTop < 800 || (scrollingUp && currentScrollTop < 2000)) {
+          restoreDetached();
+        }
+      }, { passive: true });
+    };
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      watchScroller();
+    } else {
+      window.addEventListener('DOMContentLoaded', watchScroller);
+    }
   }
 
   function injectLoadBanner() {
@@ -189,26 +319,19 @@
   }
 
   function restoreDetached(amount) {
-    userForceRestored = true;
-    userForceRestoredTime = Date.now();
-    userStartedReading = false;
+    pauseUntil = Date.now() + 20000;
+    bottomStayStartTime = 0;
 
     const banner = document.querySelector('.sl-load-banner');
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
     const anchor = detachedParent ? detachedParent.querySelector(turnSel) : null;
-    const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
-    const scroller = findScroller(anchor || document.querySelector(turnSel)) ||
-      document.querySelector(`${autoSel} div`) ||
-      document.querySelector(autoSel);
 
     if (!detachedTurns.length || !detachedParent) {
       if (banner) banner.remove();
-      lastKnownTurnCount = document.querySelectorAll(turnSel).length;
       return;
     }
 
     const countToRestore = typeof amount === 'number' ? amount : detachedTurns.length;
-    const previousOffset = anchor ? anchor.getBoundingClientRect().top : 0;
     let toRestore;
 
     if (countToRestore >= detachedTurns.length) {
@@ -220,29 +343,19 @@
       injectLoadBanner();
     }
 
+    // Insert turns in order before current anchor.
+    // Chromium's native scroll anchoring (overflow-anchor: auto) preserves visible position without manual jitter.
     toRestore.forEach((turn) => {
       if (anchor) detachedParent.insertBefore(turn, anchor);
       else detachedParent.appendChild(turn);
     });
-
-    lastKnownTurnCount = document.querySelectorAll(turnSel).length;
-
-    const fixScrollOffset = () => {
-      if (!scroller || !anchor) return;
-      const newOffset = anchor.getBoundingClientRect().top;
-      scroller.scrollTop += newOffset - previousOffset;
-    };
-
-    fixScrollOffset();
-    setTimeout(fixScrollOffset, 10);
   }
 
   function clearDetachedState() {
     detachedTurns = [];
     detachedParent = null;
-    lastKnownTurnCount = 0;
-    userForceRestored = false;
-    userStartedReading = false;
+    pauseUntil = 0;
+    bottomStayStartTime = 0;
 
     const banner = document.querySelector('.sl-load-banner');
     if (banner) banner.remove();
@@ -265,4 +378,9 @@
     }
     return null;
   }
+
+  window.StudioLab = Object.assign(window.StudioLab || {}, {
+    getDetachedTurns: () => detachedTurns,
+    restoreDetached: (amount) => restoreDetached(amount)
+  });
 })();

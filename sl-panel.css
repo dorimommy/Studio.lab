@@ -1109,5 +1109,111 @@ ms-prompt-box {
   background: var(--color-v3-hover, #3c3c3c);
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   Draft Crash Protection Styles
+   ══════════════════════════════════════════════════════════════════ */
+.sl-draft-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-v3-surface-container-high, #282a2c);
+  border: 1px solid var(--color-v3-outline-var, #3c4043);
+  border-radius: 10px;
+  padding: 5px 12px;
+  margin: 0 12px 8px 12px;
+  font-family: 'Google Sans', Inter, Roboto, sans-serif;
+  font-size: 12px;
+  color: var(--color-v3-text, #e3e3e3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: sl-fade-in 0.2s ease-out;
+  width: fit-content;
+  box-sizing: border-box;
+}
 
+.sl-draft-icon {
+  font-size: 16px;
+  color: var(--color-v3-primary, #a8c7fa);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sl-draft-indicator-text {
+  font-weight: 500;
+  color: var(--color-v3-text, #e3e3e3);
+}
+
+.sl-draft-discard-btn {
+  background: rgba(239, 83, 80, 0.12);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  color: #ff8a80;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.sl-draft-discard-btn:hover {
+  background-color: rgba(239, 83, 80, 0.25);
+  border-color: #ef5350;
+  color: #fff;
+}
+
+.sl-draft-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-v3-text-var, #8c8c8c);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sl-draft-close-btn .material-symbols-outlined {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.sl-draft-close-btn:hover {
+  background: var(--color-v3-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-v3-text, #fff);
+}
+
+
+
+@keyframes sl-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Native Search Target Turn Highlight ────────────────────────── */
+@keyframes sl-turn-pulse {
+  0% {
+    outline: 3px solid #1a73e8;
+    box-shadow: 0 0 16px rgba(26, 115, 232, 0.45);
+  }
+  70% {
+    outline: 3px solid #1a73e8;
+    box-shadow: 0 0 16px rgba(26, 115, 232, 0.45);
+  }
+  100% {
+    outline: 3px solid transparent;
+    box-shadow: none;
+  }
+}
+
+.sl-turn-highlight {
+  animation: sl-turn-pulse 2.5s ease-out forwards !important;
+  border-radius: 8px !important;
+  scroll-margin-top: 72px;
+}
 

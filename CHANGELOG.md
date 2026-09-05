@@ -1,5 +1,20 @@
 # Studio.lab Changelog
 
+## v2.0-preview-3
+**New Feature: Draft Crash Protection & Smart Optimizer Native Search Integration**
+* **Added:** `Draft Crash Protection` module.
+  * *Real-Time Autosave:* Debounced continuous caching of prompt input into `localStorage` keyed per prompt URL (`sl_draft_<pathname>`) with a `sl_draft_latest` fallback.
+  * *Automated Restoration & Reliability:* Resilient polling + MutationObserver watcher (`startTextareaWatcher`) guarantees unsent drafts are restored even during late Angular lifecycle boots.
+  * *Angular Form-Control Protection:* Guard passes at 400ms and 800ms prevent Angular's reactive form initialization from wiping restored drafts.
+  * *Safe Cleanup:* Automatically clears cached drafts once the prompt is sent (via `Ctrl+Enter`, Run button, or backend request detection).
+* **Fixed:** `Smart Optimizer` & Native AI Studio Search Integration.
+  * *Native `Ctrl+Shift+F` Search Coordination:* Automatically and synchronously restores all buffered turns the instant native search (`Ctrl+Shift+F`, `Cmd+Shift+F`, `Ctrl+/`, or Omnibar `/find`) is triggered. Correctly detects shortcuts across international keyboard layouts (e.g. Cyrillic `e.code === 'KeyF'`).
+  * *Omnibar Result Interception & Direct Jump:* Listens to search result clicks and Enter selections in `#omnibar-results`, decodes `MakerSuiteVeMetadataKey` from `jslog` to extract the target turn UUID, and guarantees the target element is rendered in the DOM before AI Studio initiates navigation.
+  * *Target Turn Highlight:* Applies an animated blue pulse highlight (`.sl-turn-highlight`) to the found message upon jumping, making it immediately identifiable in long chat threads.
+  * *Removal of `content-visibility` Glitches:* Purged intrusive `content-visibility: auto` CSS overrides that caused off-screen geometry miscalculations, premature scroll termination, and layout shifts during large jumps.
+  * *Flawless Upward Scrolling:* Removed redundant manual `scrollTop` offsetting that conflicted with Chromium's native scroll anchoring (`overflow-anchor: auto`). Upward scrolling now smoothly and instantaneously restores earlier turns without bouncing or throwing the user downwards.
+  * *Extended Read & Search Grace Period:* Requires the user to stay continuously at the bottom for at least 5 seconds before re-buffering older turns, and pauses buffering for 30 seconds after any search navigation to allow uninterrupted reading.
+
 ## v2.0-preview-2
 **Modern Web Chat Fix & Native Sidebar Card UI Overhaul**
 * **Fixed:** `Modern web chat` module.

@@ -84,7 +84,8 @@
     wordCounterEnabled: true,
     textFormatterEnabled: true,
     modernWebChatEnabled: false,
-    cleanerEnabled: false
+    cleanerEnabled: false,
+    draftSaverEnabled: true
   };
 
   const moduleApi = window.StudioLab || {};
@@ -168,6 +169,7 @@
     state.textFormatterEnabled = state.textFormatterEnabled !== false;
     state.modernWebChatEnabled = !!state.modernWebChatEnabled;
     state.cleanerEnabled = !!state.cleanerEnabled;
+    state.draftSaverEnabled = state.draftSaverEnabled !== false;
   }
 
   function snapshotState() {
