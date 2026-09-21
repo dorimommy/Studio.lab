@@ -3,53 +3,103 @@
    All values copied from the live aistudio.google.com runtime CSS dump.
    ══════════════════════════════════════════════════════════════════ */
 
-/* ── Sidebar card (identical to ms-system-instructions-panel card) ─ */
+/* ── Settings Menu Studio.lab Item (injected below User settings) ── */
+.sl-user-settings-item {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 6px 8px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  color: var(--color-v3-text, rgb(212, 212, 212)) !important;
+  font-family: Inter, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  transition: background-color 0.15s ease !important;
+  box-sizing: border-box !important;
+}
+
+.sl-user-settings-item:hover {
+  background-color: var(--color-v3-hover, #323232) !important;
+  color: #ffffff !important;
+}
+
+.sl-user-settings-item .material-symbols-outlined {
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  margin-right: 8px !important;
+  color: var(--color-v3-text, rgb(212, 212, 212)) !important;
+  font-family: "Google Symbols", sans-serif !important;
+  font-variation-settings: "FILL" 0, "GRAD" 0, "opsz" 30, "wght" 300 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* ── Left Navigation Studio.lab Button (matches native Settings nav item) ─ */
 .sl-sidebar-btn {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 12px;
+  width: calc(100% - 16px) !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  margin: 4px 8px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
   border: none !important;
-  background: var(--color-v3-surface-container, #1f1f1f) !important;
-  box-shadow: var(--v3-shadow-card, 0px 2px 1px 0px rgba(252,252,252,0), 0px 0px 1px 0px rgba(252,252,252,0.4)) !important;
-  text-align: start;
-  transition: 0.2s ease-in-out;
-  cursor: pointer;
-  display: block;
-  box-sizing: border-box;
-  font-family: Inter, sans-serif;
-  margin: 8px 0 0 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  box-sizing: border-box !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #c4c7c5 !important;
 }
 
 .sl-sidebar-btn:hover {
   border: none !important;
-  background: var(--color-v3-surface-container, #1f1f1f) !important;
-  box-shadow: var(--v3-shadow-card-hover, 0px 3px 6px 0px rgba(27,27,30,0.08), 0px 0px 1px 0px rgba(252,252,252,0.4)) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
 }
 
-.sl-sidebar-btn .title {
-  color: var(--color-v3-text, #d4d4d4);
-  display: block;
-  margin: 0 0 8px 0;
-  /* native card title spacing */
-  font-family: Inter, sans-serif;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 21px;
+.sl-sidebar-btn .start-icon {
+  font-size: 20px !important;
+  width: 20px !important;
+  height: 20px !important;
+  color: #8ab4f8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
 }
 
-.sl-sidebar-btn .subtitle {
-  color: var(--color-v3-text-var, #8c8c8c);
-  font-family: Inter, sans-serif;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  overflow-wrap: anywhere;
-  margin: 0;
+.sl-sidebar-btn .nav-item-text {
+  flex: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Collapsed left navigation drawer support */
+.v3-left-nav.collapsed .sl-sidebar-btn,
+ms-side-nav.collapsed .sl-sidebar-btn {
+  width: 40px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  margin: 4px auto !important;
+}
+
+.v3-left-nav.collapsed .sl-sidebar-btn .nav-item-text,
+ms-side-nav.collapsed .sl-sidebar-btn .nav-item-text {
+  display: none !important;
 }
 
 /* ── Badge ────────────────────────────────────────────────────────
@@ -233,14 +283,21 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 10px;
-  border: 1px solid var(--color-v3-outline-var, #262626);
-  border-radius: 10px;
-  background: var(--color-v3-surface-container-high, #252525);
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sl-search-container:focus-within {
+  border-color: #a8c7fa;
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 1px #a8c7fa;
 }
 
 .sl-search-container .sl-icon-wrap--search {
-  color: var(--color-v3-text-var, #8c8c8c);
+  color: #9aa0a6;
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
@@ -250,15 +307,19 @@
   min-width: 0;
   flex: 1 1 auto;
   height: 38px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--color-v3-text, #d4d4d4);
-  font: 400 13px/18px Inter, sans-serif;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  color: #f0f0f0 !important;
+  font: 400 13px/18px "Google Sans", Roboto, Inter, sans-serif;
 }
 
 .sl-search-container input::placeholder {
-  color: var(--color-v3-text-var, #8c8c8c);
+  color: #9aa0a6 !important;
+  opacity: 1;
+  font-weight: 400;
 }
 
 .sl-search-clear {
@@ -270,8 +331,9 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: var(--color-v3-text-var, #8c8c8c);
+  color: #9aa0a6;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .sl-search-clear.visible {
@@ -279,8 +341,8 @@
 }
 
 .sl-search-clear:hover {
-  background: var(--color-v3-hover, #323232);
-  color: var(--color-v3-text, #d4d4d4);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
 }
 
 .sl-search-clear .sl-icon {
@@ -298,18 +360,20 @@
 
 .sl-tab-btn {
   min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: var(--color-v3-surface-container-high, #252525);
-  color: var(--color-v3-text-var, #8c8c8c);
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c4c7c5;
   cursor: pointer;
-  font: 500 13px/18px Inter, sans-serif;
+  font: 500 13px/18px "Google Sans", Roboto, Inter, sans-serif;
+  transition: all 0.15s ease;
 }
 
 .sl-tab-btn:hover {
-  color: var(--color-v3-text, #d4d4d4);
-  background: var(--color-v3-hover, #323232);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .sl-tab-btn:focus {
@@ -317,13 +381,14 @@
 }
 
 .sl-tab-btn:focus-visible {
-  border-color: var(--color-v3-text-link, #a8c7fa);
+  border-color: #a8c7fa;
+  box-shadow: 0 0 0 1px #a8c7fa;
 }
 
 .sl-tab-btn.active {
-  color: var(--color-v3-text, #d4d4d4);
-  border-color: var(--color-v3-text-link, #a8c7fa);
-  background: var(--color-v3-surface-container-highest, #2a2a2a);
+  color: #ffffff;
+  border-color: #a8c7fa;
+  background: rgba(168, 199, 250, 0.12);
 }
 
 .sl-tab-content {
@@ -674,25 +739,48 @@
   background: var(--color-v3-surface-container-high, #222222);
 }
 
-/* ── Apply button ───────────────────────────────────────────────── */
+/* ── Apply & Action Buttons ──────────────────────────────────────── */
 .sl-apply-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 12px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 18px;
   border: none;
-  font-size: 14px;
+  font-family: "Google Sans", Roboto, Inter, sans-serif;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  background: var(--color-v3-text, #d4d4d4);
-  color: #000;
+  background: #a8c7fa;
+  color: #041e49;
+  transition: all 0.15s ease;
+}
+
+.sl-apply-btn:hover {
+  background: #b9d3fb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .sl-apply-btn.destructive {
-  background: rgba(215, 58, 73, 0.15);
-  color: #ff7b7b;
+  background: rgba(242, 184, 181, 0.15);
+  color: #f2b8b5;
+  border: 1px solid rgba(242, 184, 181, 0.3);
+}
+
+.sl-apply-btn.destructive:hover {
+  background: rgba(242, 184, 181, 0.25);
+}
+
+.sl-diag-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.sl-diag-copy-btn:active {
+  background: rgba(255, 255, 255, 0.18) !important;
 }
 
 /* ── Load banner (optimizer restore area) ───────────────────────── */
@@ -820,14 +908,25 @@
 
 /* ── Scroll to Bottom Button ──────────────────────────────────────
    Matches native `.scroll-to-bottom` from chat container. */
+footer {
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+ms-chat-bottom-overlay {
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
 ms-prompt-box {
   position: relative !important;
+  z-index: 11 !important;
 }
 
 .sl-scroll-bottom-btn {
   position: absolute;
   bottom: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   width: 32px;

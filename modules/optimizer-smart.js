@@ -18,7 +18,8 @@
   let detachedParent = null;
   let pauseUntil = 0;
   let bottomStayStartTime = 0;
-  let watchersInitialized = false;
+  let lastUserScrollTime = 0;
+  let watcherScope = null;
 
   window.StudioLab.registerModule({
     id: 'optimizer-smart',
@@ -43,17 +44,18 @@
     init(ctx) {
       ctxRef = ctx;
       sync();
-      if (!watchersInitialized) {
-        setupSearchAndScrollWatchers();
-        watchersInitialized = true;
-      }
     },
     onStateChange() {
       sync();
     },
-    onRouteChange() {
+    onRouteChange(ctx, current, previous) {
+      if (current && previous && current.key === previous.key) return;
+      stop();
+      // Never insert old-chat nodes into a newly reused Angular container.
       clearDetachedState();
-    }
+      sync();
+    },
+    dispose() { stop(); restoreDetached(); clearDetachedState(); }
   });
 
   function isActive() {
@@ -72,6 +74,8 @@
 
   function start() {
     if (intervalId) return;
+    watcherScope = window.StudioLab.createScope();
+    setupSearchAndScrollWatchers();
     intervalId = setInterval(applySmartOptimizer, 800);
     applySmartOptimizer();
 
@@ -81,6 +85,8 @@
   }
 
   function stop() {
+    if (watcherScope) watcherScope.dispose();
+    watcherScope = null;
     if (intervalId) {
       clearInterval(intervalId);
       intervalId = null;
@@ -98,11 +104,20 @@
     return !!document.querySelector('.overlay-content[role="dialog"], [aria-label="Command Palette"]');
   }
 
+  function isGenerating() {
+    return !!document.querySelector('button.stop, button[aria-label*="Stop"], ms-run-button .stop, [data-test-id="stop-button"], .generating');
+  }
+
   function applySmartOptimizer() {
     if (!isActive()) return;
 
-    // Never detach if search palette is active or during navigation grace period
-    if (isSearchDialogOpen() || Date.now() < pauseUntil) {
+    const now = Date.now();
+    // Never detach if:
+    // 1. Search palette is open or in navigation pause
+    // 2. Chat is actively streaming / generating
+    // 3. User was actively scrolling within the last 2.5s
+    if (isSearchDialogOpen() || now < pauseUntil || isGenerating() || (now - lastUserScrollTime < 2500)) {
+      bottomStayStartTime = 0;
       return;
     }
 
@@ -128,13 +143,12 @@
       return;
     }
 
-    // Require the user to stay at the bottom for at least 5 seconds before buffering older turns
-    const now = Date.now();
+    // Settling threshold (2500ms of completely stationary idle at bottom) before buffering older turns
     if (bottomStayStartTime === 0) {
       bottomStayStartTime = now;
       return;
     }
-    if (now - bottomStayStartTime < 5000) {
+    if (now - bottomStayStartTime < 2500) {
       return;
     }
 
@@ -154,7 +168,7 @@
   function setupSearchAndScrollWatchers() {
     // 1. Keyboard shortcuts: Restore detached turns when native search is triggered
     // Handles English (KeyF / 'f') and international Cyrillic layouts (where key might be 'а')
-    document.addEventListener('keydown', (e) => {
+    watcherScope.listen(document, 'keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyF' || (e.key && e.key.toLowerCase() === 'f') || e.key === '/')) {
         pauseUntil = Date.now() + 20000;
         bottomStayStartTime = 0;
@@ -175,7 +189,7 @@
       }
     });
     if (document.body) {
-      paletteObserver.observe(document.body, { childList: true, subtree: true });
+      watcherScope.observe(paletteObserver, document.body, { childList: true, subtree: true });
     }
 
     // 3. Search result selection interceptor (click and Enter)
@@ -217,24 +231,25 @@
             targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
           targetEl.classList.add('sl-turn-highlight');
-          setTimeout(() => targetEl.classList.remove('sl-turn-highlight'), 3000);
+          watcherScope?.add(() => targetEl.classList.remove('sl-turn-highlight'));
+          watcherScope?.timeout(() => targetEl.classList.remove('sl-turn-highlight'), 3000);
         } else if (attemptsLeft > 0) {
-          setTimeout(() => verifyNavigation(attemptsLeft - 1), 100);
+          watcherScope?.timeout(() => verifyNavigation(attemptsLeft - 1), 100);
         }
       };
 
-      setTimeout(() => verifyNavigation(3), 80);
+      watcherScope?.timeout(() => verifyNavigation(3), 80);
     };
 
-    document.addEventListener('click', (e) => {
+    watcherScope.listen(document, 'click', (e) => {
       const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
-      const item = e.target.closest(`${resultsSel} .result-item, ${resultsSel} [role="option"]`);
+      const item = e.target.closest?.(`${resultsSel} .result-item, ${resultsSel} [role="option"]`);
       if (item) {
         handleResultSelection(item);
       }
     }, { capture: true });
 
-    document.addEventListener('keydown', (e) => {
+    watcherScope.listen(document, 'keydown', (e) => {
       if (e.key === 'Enter') {
         const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
         const activeItem = document.querySelector(`${resultsSel} .result-item[aria-selected="true"], ${resultsSel} .result-item:hover, ${resultsSel} [role="option"][aria-selected="true"]`) ||
@@ -245,7 +260,16 @@
       }
     }, { capture: true });
 
-    // 4. Listen for scroll on chat container to automatically restore when scrolling UP
+    // 4. External module trigger (e.g. Modern Web Chat turn navigator jump)
+    watcherScope.listen(window, '__sl_restoreAllTurns', () => {
+      pauseUntil = Date.now() + 30000;
+      bottomStayStartTime = 0;
+      if (detachedTurns.length > 0) {
+        restoreDetached();
+      }
+    });
+
+    // 5. Listen for scroll on chat container to automatically restore when scrolling UP
     const watchScroller = () => {
       const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
       const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
@@ -254,14 +278,15 @@
         document.querySelector(`${autoSel} div`);
 
       if (!scroller) {
-        setTimeout(watchScroller, 500);
+        watcherScope?.timeout(watchScroller, 500);
         return;
       }
 
       let lastScrollTop = scroller.scrollTop;
-      scroller.addEventListener('scroll', () => {
+      watcherScope.listen(scroller, 'scroll', () => {
         if (!isActive()) return;
 
+        lastUserScrollTime = Date.now();
         const currentScrollTop = scroller.scrollTop;
         const scrollingUp = currentScrollTop < lastScrollTop;
         lastScrollTop = currentScrollTop;
@@ -270,20 +295,13 @@
         if (distFromBottom > 300) {
           bottomStayStartTime = 0;
         }
-
-        if (detachedTurns.length === 0) return;
-
-        // When scrolling up towards history or approaching the top banner, restore all turns seamlessly
-        if (currentScrollTop < 800 || (scrollingUp && currentScrollTop < 2000)) {
-          restoreDetached();
-        }
       }, { passive: true });
     };
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       watchScroller();
     } else {
-      window.addEventListener('DOMContentLoaded', watchScroller);
+      watcherScope.listen(window, 'DOMContentLoaded', watchScroller);
     }
   }
 

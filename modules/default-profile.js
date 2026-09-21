@@ -13,7 +13,7 @@
 
   function executeInMainWorld(eventName, payload = {}) {
     return new Promise((resolve) => {
-      const eventId = Math.random().toString(36).substr(2, 9);
+      const eventId = Math.random().toString(36).slice(2, 11);
       const listener = (e) => {
         window.removeEventListener('__sl_result_' + eventId, listener);
         resolve(e.detail);
@@ -32,6 +32,8 @@
   let _ddSelectedText = '(No Instruction Selected)';
   let _ddItems = [];
   let _ddRebuildFn = null;
+  let _docClickListener = null;
+  let _profileUpdatedListener = null;
 
   async function syncLibrary() {
     const btn = document.getElementById('sl-profile-sync-icon');
@@ -112,27 +114,54 @@
     });
   }
 
+  let isAutoApplying = false;
+  let autoApplyTimeout = null;
+
   function triggerAutoApply() {
-    if (location.pathname !== '/prompts/new_chat') return;
-    chrome.storage.local.get([STORAGE_KEY], (res) => {
-      if (res[STORAGE_KEY]) {
+    if (!location.pathname.startsWith('/prompts/new_chat')) return;
+    if (isAutoApplying) return;
+
+    if (autoApplyTimeout) clearTimeout(autoApplyTimeout);
+    autoApplyTimeout = setTimeout(() => {
+      autoApplyTimeout = null;
+      if (!location.pathname.startsWith('/prompts/new_chat')) return;
+      if (isAutoApplying) return;
+
+      chrome.storage.local.get([STORAGE_KEY], (res) => {
+        if (!res[STORAGE_KEY]) return;
+        if (!location.pathname.startsWith('/prompts/new_chat')) return;
+
+        isAutoApplying = true;
         let attempts = 0;
         async function attemptApply() {
-           attempts++;
-           const result = await executeInMainWorld('__sl_applyProfile', { profile: res[STORAGE_KEY] });
-           if (result === true) {
+          if (!location.pathname.startsWith('/prompts/new_chat')) {
+            isAutoApplying = false;
+            return;
+          }
+
+          attempts++;
+          try {
+            const result = await executeInMainWorld('__sl_applyProfile', { profile: res[STORAGE_KEY] });
+            if (result === true) {
               window.StudioLab.log('Default Profile: Applied successfully.');
-           } else if (attempts <= 30) {
-              setTimeout(attemptApply, 500);
-           }
+              isAutoApplying = false;
+              return;
+            }
+          } catch (e) { }
+
+          if (attempts <= 30 && location.pathname.startsWith('/prompts/new_chat')) {
+            setTimeout(attemptApply, 500);
+          } else {
+            isAutoApplying = false;
+          }
         }
         attemptApply();
-      }
-    });
+      });
+    }, 150);
   }
 
   window.addEventListener('__sl_routeChanged', (e) => {
-    const url = e.detail && e.detail.url;
+    const url = (e.detail && e.detail.url) || location.href;
     if (url && url.includes('/prompts/new_chat')) triggerAutoApply();
   });
 
@@ -149,6 +178,12 @@
     title: 'Default Profile',
     subtitle: 'Auto-apply your preferred model and instructions',
     alwaysSelected: true,
+    onRouteChange(ctx) {
+      const url = (ctx && ctx.currentUrl) || location.href;
+      if (url.includes('/prompts/new_chat') || location.pathname.startsWith('/prompts/new_chat')) {
+        triggerAutoApply();
+      }
+    },
     renderControls: () => `
       <style>
         @keyframes sl-spin-anim { 100% { transform: rotate(360deg); } }
@@ -285,6 +320,15 @@
       const menuEl = modalEl.querySelector('#sl-inst-menu');
       const triggerText = modalEl.querySelector('#sl-inst-value');
 
+      if (_docClickListener) {
+        document.removeEventListener('click', _docClickListener);
+        _docClickListener = null;
+      }
+      if (_profileUpdatedListener) {
+        window.removeEventListener('__sl_profile_updated', _profileUpdatedListener);
+        _profileUpdatedListener = null;
+      }
+
       function closeDropdown() { 
          trigger.classList.remove('open'); 
          chevron.textContent = 'expand_more';
@@ -304,8 +348,23 @@
           btn.type = 'button';
           btn.className = 'sl-dropdown-option';
           
-          let checkSvg = item.value === _ddSelectedValue ? '<span class="material-symbols-outlined notranslate" style="font-size: 18px; color: var(--color-v3-text, #fff);">check</span>' : '<span style="width: 18px;"></span>';
-          btn.innerHTML = '<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.text + '</span>' + checkSvg;
+          const textSpan = document.createElement('span');
+          textSpan.style.overflow = 'hidden';
+          textSpan.style.textOverflow = 'ellipsis';
+          textSpan.style.whiteSpace = 'nowrap';
+          textSpan.textContent = item.text || '';
+          btn.appendChild(textSpan);
+
+          const checkSpan = document.createElement('span');
+          if (item.value === _ddSelectedValue) {
+            checkSpan.className = 'material-symbols-outlined notranslate';
+            checkSpan.style.fontSize = '18px';
+            checkSpan.style.color = 'var(--color-v3-text, #fff)';
+            checkSpan.textContent = 'check';
+          } else {
+            checkSpan.style.width = '18px';
+          }
+          btn.appendChild(checkSpan);
           
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -320,15 +379,23 @@
       }
       _ddRebuildFn = rebuildMenu;
 
-      trigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (trigger.classList.contains('open')) closeDropdown();
-        else openDropdown();
-      });
+      if (trigger) {
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (trigger.classList.contains('open')) closeDropdown();
+          else openDropdown();
+        });
+      }
 
-      document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target)) closeDropdown();
-      });
+      _docClickListener = (e) => {
+        if (!modalEl || !document.contains(modalEl)) {
+          document.removeEventListener('click', _docClickListener);
+          _docClickListener = null;
+          return;
+        }
+        if (dropdown && !dropdown.contains(e.target)) closeDropdown();
+      };
+      document.addEventListener('click', _docClickListener);
 
       if (btnSave) btnSave.addEventListener('click', (e) => { e.stopPropagation(); saveCurrentAsDefault(); });
       if (btnClear) btnClear.addEventListener('click', (e) => { e.stopPropagation(); clearDefaultProfile(); });
@@ -354,16 +421,27 @@
 
                const enabledTools = (profile.tools || []).filter(t => t.checked).length;
                
-               statsEl.innerHTML =
-                 '<div class="sl-profile-card">' +
-                   '<h3 class="title">' + model + '</h3>' +
-                   '<p class="subtitle">Instruction: ' + instDisplay + (enabledTools > 0 ? ' • ' + enabledTools + ' Tools' : '') + '</p>' +
-                 '</div>';
+               statsEl.innerHTML = '';
+               const card = document.createElement('div');
+               card.className = 'sl-profile-card';
+
+               const title = document.createElement('h3');
+               title.className = 'title';
+               title.textContent = model;
+               card.appendChild(title);
+
+               const subtitle = document.createElement('p');
+               subtitle.className = 'subtitle';
+               subtitle.textContent = 'Instruction: ' + instDisplay + (enabledTools > 0 ? ' • ' + enabledTools + ' Tools' : '');
+               card.appendChild(subtitle);
+
+               statsEl.appendChild(card);
                statsEl.style.display = 'block';
 
                // Show delete button
                if (clearBtn) clearBtn.style.display = 'flex';
             } else {
+               statsEl.innerHTML = '';
                statsEl.style.display = 'none';
                // Hide delete button
                if (clearBtn) clearBtn.style.display = 'none';
@@ -372,7 +450,15 @@
       }
       
       updateStatsDisplay();
-      window.addEventListener('__sl_profile_updated', updateStatsDisplay);
+      _profileUpdatedListener = () => {
+        if (!modalEl || !document.contains(modalEl)) {
+          window.removeEventListener('__sl_profile_updated', _profileUpdatedListener);
+          _profileUpdatedListener = null;
+          return;
+        }
+        updateStatsDisplay();
+      };
+      window.addEventListener('__sl_profile_updated', _profileUpdatedListener);
 
       chrome.storage.local.get([LIBRARY_KEY], (res) => {
         if (res[LIBRARY_KEY]) {

@@ -1,40 +1,41 @@
-chrome.action.onClicked.addListener((tab) => {
-  if (tab.url && tab.url.includes("aistudio.google.com")) {
-    chrome.tabs.sendMessage(tab.id, { action: "openStudioLab" }).catch(() => {
-      console.log("[Studio.lab] Could not open panel. Is the page fully loaded?");
-    });
-  }
-});
-
-// Sync Telemetry Blocker UI state with declarativeNetRequest ruleset
-function syncTelemetryRules(enabled) {
-  if (typeof chrome.declarativeNetRequest === 'undefined') return;
-  
-  const options = enabled
-    ? { enableRulesetIds: ['telemetry_blocker'], disableRulesetIds: [] }
-    : { disableRulesetIds: ['telemetry_blocker'], enableRulesetIds: [] };
-    
-  chrome.declarativeNetRequest.updateEnabledRulesets(options).catch(err => {
-    console.error('[Studio.lab] Error updating ruleset:', err);
+'use strict';
+chrome.action.onClicked.addListener(tab => {
+  let url;
+  try { url = new URL(tab.url); } catch (_) { return; }
+  if (url.protocol !== 'https:' || url.hostname !== 'aistudio.google.com') return;
+  chrome.tabs.sendMessage(tab.id, { action: 'openStudioLab' }).catch(() => {
+    console.warn('[Studio.lab] Reload AI Studio to connect the extension.');
   });
-}
-
-// Initial sync on extension load
-chrome.storage.local.get(['slState'], (data) => {
-  const state = data.slState || {};
-  // Default to true if not set
-  const isEnabled = state.telemetryBlockerEnabled !== false;
-  syncTelemetryRules(isEnabled);
 });
 
-// Watch for toggle changes in UI
+// Serialize updates and read the latest preference inside each queued operation.
+let queue = Promise.resolve();
+let lastError = null;
+function syncTelemetryRules() {
+  queue = queue.then(async () => {
+    const data = await chrome.storage.local.get(['slState']);
+    const enabled = data.slState?.telemetryBlockerEnabled !== false;
+    await chrome.declarativeNetRequest.updateEnabledRulesets({
+      enableRulesetIds: enabled ? ['telemetry_blocker'] : [],
+      disableRulesetIds: enabled ? [] : ['telemetry_blocker']
+    });
+    lastError = null;
+  }).catch(() => { lastError = 'Could not synchronize network rules.'; });
+  return queue;
+}
+syncTelemetryRules();
+
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.slState) {
-    const newState = changes.slState.newValue || {};
-    const oldState = changes.slState.oldValue || {};
-    if (newState.telemetryBlockerEnabled !== oldState.telemetryBlockerEnabled) {
-      const isEnabled = newState.telemetryBlockerEnabled !== false;
-      syncTelemetryRules(isEnabled);
-    }
-  }
+  if (area === 'local' && changes.slState) syncTelemetryRules();
+});
+
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.action !== 'getTelemetryStatus') return;
+  queue.then(async () => {
+    try {
+      const active = await chrome.declarativeNetRequest.getEnabledRulesets();
+      reply({ enabled: active.includes('telemetry_blocker'), ok: !lastError, error: lastError });
+    } catch (_) { reply({ enabled: null, ok: false, error: 'Network rule status unavailable.' }); }
+  });
+  return true;
 });

@@ -107,11 +107,43 @@
   let initialized = false;
   let injected = false;
   let modalEl = null;
+  let modalScope = null;
+  let returnFocus = null;
   let liveStatsInterval = null;
   let lastUrl = location.href;
   let activeTab = 'all';
   let searchQuery = '';
   let lastLocalSave = '';
+  let telemetryStatus = null;
+  const moduleErrors = new Map();
+  const recentErrors = [];
+
+  function recordError(moduleId, err, phase = 'runtime') {
+    const message = err?.message || String(err);
+    const stack = err?.stack ? err.stack.split('\n').slice(0, 3).join('\n') : null;
+    moduleErrors.set(moduleId, message);
+    recentErrors.push({
+      module: moduleId,
+      phase,
+      message,
+      stack,
+      time: new Date().toISOString()
+    });
+    if (recentErrors.length > 20) recentErrors.shift();
+  }
+
+  function callModule(module, method, ...args) {
+    if (!module || typeof module[method] !== 'function') return undefined;
+    try {
+      return module[method](...args);
+    } catch (err) {
+      recordError(module.id || 'unknown', err, method);
+      if (window.StudioLab && window.StudioLab.log) {
+        window.StudioLab.log(`Error in module ${module.id || 'unknown'} ${method}: ` + err, 'error');
+      }
+      return undefined;
+    }
+  }
 
   // Start critical UI watchers immediately
   waitForSidebar();
@@ -148,6 +180,7 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.action === 'openStudioLab') openModal();
   });
+  window.addEventListener('__sl_openSettings', () => openModal());
 
   function buildInitialState() {
     const initial = Object.assign({}, DEFAULT_STATE);
@@ -200,33 +233,22 @@
 
   function initModules() {
     modules.forEach((module) => {
-      if (typeof module.init === 'function') {
-        try { module.init(ctx); } catch (e) {
-          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} init: ` + e, 'error');
-        }
-      }
+      callModule(module, 'init', ctx);
     });
     notifyModules(null);
   }
 
   function notifyModules(prevState) {
     modules.forEach((module) => {
-      if (typeof module.onStateChange === 'function') {
-        try { module.onStateChange(ctx, prevState); } catch (e) {
-          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} onStateChange: ` + e, 'error');
-        }
-      }
+      callModule(module, 'onStateChange', ctx, prevState);
     });
   }
 
   function notifyRouteChange() {
     modules.forEach((module) => {
-      if (typeof module.onRouteChange === 'function') {
-        try { module.onRouteChange(ctx); } catch (e) {
-          if (window.StudioLab && window.StudioLab.log) window.StudioLab.log(`Error in module ${module.id || 'unknown'} onRouteChange: ` + e, 'error');
-        }
-      }
+      callModule(module, 'onRouteChange', ctx);
     });
+    window.dispatchEvent(new CustomEvent('__sl_routeChanged', { detail: { url: location.href } }));
   }
 
   function startRouteWatcher() {
@@ -243,80 +265,87 @@
   }
 
   function waitForSidebar() {
-    const tryInject = () => {
-      if (document.querySelector('.sl-sidebar-btn')) return true;
+    // 1. Purge any misplaced button from the left navigation toolbar
+    const oldBtns = document.querySelectorAll('.sl-sidebar-btn');
+    oldBtns.forEach(b => b.remove());
 
-      const selectors = (window.StudioLab && window.StudioLab.SELECTORS) 
-        ? window.StudioLab.SELECTORS.SIDEBAR_ANCHORS 
-        : ['ms-system-instructions-panel', 'ms-model-selector', '.selector-container.field-group', 'ms-run-settings'];
+    // 2. Inject into the Settings menu directly below "User settings"
+    const tryInjectIntoSettingsMenu = () => {
+      const menuPanels = document.querySelectorAll('.cdk-overlay-container .mat-mdc-menu-panel:not([data-sl-settings-processed])');
+      menuPanels.forEach(panel => {
+        // Find User Settings item inside menu
+        const items = panel.querySelectorAll('button.mat-mdc-menu-item, a.mat-mdc-menu-item');
+        let userSettingsItem = null;
+        for (const item of items) {
+          const txt = item.textContent.trim().toLowerCase();
+          if (
+            item.getAttribute('data-test-id') === 'user-settings-menu' ||
+            txt.includes('user settings') ||
+            txt.includes('user setting') ||
+            item.getAttribute('aria-label')?.toLowerCase().includes('user setting')
+          ) {
+            userSettingsItem = item;
+            break;
+          }
+        }
 
-      let anchor = null;
-      for (const sel of selectors) {
-        anchor = document.querySelector(sel);
-        if (anchor) break;
-      }
+        if (!userSettingsItem) return;
+        panel.setAttribute('data-sl-settings-processed', 'true');
+        if (panel.querySelector('.sl-user-settings-item')) return;
 
-      if (!anchor) return false;
+        const slItem = document.createElement('button');
+        slItem.type = 'button';
+        slItem.setAttribute('mat-menu-item', '');
+        slItem.className = 'mat-mdc-menu-item mat-focus-indicator sl-user-settings-item';
+        slItem.setAttribute('role', 'menuitem');
 
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'sl-sidebar-btn';
-      card.setAttribute('aria-label', 'Studio.lab Settings');
+        const textSpan = document.createElement('span');
+        textSpan.className = 'mat-mdc-menu-item-text';
 
-      const titleSpan = document.createElement('span');
-      titleSpan.className = 'title';
-      titleSpan.textContent = 'Studio.lab';
+        const icon = document.createElement('span');
+        icon.className = 'material-symbols-outlined notranslate';
+        icon.textContent = 'science';
 
-      const subtitleSpan = document.createElement('span');
-      subtitleSpan.className = 'subtitle';
-      subtitleSpan.textContent = 'Performance, bypass and workspace modules';
+        const label = document.createElement('span');
+        label.textContent = 'Studio.lab Settings';
 
-      card.appendChild(titleSpan);
-      card.appendChild(subtitleSpan);
+        textSpan.appendChild(icon);
+        textSpan.appendChild(label);
+        slItem.appendChild(textSpan);
 
-      card.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openModal();
+        const ripple = document.createElement('div');
+        ripple.setAttribute('matripple', '');
+        ripple.className = 'mat-ripple mat-mdc-menu-ripple';
+        slItem.appendChild(ripple);
+
+        slItem.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const backdrop = document.querySelector('.cdk-overlay-backdrop');
+          if (backdrop) backdrop.click();
+          openModal();
+        });
+
+        userSettingsItem.insertAdjacentElement('afterend', slItem);
       });
-
-      // Inject after the component or at the top of the container
-      if (anchor.tagName.startsWith('MS-')) {
-        anchor.insertAdjacentElement('afterend', card);
-      } else {
-        anchor.prepend(card);
-      }
-
-      injected = true;
-      return true;
     };
 
-    // Run immediately and then via observer/polling
-    if (tryInject()) return;
+    // Run on any DOM change / menu overlay opening
+    if (!window._slMenuObserver) {
+      window._slMenuObserver = new MutationObserver(() => {
+        // Keep old bottom icon row clean
+        const rogueBtns = document.querySelectorAll('.v3-left-nav .sl-sidebar-btn, ms-side-nav .sl-sidebar-btn');
+        rogueBtns.forEach(b => b.remove());
 
-    if (!window._slSidebarObserver) {
-      window._slSidebarObserver = new MutationObserver(() => {
-        if (!document.querySelector('.sl-sidebar-btn')) tryInject();
+        tryInjectIntoSettingsMenu();
       });
-      window._slSidebarObserver.observe(document.documentElement, { 
+      window._slMenuObserver.observe(document.documentElement, { 
         childList: true, 
         subtree: true 
       });
     }
 
-    let attempts = 0;
-    const maxAttempts = 10; // 10 seconds health check
-    const poll = setInterval(() => {
-      attempts++;
-      if (tryInject()) {
-        clearInterval(poll);
-        return;
-      }
-      if (attempts >= maxAttempts) {
-        clearInterval(poll);
-        showHealthCheckWarning();
-      }
-    }, 1000);
+    tryInjectIntoSettingsMenu();
   }
 
   function showHealthCheckWarning() {
@@ -334,7 +363,10 @@
   }
 
   function openModal() {
+    if (!initialized || !document.body) return;
     if (modalEl) closeModal();
+    returnFocus = document.activeElement;
+    modalScope = window.StudioLab.createScope ? window.StudioLab.createScope() : null;
 
     modalEl = document.createElement('div');
     modalEl.className = 'sl-overlay';
@@ -348,22 +380,44 @@
     bindModalEvents();
     startLiveStats();
     document.addEventListener('keydown', escHandler);
+
+    const searchInput = modalEl.querySelector('[data-sl-search-input]');
+    if (searchInput) searchInput.focus();
+
+    refreshDiagnostics();
+    chrome.runtime.sendMessage({ action: 'getTelemetryStatus' }).then(result => {
+      telemetryStatus = result || null;
+      refreshDiagnostics();
+    }).catch(() => {});
   }
 
   function closeModal() {
+    if (modalScope) {
+      modalScope.dispose();
+      modalScope = null;
+    }
     if (modalEl) {
       modalEl.remove();
       modalEl = null;
     }
     stopLiveStats();
     document.removeEventListener('keydown', escHandler);
+    if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+      returnFocus.focus();
+    }
+    returnFocus = null;
   }
 
   function refreshModal() {
     if (!modalEl) return;
+    if (modalScope) {
+      modalScope.dispose();
+      modalScope = window.StudioLab.createScope ? window.StudioLab.createScope() : null;
+    }
     modalEl.innerHTML = renderDialog();
     bindModalEvents();
     refreshLiveStats();
+    refreshDiagnostics();
   }
 
   function renderDialog() {
@@ -381,7 +435,7 @@
         <div class="sl-search-field">
           <div class="sl-search-container">
             ${renderIcon('search', 'search')}
-            <input type="text" data-sl-search-input placeholder="Search settings..." aria-label="Search settings" value="${html(searchQuery)}">
+            <input type="text" data-sl-search-input placeholder="Search settings..." aria-label="Search settings" value="${html(searchQuery)}" style="background: transparent !important; background-color: transparent !important; border: none !important; outline: none !important; box-shadow: none !important;">
             <button type="button" class="sl-search-clear ${searchQuery ? 'visible' : ''}" data-sl-search-clear aria-label="Clear search">
               ${renderIcon('close', 'plain')}
             </button>
@@ -439,7 +493,7 @@
   function renderGroupToggle(group) {
     const isActive = !!state[group.enabledKey];
     return `
-      <button type="button" class="sl-auto-toggle ${isActive ? 'active' : ''}" data-sl-group-toggle="${group.id}" aria-label="Toggle ${html(group.title)}"></button>
+      <button type="button" role="switch" aria-checked="${isActive}" class="sl-auto-toggle ${isActive ? 'active' : ''}" data-sl-group-toggle="${group.id}" aria-label="Toggle ${html(group.title)}"></button>
     `;
   }
 
@@ -458,7 +512,7 @@
     return `
       <div class="sl-module-item" data-sl-module-item="${html(module.id)}" data-sl-search="${html(searchText)}">
         ${renderModuleRow(module)}
-        ${typeof module.renderControls === 'function' ? module.renderControls(ctx) : ''}
+        ${callModule(module, 'renderControls', ctx) || ''}
       </div>
     `;
   }
@@ -482,9 +536,10 @@
     const tag = module.alwaysSelected ? 'div' : 'button';
     const typeAttr = module.alwaysSelected ? '' : 'type="button"';
     const staticClass = module.alwaysSelected ? 'static' : '';
+    const ariaPressed = module.alwaysSelected ? '' : `aria-pressed="${isSelected}"`;
 
     return `
-      <${tag} ${typeAttr} class="sl-mode-row ${isSelected ? 'selected' : ''} ${staticClass}" data-sl-module-id="${html(module.id)}">
+      <${tag} ${typeAttr} ${ariaPressed} class="sl-mode-row ${isSelected ? 'selected' : ''} ${staticClass}" data-sl-module-id="${html(module.id)}">
         <div class="row-header">
           <div class="row-header-text">
             <div class="model-title">
@@ -546,6 +601,27 @@
               <div style="display: flex; align-items: center; gap: 8px;">
                 ${renderIcon('visibility_off', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">Zero analytics or external requests.</span>
               </div>
+            </div>
+            <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--color-v3-outline-var, #2a2a2a);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div>
+                  <p style="margin: 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">System Diagnostics & Compatibility</p>
+                  <div data-sl-diag-badge style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; margin-top: 6px; padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(102, 187, 106, 0.35); color: #81c784; background: rgba(102, 187, 106, 0.12);">
+                    <span style="color:#66bb6a; font-size: 10px;">●</span> All Systems Operational
+                  </div>
+                </div>
+                <button type="button" class="sl-diag-copy-btn" data-sl-copy-diagnostics style="background: rgba(255, 255, 255, 0.08); color: #e3e3e3; border: 1px solid rgba(255, 255, 255, 0.16); padding: 0 16px; height: 32px; border-radius: 16px; font-family: 'Google Sans', Roboto, Inter, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s ease;">
+                  <span class="material-symbols-outlined notranslate" style="font-size: 16px; color: #a8c7fa;">content_copy</span>
+                  <span>Copy Diagnostics</span>
+                </button>
+              </div>
+              <p style="font-size: 12px; color: #a8abb0; margin: 0 0 10px 0; line-height: 1.5;">
+                Exports a sanitized technical report to attach to bug reports. Never includes chat messages, prompt text, user emails, or API credentials.
+              </p>
+              <details style="margin-top: 8px;">
+                <summary style="cursor: pointer; font-size: 12px; color: var(--color-v3-text); user-select: none; padding: 4px 0;">View Diagnostic Snapshot</summary>
+                <pre data-sl-diagnostics style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.4); border-radius: 6px; font-size: 11px; max-height: 220px; overflow: auto; color: #a9b7c6; font-family: monospace; white-space: pre-wrap; word-break: break-all;"></pre>
+              </details>
             </div>
             <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px;">
               <p style="margin: 0 0 12px 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">Community & Updates</p>
@@ -634,8 +710,24 @@
     });
 
     modules.forEach((module) => {
-      if (typeof module.bindControls === 'function') module.bindControls(modalEl, ctx);
+      const dispose = callModule(module, 'bindControls', modalEl, ctx);
+      if (typeof dispose === 'function' && modalScope) modalScope.add(dispose);
     });
+
+    const copyBtn = modalEl.querySelector('[data-sl-copy-diagnostics]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        const btnText = copyBtn.querySelector('span');
+        try {
+          const diag = getDiagnostics();
+          await navigator.clipboard.writeText(JSON.stringify(diag, null, 2));
+          if (btnText) btnText.textContent = 'Copied to clipboard!';
+          setTimeout(() => { if (btnText) btnText.textContent = 'Copy Diagnostics'; }, 2200);
+        } catch (_) {
+          if (btnText) btnText.textContent = 'Copy failed (check permissions)';
+        }
+      });
+    }
 
     updateModalState();
     applySearchFilter();
@@ -664,6 +756,14 @@
     return false;
   }
 
+  function isModuleEnabled(module) {
+    if (!module) return false;
+    if (module.enabledKey && !state[module.enabledKey]) return false;
+    if (module.stateKey) return !!state[module.stateKey];
+    if (module.modeKey) return state[module.modeKey] === module.modeValue;
+    return true;
+  }
+
   function updateModalState() {
     if (!modalEl) return;
 
@@ -673,21 +773,26 @@
         const toggle = modalEl.querySelector(`[data-sl-group-toggle="${group.id}"]`);
         const list = modalEl.querySelector(`[data-sl-module-list="${group.id}"]`);
 
-        if (toggle) toggle.classList.toggle('active', enabled);
+        if (toggle) {
+          toggle.classList.toggle('active', enabled);
+          toggle.setAttribute('aria-checked', String(enabled));
+        }
         if (list) list.classList.toggle('disabled', !enabled);
       }
     });
 
     modules.forEach((module) => {
       const row = modalEl.querySelector(`[data-sl-module-id="${cssEscape(module.id)}"]`);
-      if (row) row.classList.toggle('selected', isModuleSelected(module));
-
-      if (typeof module.updateControls === 'function') {
-        module.updateControls(modalEl, ctx);
+      if (row) {
+        row.classList.toggle('selected', isModuleSelected(module));
+        if (!module.alwaysSelected) row.setAttribute('aria-pressed', String(isModuleSelected(module)));
       }
+
+      callModule(module, 'updateControls', modalEl, ctx);
     });
 
     refreshLiveStats();
+    refreshDiagnostics();
   }
 
   function updateTabs() {
@@ -760,7 +865,7 @@
     });
 
     modules.forEach((module) => {
-      if (typeof module.updateControls === 'function') module.updateControls(modalEl, ctx);
+      callModule(module, 'updateControls', modalEl, ctx);
     });
   }
 
@@ -771,8 +876,126 @@
     return document.querySelectorAll(sel).length;
   }
 
+  function getDiagnostics() {
+    const ngVersion = document.querySelector('[ng-version]')?.getAttribute('ng-version') || 
+                      document.querySelector('app-root')?.getAttribute('ng-version') || 
+                      'Not detected';
+
+    const criticalSelectors = {
+      promptTextarea: 'ms-prompt-box textarea',
+      promptBox: 'ms-prompt-box',
+      runSettings: 'ms-run-settings',
+      modelSelector: 'ms-model-selector',
+      thinkingSelector: 'ms-thinking-level-setting, mat-select[aria-label*="Thinking" i]',
+      chatSession: 'ms-chat-session',
+      chatTurns: 'ms-chat-turn',
+      stopButton: 'ms-run-button button.stop, [data-test-id="stop-button"]',
+      systemInstructions: 'ms-system-instructions, textarea[aria-label*="System instructions" i]'
+    };
+
+    const domCheck = {};
+    let missingCount = 0;
+    for (const [name, sel] of Object.entries(criticalSelectors)) {
+      const foundNodes = document.querySelectorAll(sel);
+      domCheck[name] = {
+        selector: sel,
+        found: foundNodes.length > 0,
+        count: foundNodes.length
+      };
+      if (foundNodes.length === 0 && name !== 'stopButton') {
+        missingCount++;
+      }
+    }
+
+    return {
+      timestamp: new Date().toISOString(),
+      extension: {
+        version: VERSION,
+        activeTab: activeTab
+      },
+      environment: {
+        userAgent: navigator.userAgent,
+        platform: navigator.userAgentData?.platform || navigator.platform,
+        viewport: `${window.innerWidth}x${window.innerHeight} (dpr: ${window.devicePixelRatio || 1})`,
+        language: navigator.language
+      },
+      aiStudio: {
+        origin: location.origin,
+        pathname: location.pathname,
+        isChat: /^\/prompts\/(?:new_chat|[^/]+)$/.test(location.pathname),
+        angularVersion: ngVersion,
+        chatTurnCount: getTurnCount()
+      },
+      signalsAndEngine: {
+        lviewMapAvailable: typeof window.__NG_LVIEW_MAP__ !== 'undefined',
+        lviewEntriesCount: window.__NG_LVIEW_MAP__ ? window.__NG_LVIEW_MAP__.size : null,
+        dynamicStudioApiReady: typeof window.__SL_DYNAMIC_API_READY__ !== 'undefined' 
+          ? window.__SL_DYNAMIC_API_READY__ 
+          : (typeof window.DynamicStudioAPI !== 'undefined'),
+        modernWebChatStyleApplied: document.body.classList.contains('modern-web-chat-enabled')
+      },
+      telemetry: telemetryStatus ? {
+        rulesActive: telemetryStatus.enabled,
+        statusOk: telemetryStatus.ok,
+        error: telemetryStatus.error || null
+      } : 'Checking...',
+      domHealth: {
+        missingCount,
+        selectors: domCheck
+      },
+      modules: modules.map(m => ({
+        id: m.id,
+        title: m.title,
+        group: m.group,
+        enabled: isModuleEnabled(m),
+        hasError: moduleErrors.has(m.id),
+        lastError: moduleErrors.get(m.id) || null
+      })),
+      recentErrors: recentErrors.slice(-10)
+    };
+  }
+
+  function refreshDiagnostics() {
+    if (!modalEl) return;
+    const diag = getDiagnostics();
+    const pre = modalEl.querySelector('[data-sl-diagnostics]');
+    if (pre) pre.textContent = JSON.stringify(diag, null, 2);
+
+    const statusBadge = modalEl.querySelector('[data-sl-diag-badge]');
+    if (statusBadge) {
+      const hasErrors = moduleErrors.size > 0 || recentErrors.length > 0;
+      const missing = diag.domHealth.missingCount;
+      if (hasErrors) {
+        statusBadge.innerHTML = `<span style="color:#ef5350;">●</span> ${moduleErrors.size} Module Error(s) Reported`;
+        statusBadge.style.borderColor = 'rgba(239, 83, 80, 0.4)';
+        statusBadge.style.color = '#ef5350';
+      } else if (missing > 3) {
+        statusBadge.innerHTML = `<span style="color:#ffca28;">▲</span> UI Elements Unmounted (${missing} missing)`;
+        statusBadge.style.borderColor = 'rgba(255, 202, 40, 0.4)';
+        statusBadge.style.color = '#ffca28';
+      } else {
+        statusBadge.innerHTML = `<span style="color:#66bb6a;">●</span> All Systems Operational`;
+        statusBadge.style.borderColor = 'rgba(102, 187, 106, 0.4)';
+        statusBadge.style.color = '#66bb6a';
+      }
+    }
+  }
+
   function escHandler(event) {
     if (event.key === 'Escape') closeModal();
+    if (event.key !== 'Tab' || !modalEl) return;
+    const focusable = [...modalEl.querySelectorAll('button, input, textarea, a[href], [tabindex="0"]')]
+      .filter(node => !node.disabled && node.getClientRects().length);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function html(value) {

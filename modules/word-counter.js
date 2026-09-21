@@ -8,7 +8,6 @@
 
   let ctxRef = null;
   let observer = null;
-  const timers = new WeakMap();
 
   window.StudioLab.registerModule({
     id: 'word-counter',
@@ -26,16 +25,23 @@
     ],
     init(ctx) {
       ctxRef = ctx;
-      startObserver();
+      if (isActive()) startObserver();
     },
     onStateChange() {
-      if (isActive()) updateAllTurns();
-      else removeCounters();
+      if (isActive()) startObserver();
+      else stop();
     },
     onRouteChange() {
-      if (isActive()) setTimeout(updateAllTurns, 300);
-    }
+      clearTimeout(routeTimer);
+      timers.forEach(clearTimeout);
+      timers.clear();
+      if (isActive()) routeTimer = setTimeout(updateAllTurns, 300);
+    },
+    dispose: stop
   });
+
+  let routeTimer = null;
+  const timers = new Map();
 
   function isActive() {
     return !!(ctxRef && ctxRef.state.wordCounterEnabled);
@@ -85,6 +91,15 @@
     }, 300);
 
     timers.set(turn, timer);
+  }
+
+  function stop() {
+    if (observer) observer.disconnect();
+    observer = null;
+    clearTimeout(routeTimer);
+    timers.forEach(clearTimeout);
+    timers.clear();
+    removeCounters();
   }
 
   function updateAllTurns() {

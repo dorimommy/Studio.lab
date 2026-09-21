@@ -1,5 +1,77 @@
 # Studio.lab Changelog
 
+## v2.0-preview-4
+**Modern Web Chat Major Overhaul, Angular 19 Signals & Architectural Stabilization**
+
+`Core Architecture & Network Engine`.
+* **Added:** `Angular 19 Signals Direct State Mutation & LView Interceptor`.
+  * *LView Map Interception:* Intercepts Angular 19's internal LView registry at `document_start` in the `MAIN` execution world via multi-candidate `Map.prototype.set` monitoring with active DOM context resolution (`ms-run-settings`, `app-root`), accessing over 600–1,200 runtime component LViews.
+  * *DynamicStudioAPI & Zero-Flicker Mutation:* Direct programmatic inspection and mutation of Angular 19 Writable Signals (`model.set()`, `temperature.set()`, `thinkingBudget.set()`, `maxOutputTokens.set()`, `enableSearchAsATool.set()`, `enableCodeExecution.set()`).
+  * *Purge of Invisible DOM Hacks:* Completely removed `injectInvisibleCSS()`, `toggleInvisibleDOM()`, and `opacity: 0.0001` DOM-hiding hacks along with modal dialog click-polling. Settings and models apply instantaneously with zero UI flicker or dialog popups.
+  * *Clean System Instructions Injection:* Injects instructions via native prototype descriptor (`HTMLTextAreaElement.prototype.value`) and synthetic `input` events, binding directly to Angular's `FormControl` before silently dismissing the slide panel.
+* **Fixed:** `Bypass Toggle & Abort Delegation`.
+  * *Native Abort Delegation:* In `interceptor.js`, `xhr.abort` now checks `bypassEnabled`. If bypass is disabled in settings, abort calls delegate cleanly to the host environment's native abort routine, restoring user cancellation for streaming generations.
+* **Consolidated:** `Unified XMLHttpRequest Open Patch & Telemetry Logging`.
+  * *Consolidated Patching:* Merged duplicate `XMLHttpRequest.prototype.open` monkey-patches in `interceptor.js` into a single unified implementation handling model swapping, telemetry logging, and runtime model discovery (`ListModels`).
+* **Cleaned:** `Production Media Download Fallback`.
+  * *Dead Code Removal:* Removed unreachable `window.ng.getComponent` branch in `interceptor.js`, ensuring direct fallback downloads via native buttons and anchor elements.
+
+`Modern Web Chat` module.
+* **Added:** `Modular Architecture & CSS Extraction`.
+  * *Dedicated Stylesheet:* Extracted 2,242 lines of CSS from embedded JavaScript template strings into standalone `modules/modern-web-chat.css`, registered under `web_accessible_resources` in `manifest.json`.
+  * *Dynamic Link Injection:* Updated `updateStyles()` to inject `<link rel="stylesheet">`, reducing script size by over 55% (~4,100 lines down to 1,833 lines) for improved maintainability, parsing speed, and browser caching.
+* **Fixed:** `Observer Lifecycle & State Toggle`.
+  * *Conditional Observer Attachment:* Observers (`mainObserver`, `overlayObserver`) now attach strictly when the module is enabled. Toggling off cleanly disconnects observers; toggling back on immediately re-instantiates them so new turns, menus, and media continue processing.
+* **Fixed:** `Stealth Thought Deletion & Reasoning Tokens Preservation`.
+  * *Non-Destructive Thought Handling:* Removed automated physical clicking of delete/close buttons on `ms-thought-chunk`, preserving model reasoning tokens and thinking chunks within the session while maintaining full user control over thought blocks. Completely purged dead `autoDeleteThoughts` and `__sl_deleteThought` event hooks.
+* **Fixed:** `More Models Dialog & Drawer Isolation`.
+  * *Direct Native Trigger & Persistent Availability:* Clicking "More models..." triggers Google AI Studio's native model selection dialog directly without prematurely expanding the right settings drawer. Preserved the settings component in the DOM when closing the right drawer and implemented `ensureRunSettingsMounted` to ensure "More models..." opens reliably even after repeatedly toggling the drawer.
+* **Added:** `Centered Top Saving Pill Banner`.
+  * *Header Harmony & Slide-Down Animation:* Replaced native toolbar saving indicators in `toolbar-right` with a centered pill banner that slides down smoothly from the top viewport edge (`translate(-50%, -32px)` -> `translate(-50%, 0)`).
+  * *Authentic Header Styling:* Matched the exact aesthetic of header buttons (`rgba(30, 30, 30, 0.92)` frosted glass, `backdrop-filter: blur(16px)`, `16px` border-radius, elevation shadow, `#8ab4f8` spinning sync icon, and Google Sans typography), with real-time sync across XHR/fetch saving requests and DOM status mutations.
+* **Fixed:** `Settings Search Bar Uniformity`.
+  * *Background Stripe Elimination:* Enforced transparent background on the search input element, eliminating host stylesheet background layering and the visible vertical stripe at the end of the input field.
+* **Enhanced:** `Persistent ChatGPT-Style Turn Navigator & Frosted-Glass Styling`.
+  * *Desktop-Wide Visibility:* Removed breakpoint restrictions that hid the 3-dash turn navigator widget when settings were open; the widget now remains consistently visible on all desktop viewports (> 768px).
+  * *History Flyout Aesthetic Match:* Upgraded the turn navigator popover to use `rgba(30, 30, 30, 0.88)` frosted glass with `backdrop-filter: blur(16px)`, matching the native History flyout panel with tighter 5px dash spacing, 2px popover item gaps, and 30px compact item heights.
+* **Redesigned:** `Viewport-Aligned Header & Slide-Out Settings Drawer`.
+  * *Unified Header Toolbar:* Grouped navigation drawer toggle, `+` (New chat), and `⋮` (Overflow menu) into `.toolbar-left`. Relocated Model selector, Thinking level, and Run Settings trigger to `.toolbar-right`, automatically hiding the redundant `+` on empty chats.
+  * *Isolated Fixed Overlay Drawer:* Replaced the docked right panel (`ms-right-side-panel`, `ms-run-settings`) with a fixed 380px slide-out drawer (`position: fixed; z-index: 1200; background: #191919`), reclaiming 300px of workspace to center the chat canvas. Dismisses cleanly via outside click or `Escape`.
+  * *Left-Navigation Settings Entry:* Integrated Studio.lab Settings directly into the left navigation drawer below native User Settings with pixel-perfect native geometry, typography, and collapsed drawer support.
+* **Redesigned:** `Native Material Model & Thinking Selectors`.
+  * *Frosted-Glass Flyouts:* Re-engineered dropdown menus to mirror native `.nav-flyout-panel` surface aesthetics: `rgba(30, 30, 30, 0.92)` frosted glass (`backdrop-filter: blur(12px)`), 16px border-radius, elevation shadows, and squircle item hover states.
+  * *Dynamic Featured Models & Constrained Thinking Levels:* Intercepts runtime models (`Gemini 3.8 Flash`, `Gemini 3.5 Flash Lite`, `Gemini 3.1 Pro Preview`) and dynamically constrains thinking levels to those officially supported by the selected model (`Minimal`, `Low`, `Medium`, `High`).
+* **Redesigned:** `Square Media Tiles & Circular Frosted-Glass Controls`.
+  * *Strict 112×112px Square Tiles & Flex Rows:* Enforced 112×112px square tiles with `object-fit: cover` and unclipped horizontal flex row wrapping for multiple attachments, eliminating turn clamping.
+  * *Shadowless Circular Action Buttons:* Redesigned media action buttons (`⋮`) as 28×28px circular frosted-glass buttons (`backdrop-filter: blur(20px)`, zero borders, zero drop shadows).
+  * *Isolated Full-Width Video Cards:* Restores full width and auto height for video chunks, preserving duration, token count, and filename metadata bars.
+  * *Turn Options Download Integration:* Dynamically injects native-styled "Download" actions into active media turn menus, routing through the main-world download pipeline.
+* **Enhanced:** `Prompt Box, Editing Experience & Responsive Layout`.
+  * *Full-Height Autosize Editing:* Synchronized typography (`15px` font size, `1.6` line-height) across `ms-autosize-textarea`, its native `::after` element, and `textarea`, resolving CSS Grid row clamping with dedicated bottom scroll clearance (`22px`).
+  * *Floating Prompt Box Overlay:* Centered 900px prompt box anchored to the bottom with fixed darkening gradient (`footer::before`) and 240px scroll clearance. Attachment chips inside prompt box use compact 18px native remove buttons.
+  * *Upward-Opening Hover Submenus:* `+` prompt submenus (`Other uploads`, `Tools`) open upwards into view with direct, silent tool toggling.
+  * *Responsive Adaptation:* Optimized layouts across Mobile (< 768px; hides TOC, 94% bubble width), Tablet (768–1024px; adaptive padding), and Widescreen (> 1024px) viewports with uniform 16px edge clearance.
+  * *Minimalist Timestamps:* Purged timestamps from user turns and edit mode; model turns feature a single consolidated timestamp with an inline `• Edited` badge.
+
+`Default Profile` module.
+* **Fixed:** `SPA Navigation & Route Auto-Apply`.
+  * *Route Lifecycle Hook:* Implemented `onRouteChange(ctx)` lifecycle handler and added `__sl_routeChanged` event dispatching in `content.js`, ensuring default profile settings auto-apply reliably upon navigating to `/prompts/new_chat`.
+* **Fixed:** `DOM Safety & XSS Prevention`.
+  * *Safe Element Construction:* Replaced unsafe `innerHTML` concatenations with safe DOM manipulation (`textContent` and node creation) for instruction library dropdown options and profile status displays.
+* **Fixed:** `Memory Leak & Listener Cleanup`.
+  * *Listener Disposer Pattern:* Prior document click and profile update event listeners are cleanly unbound and guarded against duplicate registrations on modal re-open.
+* **Enhanced:** `Direct Signals Integration`.
+  * *Silent Profile Application:* Applies model, temperature, and toolsets directly via `DynamicStudioAPI` signals without modal popups or DOM flickering.
+
+`Smart Optimizer` module.
+* **Enhanced:** `Streaming Guard & Scroll Jitter Elimination`.
+  * *Active Stream & Scroll Detection:* Suspends turn buffering while model responses are actively streaming or while the user is actively scrolling, completely eliminating scroll jumps and jitter during reading.
+  * *Stationary Settle Threshold:* Buffers older turns only after 2.5 seconds of stationary idle at the bottom, keeping message restoration manual via banner buttons or search shortcuts.
+
+`Scroll to Bottom` module.
+* **Enhanced:** `Elevation & Stacking Context Polish`.
+  * *Elevated Footer Hierarchy:* Added `position: relative !important; z-index: 10 !important;` to `footer` and `z-index: 11` to `ms-prompt-box`, while ensuring the darkening gradient sits at `z-index: 1` with `pointer-events: none`, keeping the scroll-to-bottom button crisp, un-shadowed, and fully interactive.
+
 ## v2.0-preview-3
 **New Feature: Draft Crash Protection & Smart Optimizer Native Search Integration**
 * **Added:** `Draft Crash Protection` module.

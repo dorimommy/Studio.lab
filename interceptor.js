@@ -7,60 +7,296 @@
 (function () {
   'use strict';
 
-  function injectInvisibleCSS() {
-    let style = document.getElementById('sl-invisible-css');
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'sl-invisible-css';
-      style.textContent = `
-        .cdk-overlay-container, 
-        .cdk-global-overlay-wrapper, 
-        .cdk-overlay-backdrop, 
-        .cdk-overlay-pane,
-        mat-dialog-container {
-           opacity: 0.0001 !important;
-           pointer-events: none !important;
-           transition: none !important;
-           animation: none !important;
-        }
-      `;
-      document.head.appendChild(style);
-      style.disabled = true;
+  // ═══════════════════════════════════════════════════════════════════
+  // ANGULAR 19 LVIEW REGISTRY INTERCEPTOR
+  // Captures Angular's internal LView Map before bootstrap
+  // ═══════════════════════════════════════════════════════════════════
+  const _candidateLViewMaps = new Set();
+  const _origMapSet = Map.prototype.set;
+  Map.prototype.set = function (key, value) {
+    if (typeof key === 'number' && Array.isArray(value) && value.length > 20) {
+      _candidateLViewMaps.add(this);
+      window.__NG_LVIEW_MAPS__ = _candidateLViewMaps;
     }
-  }
+    return _origMapSet.apply(this, arguments);
+  };
 
-  function toggleInvisibleDOM(hide) {
-    injectInvisibleCSS();
-    const style = document.getElementById('sl-invisible-css');
-    if (style) {
-      style.disabled = !hide;
+  // ═══════════════════════════════════════════════════════════════════
+  // DYNAMIC STUDIO API (Angular Signals & Direct State Mutation)
+  // ═══════════════════════════════════════════════════════════════════
+  const DynamicStudioAPI = {
+    _getMap() {
+      if (window.__NG_LVIEW_MAP__ && window.__NG_LVIEW_MAP__.size > 30) {
+        return window.__NG_LVIEW_MAP__;
+      }
+      // Check candidate maps for the one that has active DOM elements with __ngContext__
+      const probeEls = document.querySelectorAll('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
+      for (const el of probeEls) {
+        const ctxId = el.__ngContext__;
+        if (typeof ctxId === 'number') {
+          for (const m of _candidateLViewMaps) {
+            if (m.has(ctxId)) {
+              window.__NG_LVIEW_MAP__ = m;
+              return m;
+            }
+          }
+        }
+      }
+      // Fallback: pick candidate map with most entries
+      let best = window.__NG_LVIEW_MAP__ || null;
+      let maxLen = best ? best.size : 0;
+      for (const m of _candidateLViewMaps) {
+        if (m.size > maxLen) {
+          maxLen = m.size;
+          best = m;
+        }
+      }
+      if (best) window.__NG_LVIEW_MAP__ = best;
+      return best;
+    },
+
+    getRunSettingsComponent() {
+      const map = this._getMap();
+      if (!map) return null;
+
+      // 1. Try direct lookup via DOM element __ngContext__
+      const rs = document.querySelector('ms-run-settings, ms-prompt-run-settings');
+      if (rs && typeof rs.__ngContext__ === 'number' && map.has(rs.__ngContext__)) {
+        const lview = map.get(rs.__ngContext__);
+        if (Array.isArray(lview)) {
+          for (let i = 0; i < lview.length; i++) {
+            const item = lview[i];
+            if (item && typeof item === 'object' && !Array.isArray(item) && !(item instanceof Node)) {
+              if (item.model && typeof item.model === 'function') {
+                return item;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Scan map entries if not found via DOM
+      for (const [key, lview] of map.entries()) {
+        if (!Array.isArray(lview)) continue;
+        for (let i = 0; i < lview.length; i++) {
+          const item = lview[i];
+          if (item && typeof item === 'object' && !Array.isArray(item) && !(item instanceof Node)) {
+            if (item.model && item.temperature && typeof item.model === 'function' && typeof item.temperature === 'function') {
+              return item;
+            }
+          }
+        }
+      }
+      return null;
+    },
+
+    getModel() {
+      const rs = this.getRunSettingsComponent();
+      if (rs && typeof rs.model === 'function') {
+        const val = rs.model();
+        if (typeof val === 'string') return val.replace(/^models\//, '');
+        if (val && typeof val === 'object' && val.name) return String(val.name).replace(/^models\//, '');
+      }
+      const modelSelect = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
+      if (modelSelect) return modelSelect.textContent.trim();
+      return '';
+    },
+
+    setModel(modelName) {
+      if (!modelName) return false;
+      const cleanName = modelName.replace(/^models\//, '');
+      const fullName = 'models/' + cleanName;
+      const rs = this.getRunSettingsComponent();
+      if (rs && rs.model) {
+        if (typeof rs.model.set === 'function') {
+          const current = typeof rs.model === 'function' ? rs.model() : null;
+          if (typeof current === 'string') {
+            if (current.startsWith('models/')) {
+              rs.model.set(fullName);
+            } else {
+              rs.model.set(cleanName);
+            }
+            return true;
+          } else {
+            try {
+              rs.model.set(fullName);
+              return true;
+            } catch (e) {
+              try {
+                rs.model.set(cleanName);
+                return true;
+              } catch (e2) {}
+            }
+          }
+        }
+      }
+      return false;
+    },
+
+    getTemperature() {
+      const rs = this.getRunSettingsComponent();
+      if (rs && typeof rs.temperature === 'function') {
+        const val = rs.temperature();
+        if (typeof val === 'number') return val;
+      }
+      const tempInput = document.querySelector('ms-temperature-slider input');
+      if (tempInput) return parseFloat(tempInput.value);
+      return 1.0;
+    },
+
+    setTemperature(temp) {
+      const val = typeof temp === 'number' ? temp : parseFloat(temp);
+      if (isNaN(val)) return false;
+      const rs = this.getRunSettingsComponent();
+      if (rs && rs.temperature && typeof rs.temperature.set === 'function') {
+        rs.temperature.set(val);
+        return true;
+      }
+      const tempInput = document.querySelector('ms-temperature-slider input');
+      if (tempInput) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(tempInput, val);
+        tempInput.dispatchEvent(new Event('input', { bubbles: true }));
+        tempInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+      return false;
+    },
+
+    setSystemInstructions(text, callback) {
+      if (typeof text !== 'string') {
+        if (callback) callback();
+        return;
+      }
+
+      let textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+      if (textarea) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(textarea, text);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        if (callback) callback();
+        return;
+      }
+
+      const btn = document.querySelector('ms-system-instructions-panel button');
+      if (!btn) {
+        if (callback) callback();
+        return;
+      }
+
+      btn.click();
+      setTimeout(() => {
+        textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+        if (textarea) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+          setter.call(textarea, text);
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const closeBtn = document.querySelector('button[aria-label="Close panel"]');
+        if (closeBtn) closeBtn.click();
+        if (callback) callback();
+      }, 80);
+    },
+
+    getTools() {
+      const rs = this.getRunSettingsComponent();
+      if (!rs) return [];
+      const list = [];
+      if (rs.enableSearchAsATool && typeof rs.enableSearchAsATool === 'function') {
+        list.push({ name: 'Grounding with Google Search', checked: !!rs.enableSearchAsATool() });
+      }
+      if (rs.enableCodeExecution && typeof rs.enableCodeExecution === 'function') {
+        list.push({ name: 'Code execution', checked: !!rs.enableCodeExecution() });
+      }
+      if (rs.enableGoogleMaps && typeof rs.enableGoogleMaps === 'function') {
+        list.push({ name: 'Google Maps', checked: !!rs.enableGoogleMaps() });
+      }
+      if (rs.enableBrowseAsATool && typeof rs.enableBrowseAsATool === 'function') {
+        list.push({ name: 'Browse as a tool', checked: !!rs.enableBrowseAsATool() });
+      }
+      if (rs.enableImageSearch && typeof rs.enableImageSearch === 'function') {
+        list.push({ name: 'Image Search', checked: !!rs.enableImageSearch() });
+      }
+      return list;
+    },
+
+    setTool(name, enabled) {
+      const rs = this.getRunSettingsComponent();
+      if (!rs) return false;
+      const q = (name || '').toLowerCase();
+      const val = !!enabled;
+
+      if (q.includes('search') || q.includes('grounding')) {
+        if (rs.enableSearchAsATool && typeof rs.enableSearchAsATool.set === 'function') {
+          rs.enableSearchAsATool.set(val);
+          return true;
+        }
+      }
+      if (q.includes('code') || q.includes('execution')) {
+        if (rs.enableCodeExecution && typeof rs.enableCodeExecution.set === 'function') {
+          rs.enableCodeExecution.set(val);
+          return true;
+        }
+      }
+      if (q.includes('map')) {
+        if (rs.enableGoogleMaps && typeof rs.enableGoogleMaps.set === 'function') {
+          rs.enableGoogleMaps.set(val);
+          return true;
+        }
+      }
+      if (q.includes('browse') || q.includes('url')) {
+        if (rs.enableBrowseAsATool && typeof rs.enableBrowseAsATool.set === 'function') {
+          rs.enableBrowseAsATool.set(val);
+          return true;
+        }
+      }
+      if (q.includes('image')) {
+        if (rs.enableImageSearch && typeof rs.enableImageSearch.set === 'function') {
+          rs.enableImageSearch.set(val);
+          return true;
+        }
+      }
+      return false;
     }
-  }
+  };
+
+  window.DynamicStudioAPI = DynamicStudioAPI;
 
   window.addEventListener('__sl_captureProfile', (e) => {
     const eventId = e.detail && e.detail.eventId;
     if (!eventId) return;
 
     const profile = {};
-    const modelSelect = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
-    if (modelSelect) profile.model = modelSelect.textContent.trim();
+    profile.model = DynamicStudioAPI.getModel() || 'gemini-1.5-pro';
+    profile.temperature = DynamicStudioAPI.getTemperature();
 
-    const tempInput = document.querySelector('ms-temperature-slider input');
-    if (tempInput) profile.temperature = parseFloat(tempInput.value);
+    const signalTools = DynamicStudioAPI.getTools();
+    if (signalTools.length > 0) {
+      profile.tools = signalTools;
+    } else {
+      const toolToggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+      const toolsState = [];
+      toolToggles.forEach(t => {
+         const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
+         const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
+         const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
+         
+         let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
+         if (name) toolsState.push({ name, checked: !!isChecked });
+      });
+      profile.tools = toolsState;
+    }
 
-    if (!profile.model) profile.model = 'gemini-1.5-pro';
-
-    const toolToggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle');
-    const toolsState = [];
-    toolToggles.forEach(t => {
-       const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
-       const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
-       const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
-       
-       let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
-       if (name) toolsState.push({ name, checked: !!isChecked });
-    });
-    profile.tools = toolsState;
+    const inlineTextarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+    if (inlineTextarea && inlineTextarea.value) {
+      profile.systemInstructions = inlineTextarea.value;
+    } else {
+      const panel = document.querySelector('ms-system-instructions-panel');
+      const subtitle = panel?.querySelector('.subtitle')?.textContent?.trim();
+      if (subtitle && !subtitle.includes('Optional tone and style')) {
+        profile.systemInstructions = subtitle;
+      }
+    }
 
     window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: profile }));
   });
@@ -88,19 +324,19 @@
             };
           }).filter(opt => opt.instructionText !== '');
         } else if (typeof parsed === 'object') {
-           Object.values(parsed).forEach((item, idx) => {
-             const rawText = typeof item === 'string' ? item : (item.text || item.instruction || item.content || JSON.stringify(item));
-             const rawTitle = typeof item === 'string' ? null : (item.title || item.name || item.displayName);
-             const promptText = rawText ? rawText.trim() : '';
-             const displayTitle = rawTitle ? rawTitle.trim() : (promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''));
-             if (promptText !== '') {
-               libraryItems.push({
-                  text: displayTitle,
-                  instructionText: promptText,
-                  id: idx.toString()
-               });
-             }
-           });
+          Object.values(parsed).forEach((item, idx) => {
+            const rawText = typeof item === 'string' ? item : (item.text || item.instruction || item.content || JSON.stringify(item));
+            const rawTitle = typeof item === 'string' ? null : (item.title || item.name || item.displayName);
+            const promptText = rawText ? rawText.trim() : '';
+            const displayTitle = rawTitle ? rawTitle.trim() : (promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''));
+            if (promptText !== '') {
+              libraryItems.push({
+                text: displayTitle,
+                instructionText: promptText,
+                id: idx.toString()
+              });
+            }
+          });
         }
       }
       
@@ -110,153 +346,66 @@
     }
   });
 
+  function applyTools(tools, next) {
+    if (!tools || !tools.length) return next();
+
+    // 1. Direct Signals application
+    let appliedAll = true;
+    for (const item of tools) {
+      const ok = DynamicStudioAPI.setTool(item.name, item.checked);
+      if (!ok) appliedAll = false;
+    }
+    if (appliedAll) {
+      return next();
+    }
+
+    // 2. Fallback: DOM switch toggles
+    const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+    let i = 0;
+    function nextToggle() {
+      if (i >= toggles.length) return next();
+      const t = toggles[i];
+      const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
+      const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
+      let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
+      const savedState = tools.find(x => x.name === name);
+      if (savedState) {
+        const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
+        if (!!isChecked !== savedState.checked) {
+          const btn = t.querySelector('button');
+          if (btn) btn.click();
+        }
+      }
+      i++;
+      setTimeout(nextToggle, 30);
+    }
+    nextToggle();
+  }
+
   window.addEventListener('__sl_applyProfile', (e) => {
     const eventId = e.detail && e.detail.eventId;
     const profile = e.detail && e.detail.profile;
     if (!eventId || !profile) return;
 
-    // Check if the required UI components have rendered
-    const modelBtn = document.querySelector('ms-model-selector button.model-selector-card');
-    const sysBtn = document.querySelector('ms-system-instructions-panel button');
-    if (!modelBtn || !sysBtn) {
-       window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: { error: 'Not ready' } }));
-       return;
-    }
-
-    let appliedRunSettings = true;
-    toggleInvisibleDOM(true);
-
-    function waitFor(selector, callback, maxAttempts = 30) {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        attempts++;
-        const el = document.querySelectorAll(selector);
-        if (el.length > 0 || attempts >= maxAttempts) {
-           clearInterval(interval);
-           callback(el.length > 0 ? el : null);
-        }
-      }, 50);
-    }
-
-    function waitForDisappear(selector, callback, maxAttempts = 30) {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        attempts++;
-        const el = document.querySelectorAll(selector);
-        if (el.length === 0 || attempts >= maxAttempts) {
-           clearInterval(interval);
-           callback();
-        }
-      }, 50);
-    }
-
-    function applyModel(next) {
-      if (!profile.model) return next();
-      const currentModelEl = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
-      if (currentModelEl && currentModelEl.textContent.trim() === profile.model) return next();
-
-      modelBtn.click();
-
-      waitFor('mat-dialog-container button.content-button', (optionsNodeList) => {
-         const options = optionsNodeList ? Array.from(optionsNodeList) : [];
-         const optionToClick = options.find(opt => opt.textContent.includes(profile.model));
-         
-         if (optionToClick) {
-            optionToClick.click();
-         }
-         
-         setTimeout(() => {
-             const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
-             if (closeBtn) closeBtn.click();
-             else {
-                const backdrop = document.querySelector('.cdk-overlay-backdrop');
-                if (backdrop) backdrop.click();
-             }
-             waitForDisappear('mat-dialog-container', next);
-         }, 100);
-      });
-    }
-
-    function applySystemInstruction(next) {
-      if (!profile.systemInstructions) return next();
-      
-      const inlineTextarea = document.querySelector('ms-system-instructions textarea');
-      if (inlineTextarea && inlineTextarea.offsetParent !== null) {
-         inlineTextarea.value = profile.systemInstructions;
-         inlineTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-         return next();
+    // 1. Set model via DynamicStudioAPI (Signals) or fallback to model override in XHR
+    if (profile.model) {
+      const ok = DynamicStudioAPI.setModel(profile.model);
+      if (!ok) {
+        overrideModelId = profile.model.replace(/^models\//, '');
       }
+    }
 
-      const btn = document.querySelector('ms-system-instructions-panel button');
-      if (!btn) return next();
-      btn.click();
+    // 2. Set temperature via Signals
+    if (typeof profile.temperature !== 'undefined') {
+      DynamicStudioAPI.setTemperature(profile.temperature);
+    }
 
-      waitFor('mat-dialog-container textarea', (textareas) => {
-         if (!textareas) {
-            const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
-            if (closeBtn) closeBtn.click();
-            else {
-               const backdrop = document.querySelector('.cdk-overlay-backdrop');
-               if (backdrop) backdrop.click();
-            }
-            waitForDisappear('mat-dialog-container', next);
-            return;
-         }
-
-         const ta = textareas[0];
-         ta.value = profile.systemInstructions;
-         ta.dispatchEvent(new Event('input', { bubbles: true }));
-
-         setTimeout(() => {
-            const closeBtn = document.querySelector('mat-dialog-container button[mat-dialog-close]');
-            if (closeBtn) closeBtn.click();
-            else {
-               const panelBackdrop = document.querySelector('.cdk-overlay-backdrop');
-               if (panelBackdrop) panelBackdrop.click();
-            }
-            waitForDisappear('mat-dialog-container', next);
-         }, 100);
+    // 3. Set system instructions (silent slide panel injection, zero dialog popups)
+    DynamicStudioAPI.setSystemInstructions(profile.systemInstructions, () => {
+      // 4. Apply tools
+      applyTools(profile.tools, () => {
+        window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: true }));
       });
-    }
-
-    function applyTools(next) {
-      if (!profile.tools || !profile.tools.length) return next();
-      
-      const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle');
-      
-      let i = 0;
-      function nextToggle() {
-         if (i >= toggles.length) return next();
-         
-         const t = toggles[i];
-         const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
-         const text = parentRow ? parentRow.textContent.trim().replace(/\s+/g, ' ') : '';
-         let name = text.replace(' Edit', '').replace(' Source: Google Search', '').trim();
-         
-         const savedState = profile.tools.find(x => x.name === name);
-         if (savedState) {
-            const isChecked = t.classList.contains('mat-mdc-slide-toggle-checked') || t.querySelector('input')?.checked;
-            if (!!isChecked !== savedState.checked) {
-               const btn = t.querySelector('button');
-               if (btn) btn.click();
-            }
-         }
-         i++;
-         setTimeout(nextToggle, 50);
-      }
-      
-      nextToggle();
-    }
-
-    applyModel(() => {
-       applySystemInstruction(() => {
-          applyTools(() => {
-             setTimeout(() => {
-                toggleInvisibleDOM(false);
-                window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: appliedRunSettings }));
-             }, 100);
-          });
-       });
     });
   });
 
@@ -264,6 +413,11 @@
 
   const URL_MARKER = 'GenerateContent';
   const EVENT_NAME = '__aisu_xhrCapture';
+
+  function isGenerateContentUrl(u) {
+    if (!u || typeof u !== 'string') return false;
+    return u.toLowerCase().includes('generatecontent');
+  }
 
   let bypassEnabled = true;
 
@@ -294,11 +448,16 @@
   let overrideModelId = null;
 
   window.addEventListener('__sl_setModel', (e) => {
-    const id = e.detail && e.detail.modelId;
+    const id = e.detail && (e.detail.modelId || e.detail.model);
+    const modelName = e.detail && e.detail.modelName;
     if (id) {
-      overrideModelId = id;
+      overrideModelId = id.replace(/^models\//, '');
+      const setOk = DynamicStudioAPI.setModel(id);
+      window.dispatchEvent(new CustomEvent('__sl_modelChanged', {
+        detail: { modelId: overrideModelId, modelName: modelName || overrideModelId, signalApplied: setOk }
+      }));
       console.log(
-        '%c[Studio.lab] 🔄 Model override set: ' + id,
+        '%c[Studio.lab] 🔄 Model override / signal set: ' + id + (setOk ? ' (Signal OK)' : ' (XHR fallback)'),
         'color:#87a9ff;font-weight:bold'
       );
     }
@@ -309,26 +468,109 @@
     overrideModelId = null;
   });
 
-  // ── Patch open (with model override) ──────────────────────────────
-  // Replacing the original patched open with one that supports model override
+  // ═══════════════════════════════════════════════════════════════════
+  // TELEMETRY & ROUTING PATTERNS
+  // ═══════════════════════════════════════════════════════════════════
+  const TELEMETRY_PATTERNS = [
+    'play.google.com/log',
+    'google-analytics.com/g/collect',
+    'google-analytics.com/analytics.js',
+    'googletagmanager.com/gtm.js',
+    'googletagmanager.com/gtag',
+    '/cspreport/',
+    'gen_204',
+    'generate_204',
+    'cleardot.gif',
+    'feedback-pa.clients6.google.com',
+    'google.com/pagead/',
+    'google.com/measurement/'
+  ];
+
+  function isTelemetryUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    for (let i = 0; i < TELEMETRY_PATTERNS.length; i++) {
+      if (url.includes(TELEMETRY_PATTERNS[i])) return true;
+    }
+    return false;
+  }
+
+  // ── Patch open (with model override & telemetry logging) ───────────
   XMLHttpRequest.prototype.open = function (method, url) {
-    let finalUrl = typeof url === 'string' ? url : '';
+    const rawUrl = typeof url === 'string' ? url : (url != null ? String(url) : '');
+    let processedUrl = rawUrl;
 
     // Apply model override to GenerateContent requests
-    if (overrideModelId && finalUrl.includes(URL_MARKER)) {
-      finalUrl = finalUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+    if (overrideModelId && isGenerateContentUrl(processedUrl)) {
+      processedUrl = processedUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in request: ' + overrideModelId,
         'color:#87a9ff'
       );
     }
 
-    this.__aisuUrl = finalUrl;
-    this.__aisuIsGen = finalUrl.includes(URL_MARKER);
+    // Telemetry detection
+    const isTelemetry = isTelemetryUrl(processedUrl);
+    window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
+      detail: { url: processedUrl, method, ts: Date.now(), isTelemetry }
+    }));
+
+    this.__aisuUrl = processedUrl;
+    this.__aisuIsGen = isGenerateContentUrl(processedUrl);
+
+    // Save / Sync detection (prompt auto-saving or Drive sync)
+    if (/prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(processedUrl)) {
+      window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: true, url: processedUrl } }));
+      this.addEventListener('loadend', function () {
+        window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url: processedUrl } }));
+      });
+    }
+
+    if (processedUrl.includes('ListModels')) {
+      this.addEventListener('load', function () {
+        try {
+          const raw = (this.responseType === 'json' || (this.response && typeof this.response === 'object'))
+            ? this.response
+            : JSON.parse(this.responseText || '{}');
+          let modelsList = [];
+          if (Array.isArray(raw)) {
+            modelsList = raw;
+          } else if (raw && Array.isArray(raw.models)) {
+            modelsList = raw.models;
+          } else if (raw && typeof raw === 'object') {
+            for (const v of Object.values(raw)) {
+              if (Array.isArray(v)) {
+                modelsList = v;
+                break;
+              }
+            }
+          }
+          if (modelsList.length > 0) {
+            const featured = [];
+            for (const m of modelsList) {
+              const name = m.displayName || m.name || m.title || '';
+              const id = (m.name || m.id || m.modelId || '').replace(/^models\//, '');
+              if (name && id && !id.includes('embedding') && !id.includes('aqa') && !id.includes('imagen')) {
+                featured.push({ id, name });
+              }
+            }
+            if (featured.length > 0) {
+              try {
+                if (typeof window !== 'undefined' && window.localStorage) {
+                  window.localStorage.setItem('sl_featured_models', JSON.stringify(featured));
+                }
+              } catch (storageErr) { }
+              window.dispatchEvent(new CustomEvent('__sl_featuredModels', { detail: featured }));
+            }
+          }
+        } catch (e) { }
+      });
+    }
 
     // Call original open with potentially modified URL
     const args = Array.from(arguments);
-    args[1] = finalUrl;
+    if (processedUrl !== rawUrl || typeof url !== 'string') {
+      args[1] = processedUrl;
+    }
     return _origOpen.apply(this, args);
   };
 
@@ -338,11 +580,20 @@
       return _origSend.apply(this, arguments);
     }
 
-    if (body && typeof body === 'string') {
+    let modifiedBody = body;
+    if (overrideModelId && typeof body === 'string' && body.includes('models/')) {
+      modifiedBody = body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId);
+    }
+
+    if (modifiedBody && typeof modifiedBody === 'string') {
       window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
-        detail: body
+        detail: modifiedBody
       }));
     }
+
+    window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
+      detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
+    }));
 
     const xhr = this;
     let snap = '';
@@ -351,6 +602,9 @@
 
     // ── 1. ABORT BLOCK (Core Bypass Feature) ─────────────────────────
     xhr.abort = function () {
+      if (!bypassEnabled) {
+        return _origAbort.apply(this, arguments);
+      }
       console.log('%c[Studio.lab] 🚫 abort() blocked — preserving stream', 'color:#ff9800;font-weight:bold');
       return; 
     };
@@ -469,20 +723,38 @@
     return raw.slice(0, 50000);
   }
 
-  // ── Thought deletion (MAIN world, no inline script needed) ────────
-  window.addEventListener('__sl_deleteThought', () => {
-    const chunk = document.querySelector('.sl-delete-target');
-    if (!chunk) return;
-    chunk.classList.remove('sl-delete-target');
 
-    const deleteBtn = Array.from(chunk.querySelectorAll('button')).find(btn => {
-      const icon = btn.querySelector('.material-symbols-outlined, .google-symbols');
-      const iconText = icon ? icon.textContent.trim().toLowerCase() : '';
-      return iconText === 'close' || iconText === 'delete' || iconText === 'clear' ||
-             btn.getAttribute('aria-label')?.toLowerCase().includes('delete') ||
-             btn.getAttribute('aria-label')?.toLowerCase().includes('remove');
-    });
-    if (deleteBtn) deleteBtn.click();
+  // ── Media / File Download handler ─────────────────────────────────
+  window.addEventListener('__sl_download_media', (e) => {
+    const detail = e.detail || {};
+    const filename = detail.filename || 'download';
+    const target = document.querySelector('[data-sl-dl-target="true"]');
+    if (!target) return;
+    target.removeAttribute('data-sl-dl-target');
+
+    // 1. Try native download button in chunk
+    const nativeBtn = target.querySelector('button[aria-label*="ownload"]') ||
+                      target.querySelector('.bottom-right-image-controls button');
+    if (nativeBtn) {
+      nativeBtn.click();
+      return;
+    }
+
+    // 2. Fallback for image chunks
+    const img = target.querySelector('img');
+    if (img && img.src) {
+      const a = document.createElement('a');
+      a.href = img.src;
+      a.download = filename.includes('.') ? filename : `${filename}.png`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => a.remove(), 1000);
+      return;
+    }
+
+    // 3. Fallback: click target
+    target.click();
   });
 
   // ═══════════════════════════════════════════════════════════════════
@@ -490,72 +762,54 @@
   // The actual blocking is done by declarativeNetRequest rules, but
   // this intercept lets us COUNT and LOG blocked requests for the UI.
   // ═══════════════════════════════════════════════════════════════════
-  const TELEMETRY_PATTERNS = [
-    'play.google.com/log',
-    'google-analytics.com/g/collect',
-    'google-analytics.com/analytics.js',
-    'googletagmanager.com/gtm.js',
-    'googletagmanager.com/gtag',
-    '/cspreport/',
-    'gen_204',
-    'generate_204',
-    'cleardot.gif',
-    'feedback-pa.clients6.google.com',
-    'google.com/pagead/',
-    'google.com/measurement/'
-  ];
 
-  function isTelemetryUrl(url) {
-    if (!url || typeof url !== 'string') return false;
-    for (let i = 0; i < TELEMETRY_PATTERNS.length; i++) {
-      if (url.includes(TELEMETRY_PATTERNS[i])) return true;
-    }
-    return false;
-  }
-
-  // Intercept fetch() for telemetry logging
+  // Intercept fetch() for telemetry logging & model override
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
-    const url = typeof input === 'string' ? input
+    let url = typeof input === 'string' ? input
       : (input && input.url) ? input.url : '';
+    const isGen = isGenerateContentUrl(url);
+
+    if (isGen && overrideModelId) {
+      const rewrittenUrl = url.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+      if (typeof input === 'string') {
+        input = rewrittenUrl;
+      } else if (input && typeof Request !== 'undefined' && input instanceof Request) {
+        input = new Request(rewrittenUrl, input);
+      }
+      url = rewrittenUrl;
+      if (init && typeof init.body === 'string' && init.body.includes('models/')) {
+        init.body = init.body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId);
+      }
+      console.log(
+        '%c[Studio.lab] 🔄 Model swapped in fetch request: ' + overrideModelId,
+        'color:#87a9ff;font-weight:bold'
+      );
+    }
+
     const isTelemetry = isTelemetryUrl(url);
     window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
       detail: { url, method: (init && init.method) || 'GET', ts: Date.now(), isTelemetry }
     }));
-    
-    return _origFetch.apply(this, arguments);
-  };
 
-  // Also intercept XHR for telemetry logging (play.google.com uses XHR)
-  const _origXhrOpen = _origOpen; // saved earlier
-  XMLHttpRequest.prototype.open = (function (prevOpen) {
-    return function (method, url) {
-      const finalUrl = typeof url === 'string' ? url : '';
+    const isSave = /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(url);
+    if (isSave) {
+      window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: true, url } }));
+    }
 
-      // Model override logic (preserved from above)
-      let processedUrl = finalUrl;
-      if (overrideModelId && processedUrl.includes(URL_MARKER)) {
-        processedUrl = processedUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
-        console.log(
-          '%c[Studio.lab] 🔄 Model swapped in request: ' + overrideModelId,
-          'color:#87a9ff'
-        );
+    try {
+      const res = await _origFetch.apply(this, arguments);
+      if (isSave) {
+        window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
       }
-
-      // Telemetry detection
-      const isTelemetry = isTelemetryUrl(processedUrl);
-      window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
-        detail: { url: processedUrl, method, ts: Date.now(), isTelemetry }
-      }));
-
-      this.__aisuUrl = processedUrl;
-      this.__aisuIsGen = processedUrl.includes(URL_MARKER);
-
-      const args = Array.from(arguments);
-      args[1] = processedUrl;
-      return _origXhrOpen.apply(this, args);
-    };
-  })(XMLHttpRequest.prototype.open);
+      return res;
+    } catch (fetchErr) {
+      if (isSave) {
+        window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
+      }
+      throw fetchErr;
+    }
+  };
 
   // ═══════════════════════════════════════════════════════════════════
   // BUILD INFO DATA BRIDGE — sends runtime data to content script

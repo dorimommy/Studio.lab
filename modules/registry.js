@@ -11,7 +11,11 @@
 
   function registerModule(module) {
     if (!module || !module.id) return;
-    if (modules.some(item => item.id === module.id)) return;
+    const idx = modules.findIndex(item => item.id === module.id);
+    if (idx !== -1) {
+      modules[idx] = module;
+      return;
+    }
     modules.push(module);
   }
 
@@ -48,9 +52,67 @@
     console.log(`%c[Studio.lab] ${message}`, colors[type] || colors.info);
   }
 
+  // A scope owns resources for one activation, route, or settings dialog.
+  function createScope() {
+    const cleanups = new Set();
+    let disposed = false;
+    function add(cleanup) {
+      let active = true;
+      const cancel = () => {
+        if (!active) return;
+        active = false;
+        cleanups.delete(cancel);
+        cleanup();
+      };
+      if (disposed) cancel();
+      else cleanups.add(cancel);
+      return cancel;
+    }
+    return {
+      get disposed() { return disposed; },
+      add,
+      listen(target, type, handler, options) {
+        if (disposed) return () => {};
+        target.addEventListener(type, handler, options);
+        return add(() => target.removeEventListener(type, handler, options));
+      },
+      observe(observer, target, options) {
+        if (disposed) { observer.disconnect(); return observer; }
+        observer.observe(target, options);
+        add(() => observer.disconnect());
+        return observer;
+      },
+      timeout(fn, delay) {
+        if (disposed) return () => {};
+        const id = setTimeout(() => { cancel(); if (!disposed) fn(); }, delay);
+        const cancel = add(() => clearTimeout(id));
+        return cancel;
+      },
+      interval(fn, delay) {
+        if (disposed) return () => {};
+        const id = setInterval(() => { if (!disposed) fn(); }, delay);
+        return add(() => clearInterval(id));
+      },
+      frame(fn) {
+        if (disposed) return () => {};
+        const id = requestAnimationFrame((time) => { cancel(); if (!disposed) fn(time); });
+        const cancel = add(() => cancelAnimationFrame(id));
+        return cancel;
+      },
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        for (const cleanup of [...cleanups].reverse()) {
+          try { cleanup(); } catch (_) { log('Resource cleanup failed.', 'warn'); }
+        }
+      }
+    };
+  }
+
   window.StudioLab = Object.assign(window.StudioLab || {}, {
     registerModule,
     getModules,
+    createScope,
     SELECTORS,
     log
   });

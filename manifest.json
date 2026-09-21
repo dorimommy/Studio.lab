@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Studio.lab (Preview version)",
+  "name": "Studio.lab (Preview version 4)",
   "version": "2.0",
   "description": "Unofficial performance optimizer, bypass, and workspace extension for Google AI Studio.",
   "permissions": [
@@ -71,7 +71,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "images/Banner.png"
+        "images/Banner.png",
+        "modules/modern-web-chat.css"
       ],
       "matches": [
         "https://aistudio.google.com/*"

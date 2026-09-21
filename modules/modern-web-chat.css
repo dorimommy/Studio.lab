@@ -1,0 +1,2287 @@
+    /* ── PART 1: MEDIA GALLERY & VIEWER ────────────────────────────────── */
+
+    /* 1. Media Gallery & Viewer (Layout managed by Gemini-stream flex in Part 6) */
+
+    /* 3. Image Chunk — 1:1 square tiles */
+    ms-image-chunk {
+      aspect-ratio: 1 / 1 !important;
+      width: 100% !important; height: 100% !important;
+      border-radius: 12px !important; overflow: visible !important;
+      background: var(--color-v3-surface-container-high) !important;
+      position: relative !important; display: block !important;
+      & .image-container, & img {
+        width: 100% !important; height: 100% !important;
+        object-fit: cover !important; display: block !important;
+        border-radius: 12px !important; overflow: hidden !important;
+      }
+    }
+    /* Model response images (in mixed text+image turns) — NOT square, natural aspect */
+    ms-chat-turn:has(ms-text-chunk) ms-image-chunk {
+      aspect-ratio: auto !important;
+      height: auto !important;
+    }
+    ms-chat-turn:has(ms-text-chunk) ms-image-chunk img {
+      height: auto !important;
+      max-height: 70vh !important;
+      object-fit: contain !important;
+    }
+
+    /* Native image hover controls: completely hidden in favor of top-right tile menu */
+    .bottom-right-image-controls {
+      display: none !important;
+    }
+
+    /* 4. File Chunk Styling */
+    ms-file-chunk {
+      display: flex !important; width: 100% !important; min-width: 0 !important;
+      background: var(--color-v3-surface-container-high) !important;
+      border-radius: 12px !important; cursor: pointer !important;
+      &:hover { background: var(--color-v3-surface-container-highest) !important; }
+      .preview-container { display: none !important; }
+      .file-chunk-container {
+        padding: 10px 14px !important; display: flex !important;
+        align-items: center !important; justify-content: space-between !important;
+        width: 100% !important; min-width: 0 !important;
+        gap: 6px !important; box-sizing: border-box !important;
+      }
+    }
+    ms-file-chunk .file-chunk-container > div:first-child {
+      display: flex !important; align-items: center !important;
+      gap: 10px !important; flex: 1 !important;
+      min-width: 0 !important; overflow: hidden !important;
+    }
+    ms-file-chunk .file-icon {
+      font-size: 20px !important; color: var(--color-v3-primary) !important; flex-shrink: 0 !important; margin: 0 !important;
+    }
+    ms-file-chunk .name {
+      font-size: 14px !important; font-weight: 500 !important;
+      white-space: nowrap !important; overflow: hidden !important;
+      text-overflow: ellipsis !important; flex: 1 !important;
+    }
+    ms-file-chunk .token-count {
+      font-size: 12px !important; color: var(--color-v3-text-var) !important;
+      margin-left: 8px !important; flex-shrink: 0 !important;
+    }
+
+    /* 5. Enhanced Full-Screen Viewer */
+    .cdk-overlay-backdrop.sl-backdrop-tint {
+      background-color: rgba(0, 0, 0, 0.6) !important;
+    }
+    .cdk-overlay-pane:has(ms-view-media-dialog) {
+      width: 100vw !important; height: 100vh !important;
+      max-width: 100vw !important; max-height: 100vh !important;
+      position: fixed !important; top: 0 !important; left: 0 !important;
+      transform: none !important; z-index: 2000 !important;
+      background: transparent !important; pointer-events: none !important;
+      animation: none !important; transition: none !important;
+    }
+    .cdk-overlay-pane:has(ms-view-media-dialog) mat-dialog-container, 
+    .cdk-overlay-pane:has(ms-view-media-dialog) .mat-mdc-dialog-container,
+    .cdk-overlay-pane:has(ms-view-media-dialog) .mat-mdc-dialog-inner-container,
+    .cdk-overlay-pane:has(ms-view-media-dialog) .mat-mdc-dialog-surface,
+    .cdk-overlay-pane:has(ms-view-media-dialog) .mdc-dialog__surface,
+    ms-view-media-dialog,
+    ms-view-media-dialog .action-confirmation,
+    ms-view-media-dialog .action-confirmation-wide,
+    ms-view-media-dialog .view-media-dialog,
+    ms-view-media-dialog main,
+    ms-view-media-dialog .image-container {
+      background: transparent !important; border: none !important;
+      box-shadow: none !important; width: 100% !important; height: 100% !important;
+      max-width: 100vw !important; max-height: 100vh !important;
+      padding: 0 !important; margin: 0 !important; pointer-events: none !important;
+      display: flex !important; flex-direction: column !important;
+      animation: none !important; transition: none !important;
+      --mat-dialog-transition-duration: 0ms !important;
+    }
+    ms-view-media-dialog header.shared-dialog-header,
+    ms-view-media-dialog .main-media-item,
+    ms-view-media-dialog .actions,
+    .sl-back-button,
+    ms-view-media-dialog main {
+      pointer-events: auto !important;
+    }
+    ms-view-media-dialog header.shared-dialog-header {
+      position: absolute !important; top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 76px !important; padding: 0 24px !important;
+      display: flex !important; align-items: center !important;
+      justify-content: flex-start !important; background: transparent !important;
+      z-index: 100 !important;
+    }
+    ms-view-media-dialog header .text {
+      font-size: 14px !important; font-weight: 500 !important; flex: 1 !important;
+    }
+    ms-view-media-dialog main {
+      justify-content: center !important; align-items: center !important;
+      flex: 1 !important; width: 100% !important; height: 100% !important;
+      cursor: default !important;
+    }
+    ms-view-media-dialog .main-media-item {
+      max-width: 90vw !important; max-height: 90vh !important;
+      border-radius: 24px !important;
+      box-shadow: 0 10px 60px rgba(0,0,0,0.6) !important;
+      object-fit: contain !important; background: #000 !important;
+    }
+
+    /* ── PART 2: HIDE LEFT ROW & REARRANGE RIGHT ROW ────────────────── */
+    
+    /* Allow submenus to break out of the native panel boundaries */
+    .cdk-overlay-container .mat-mdc-menu-panel,
+    .cdk-overlay-container .mat-mdc-menu-content {
+        overflow: visible !important;
+    }
+
+    ms-prompt-box .buttons-row {
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+    }
+
+    /* 1. Flatten both left and right button wrappers so all buttons become direct flex items */
+    ms-prompt-box .button-row-left,
+    ms-prompt-box .button-wrapper,
+    ms-prompt-box-tools {
+        display: contents !important;
+    }
+
+    /* 2. Hide native Tools and Paid API buttons from bottom row (accessible via + menu) */
+    ms-paid-api-key-button,
+    ms-prompt-box-tools > button {
+        opacity: 0 !important;
+        position: absolute !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    /* 3. Make sure any other unclassified elements in the bottom row are pushed to the right initially */
+    ms-prompt-box .buttons-row > * {
+        order: 10 !important;
+    }
+
+    /* 4. Assign specific order to force layout */
+    /* Move + to the far left */
+    ms-add-media-button {
+        order: -2 !important;
+        margin-right: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        position: static !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        height: auto !important;
+    }
+    ms-add-media-button > button {
+        border-radius: 12px !important;
+        background: transparent !important;
+        border: 1px solid #333 !important;
+        height: 32px !important;
+        width: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+    }
+    ms-add-media-button > button:hover {
+        background: #1f1f1f !important;
+    }
+
+    /* Formatting toggle button (from Text Formatter module) sits right after + */
+    .sl-fmt-toggle {
+        order: -1 !important;
+        margin-right: 8px !important;
+    }
+
+    /* Enabled tools bar sits right after + and formatter */
+    ms-horizontal-scroll.enabled-tool-container {
+        order: 0 !important;
+        margin-right: 8px !important;
+        flex-shrink: 1 !important;
+        min-width: 0 !important;
+        max-width: calc(100% - 200px) !important;
+        opacity: 1 !important;
+        position: static !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        height: auto !important;
+    }
+
+    /* Mic and Run stay on the right. 
+       margin-left: auto pushes them to the far right, keeping + and tools flush left! */
+    ms-stt-button { 
+        order: 2 !important; 
+        margin-left: auto !important; 
+        margin-right: 8px !important; 
+    }
+    ms-run-button { 
+        order: 3 !important; 
+    }
+
+    /* Submenu hover wrapper */
+    .sl-hover-wrapper {
+        position: relative;
+        width: 100%;
+    }
+    .sl-hover-wrapper > button {
+        width: 100%;
+    }
+    /* The submenu panel - Native V3 dropdown style */
+    .sl-custom-submenu {
+        display: none;
+        position: absolute;
+        left: 100%;
+        bottom: -4px !important;
+        top: auto !important;
+        min-width: 220px;
+        background: #1f1f1f !important;
+        border: 1px solid #262626 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+        padding: 4px !important;
+        flex-direction: column;
+        z-index: 1000;
+        box-sizing: border-box;
+    }
+    /* Invisible bridge between button edge and submenu to prevent hover gap */
+    .sl-custom-submenu::before {
+        content: '';
+        position: absolute;
+        right: 100%;
+        bottom: 0;
+        top: 0;
+        width: 16px;
+        height: 100%;
+    }
+    /* Pure CSS hover — no JS events, no flickering */
+    .sl-hover-wrapper:hover > .sl-custom-submenu {
+        display: flex !important;
+    }
+
+    .sl-custom-submenu .mat-mdc-menu-item,
+    .sl-custom-submenu .sl-tools-menu-item,
+    .sl-custom-submenu-content .mat-mdc-menu-item {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 6px 8px !important;
+        margin: 0 !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
+        color: #e3e3e3 !important;
+        font-size: 14px !important;
+        font-weight: 400 !important;
+        font-family: inherit !important;
+        transition: background 0.12s ease, color 0.12s ease !important;
+        box-sizing: border-box !important;
+        border: none !important;
+        background: transparent !important;
+        width: 100% !important;
+        text-align: left !important;
+    }
+    .sl-custom-submenu .mat-mdc-menu-item:hover,
+    .sl-custom-submenu .sl-tools-menu-item:hover,
+    .sl-custom-submenu-content .mat-mdc-menu-item:hover {
+        background: #323232 !important;
+        color: #ffffff !important;
+    }
+    .sl-custom-submenu .mat-mdc-menu-item-text {
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+        font-size: 14px !important;
+    }
+    .sl-custom-submenu .material-symbols-outlined,
+    .sl-custom-submenu .start-icon {
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-right: 8px !important;
+        font-family: "Google Symbols", sans-serif !important;
+    }
+
+    /* ── PART 3: ENABLED TOOLS BAR ──────────────────────────────────── */
+
+    /* Container — layout left, take up available space */
+    ms-horizontal-scroll.enabled-tool-container {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }
+    
+    ms-horizontal-scroll.enabled-tool-container .scroll-container {
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        gap: 0 !important;
+        background: transparent !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Hide scroll chevrons and gradients */
+    ms-horizontal-scroll.enabled-tool-container .chevron-btn,
+    ms-horizontal-scroll.enabled-tool-container .scroll-container::before,
+    ms-horizontal-scroll.enabled-tool-container .scroll-container::after,
+    ms-horizontal-scroll.enabled-tool-container .show-left-gradient::before,
+    ms-horizontal-scroll.enabled-tool-container .show-right-gradient::after {
+        display: none !important;
+    }
+
+    /* Content row */
+    ms-horizontal-scroll.enabled-tool-container .content-container {
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        gap: 6px !important;
+        padding: 0 !important;
+    }
+
+    /* Tool chip — subtle outline pill, matches + button style */
+    .enabled-tool-container .enabled-tool {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 2px !important;
+        background: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important; /* Extra faint to match + button */
+        border-radius: 100px !important;
+        padding: 0 4px 0 10px !important;
+        margin: 0 !important;
+        height: 32px !important; /* strict height so it doesn't stretch row */
+        transition: background 0.15s ease !important;
+    }
+    .enabled-tool-container .enabled-tool:hover {
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Reset button inside */
+    .enabled-tool-container .tool-chip-button {
+        background: none !important;
+        border: none !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        height: 100% !important;
+    }
+
+    /* Text */
+    .enabled-tool-container .tool-name {
+        color: rgba(255, 255, 255, 0.6) !important; /* subtle text, not bright white */
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        white-space: nowrap !important;
+        line-height: 1 !important;
+    }
+
+    /* Icon */
+    .enabled-tool-container .tool-icon {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 16px !important;
+    }
+
+    /* Close button */
+    .enabled-tool-container .enabled-tool > button:last-child {
+        background: none !important;
+        border: none !important;
+        color: rgba(255, 255, 255, 0.5) !important;
+        padding: 0 !important;
+        width: 24px !important;
+        height: 24px !important;
+        border-radius: 50% !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: color 0.15s ease, background 0.15s ease !important;
+    }
+    .enabled-tool-container .enabled-tool > button:last-child:hover {
+        color: rgba(255, 255, 255, 0.9) !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+    }
+    .enabled-tool-container .enabled-tool > button:last-child .material-symbols-outlined {
+        font-size: 16px !important;
+    }
+
+    /* Hide native tooltips when hovering over the tools bar to prevent confusing popups */
+    body:has(.enabled-tool-container:hover) .cdk-overlay-container .mat-mdc-tooltip {
+        display: none !important;
+        opacity: 0 !important;
+    }
+
+    /* Fix scroll-to-bottom button elevation above footer overlay */
+    ms-scroll-to-bottom,
+    ms-scroll-to-bottom-button,
+    ms-chat-scroll-to-bottom,
+    .scroll-to-bottom,
+    .scroll-to-bottom-button,
+    .scroll-bottom-button,
+    footer button:has(mat-icon[fonticon*="arrow"]),
+    footer button:has(mat-icon[fonticon="south"]) {
+        z-index: 999 !important;
+        position: relative !important;
+        opacity: 1 !important;
+        filter: none !important;
+    }
+    ms-chat-bottom-overlay {
+        display: none !important;
+    }
+
+    /* ── PART 4: CHATGPT-STYLE FLOATING HEADER & CONTROLS ── */
+    /* REMOVE TOP GRADIENT / DARKENING OVERLAY COMPLETELY */
+    ms-header::after,
+    ms-header::before,
+    ms-playground-toolbar ms-header::after,
+    ms-playground-toolbar ms-header::before,
+    ms-playground-toolbar::after,
+    ms-playground-toolbar::before {
+        display: none !important;
+        content: none !important;
+        background: none !important;
+        opacity: 0 !important;
+    }
+
+    /* Transparent floating header container without tint, blur, borders, or shadows */
+    section.chunk-editor-main {
+        position: relative !important;
+    }
+
+    ms-playground-toolbar {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        z-index: 10 !important; /* Low enough so sliding drawers sit cleanly above it */
+        pointer-events: none !important;
+        background: transparent !important;
+    }
+
+    /* Ensure sliding / fixed drawers on small screens overlay cleanly above header toolbar */
+    .v3-left-nav,
+    ms-right-side-panel,
+    ms-side-nav,
+    .drawer-container {
+        z-index: 100 !important;
+    }
+
+    ms-playground-toolbar ms-header,
+    ms-header {
+        pointer-events: none !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 16px 16px 0 16px !important;
+        height: auto !important;
+        min-height: 32px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+    }
+
+    /* Toolbar Left: Nav toggle, + (New chat), and ⋮ (Overflow menu) in a clean horizontal row */
+    .toolbar-left {
+        pointer-events: auto !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding-left: 0 !important;
+    }
+
+    .toolbar-left > button,
+    .toolbar-left .overflow-menu-wrapper > button {
+        pointer-events: auto !important;
+    }
+
+    /* Hide + button in toolbar-left when in an empty or new chat */
+    body.sl-empty-chat .toolbar-left > button[data-test-clear="outside"],
+    body.sl-empty-chat .toolbar-left > button[aria-label="New chat"] {
+        display: none !important;
+    }
+
+    .toolbar-left .title-tokencount-container {
+        display: none !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Right toolbar: Model, Thinking level, and Run Settings */
+    .toolbar-right {
+        margin-left: auto !important;
+        pointer-events: auto !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        height: 32px !important;
+        padding-right: 0 !important;
+    }
+
+    /* Hide unused right buttons (Share, Compare, App, New chat if in right, native runsettings) */
+    .toolbar-right > button[aria-label="Make this an app"],
+    .toolbar-right > ms-share-prompt,
+    .toolbar-right > button.compare-button,
+    .toolbar-right > button:has(.material-symbols-outlined:is(.design_services, .share, .compare_arrows)),
+    .toolbar-right > button.runsettings-toggle-button,
+    .toolbar-right > button[aria-label="Toggle run settings panel"] {
+        display: none !important;
+    }
+
+    /* UNIFORM SQUIRCLE FROSTED-GLASS BUTTONS FOR FLOATING HEADER (matches prompt box 12px squircle) */
+    .toolbar-left > button,
+    .toolbar-left .overflow-menu-wrapper > button,
+    .toolbar-right > button[data-test-clear="outside"],
+    .toolbar-right > button[aria-label="New chat"],
+    .toolbar-right .overflow-menu-wrapper > button,
+    .sl-header-btn {
+        background: rgba(40, 40, 42, 0.35) !important;
+        backdrop-filter: blur(28px) saturate(190%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        box-shadow: none !important;
+        padding: 0 10px !important;
+        font-family: 'Google Sans', Roboto, sans-serif !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        line-height: 18px !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+        white-space: nowrap !important;
+        vertical-align: middle !important;
+    }
+
+    .toolbar-left > button,
+    .toolbar-left .overflow-menu-wrapper > button,
+    .sl-header-settings-btn {
+        width: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        padding: 0 !important;
+    }
+
+    .sl-header-btn-label {
+        display: inline-flex !important;
+        align-items: center !important;
+        line-height: 18px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    .toolbar-left > button:hover,
+    .toolbar-left .overflow-menu-wrapper > button:hover,
+    .toolbar-right > button[data-test-clear="outside"]:hover,
+    .toolbar-right > button[aria-label="New chat"]:hover,
+    .toolbar-right .overflow-menu-wrapper > button:hover,
+    .sl-header-btn:hover {
+        background: rgba(65, 65, 70, 0.6) !important;
+        border-color: rgba(255, 255, 255, 0.16) !important;
+        color: #ffffff !important;
+    }
+
+    .toolbar-left > button .material-symbols-outlined,
+    .toolbar-left .overflow-menu-wrapper > button .material-symbols-outlined,
+    .toolbar-right > button[data-test-clear="outside"] .material-symbols-outlined,
+    .toolbar-right > button[aria-label="New chat"] .material-symbols-outlined,
+    .toolbar-right .overflow-menu-wrapper > button .material-symbols-outlined,
+    .sl-header-btn .material-symbols-outlined {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        line-height: 18px !important;
+    }
+
+    .sl-header-btn .icon {
+        color: #8ab4f8 !important;
+        margin-right: 4px !important;
+    }
+
+    .sl-header-btn .chevron {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+        margin-left: 4px !important;
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        line-height: 18px !important;
+    }
+
+    /* Hide native toolbar saving indicators so they don't crowd the right button row */
+    .toolbar-saving-indicator,
+    ms-drive-save-indicator,
+    .toolbar-right ms-drive-save-indicator,
+    .save-button ms-drive-save-indicator {
+        display: none !important;
+    }
+
+    /* Centered Top Saving Pill (slides down smoothly from top, frosted glass blur matching header buttons) */
+    .sl-saving-pill {
+        position: fixed !important;
+        top: 14px !important;
+        left: 50% !important;
+        transform: translate(-50%, -32px) !important;
+        z-index: 1100 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        height: 32px !important;
+        padding: 0 14px !important;
+        background: rgba(30, 30, 30, 0.92) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-radius: 16px !important;
+        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 8px 24px !important;
+        color: #e3e3e3 !important;
+        font: 500 13px/18px "Google Sans", Roboto, Inter, sans-serif !important;
+        pointer-events: none !important;
+        user-select: none !important;
+        opacity: 0 !important;
+        transition: opacity 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+    }
+
+    .sl-saving-pill.sl-visible {
+        opacity: 1 !important;
+        transform: translate(-50%, 0) !important;
+    }
+
+    .sl-saving-pill .sl-spin-icon {
+        font-size: 16px !important;
+        width: 16px !important;
+        height: 16px !important;
+        color: #8ab4f8 !important;
+        animation: slSpin 1s linear infinite !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    @keyframes slSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* Masking during background model, thinking, or tool switches (100% seamless without dialog flash) */
+    body.sl-switching-model mat-dialog-container,
+    body.sl-switching-model .cdk-overlay-pane:has(mat-dialog-container),
+    body.sl-switching-model .cdk-overlay-pane:has(.ms-sliding-right-panel-dialog),
+    body.sl-switching-model .ms-sliding-right-panel-dialog,
+    body.sl-switching-model .mat-mdc-dialog-panel,
+    body.sl-switching-model .mat-mdc-select-panel,
+    body.sl-switching-model .cdk-overlay-pane:has(.mat-mdc-select-panel),
+    body.sl-switching-model .cdk-overlay-backdrop,
+    body.sl-switching-tool xap-inline-dialog-container,
+    body.sl-switching-tool .cdk-overlay-pane:has(xap-inline-dialog-container),
+    body.sl-switching-tool .cdk-overlay-backdrop {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Right side panel styling matching left nav (#191919 background & #262626 border) */
+    body:not(.sl-settings-open) ms-right-side-panel,
+    body:not(.sl-settings-open) .drawer-container {
+        display: none !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+    }
+
+    body.sl-settings-open ms-right-side-panel,
+    body.sl-settings-open .drawer-container:has(ms-run-settings) {
+        display: flex !important;
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 300px !important;
+        max-width: 90vw !important;
+        height: 100vh !important;
+        z-index: 1200 !important;
+        background: #191919 !important;
+        border-left: 1px solid #262626 !important;
+        box-shadow: none !important;
+        pointer-events: auto !important;
+        opacity: 1 !important;
+        animation: slSlideIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+        isolation: isolate !important;
+        overflow-y: auto !important;
+    }
+
+    ms-right-side-panel .overlay-header {
+        background: #191919 !important;
+        border-bottom: 1px solid #262626 !important;
+        padding: 12px 16px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    ms-run-settings,
+    ms-run-settings .settings-items-wrapper,
+    ms-run-settings .scrollable-area,
+    ms-run-settings ms-prompt-run-settings-switcher,
+    ms-run-settings ms-prompt-run-settings {
+        display: flex !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        background: #191919 !important;
+    }
+
+    /* NO BLURRY BACKDROP: user maintains clear interactive view of chat */
+    .sl-drawer-backdrop {
+        display: none !important;
+    }
+
+    /* Hide duplicated header items inside Run Settings drawer cleanly without breaking DOM clicks */
+    ms-run-settings .settings-model-selector,
+    ms-run-settings ms-model-selector,
+    ms-run-settings ms-thinking-level-setting,
+    ms-run-settings .field-group:has(ms-thinking-level-setting),
+    ms-run-settings ms-thinking-budget-slider,
+    ms-run-settings div:has(> ms-thinking-budget-slider) {
+        position: absolute !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Native Angular Material-matched Dropdown Menus for Header Controls (Matches left nav History popover) */
+    .sl-custom-dropdown {
+        position: fixed !important;
+        background: rgba(30, 30, 30, 0.92) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 0px none !important;
+        border-radius: 16px !important;
+        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.5) 0px 8px 28px !important;
+        z-index: 1050 !important;
+        padding: 6px !important;
+        min-width: 200px !important;
+        box-sizing: border-box !important;
+        animation: slFadeIn 0.12s ease !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-item {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 8px !important;
+        margin: 0 !important;
+        border-radius: 10px !important;
+        cursor: pointer !important;
+        color: light-dark(rgb(91, 91, 100), rgba(255, 255, 255, 0.65)) !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Google Sans", Roboto, sans-serif !important;
+        transition: background 0.12s ease, color 0.12s ease !important;
+        user-select: none !important;
+        box-sizing: border-box !important;
+        border: none !important;
+        background: transparent !important;
+        width: 100% !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-item:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: var(--color-v3-text, #ffffff) !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-item.active {
+        color: #ffffff !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-check {
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #8ab4f8 !important;
+        opacity: 0 !important;
+        flex-shrink: 0 !important;
+        margin-left: 8px !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-item.active .sl-dropdown-check {
+        opacity: 1 !important;
+    }
+
+    .sl-custom-dropdown .sl-dropdown-divider {
+        height: 1px !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        margin: 4px 0 !important;
+        display: block !important;
+    }
+
+    @keyframes slFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slSlideIn {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    /* Chat viewport container fill */
+    .chat-container,
+    .chat-view-container,
+    ms-chat-view {
+        position: relative !important;
+        height: 100% !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+    }
+
+    /* Autoscroll container takes full height behind floating header & footer */
+    ms-autoscroll-container {
+        height: 100% !important;
+        max-height: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* Floating ChatGPT/Gemini style prompt box at bottom with bottom-anchored gradient darkening */
+    footer {
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        pointer-events: none !important;
+        z-index: 20 !important;
+        padding: 0 0 16px 0 !important;
+        margin: 0 !important;
+        background: transparent !important;
+    }
+
+    footer::before {
+        content: '' !important;
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 120px !important;
+        pointer-events: none !important;
+        background: linear-gradient(to top, rgba(19, 19, 20, 0.95) 0%, rgba(19, 19, 20, 0.75) 60px, rgba(19, 19, 20, 0) 100%) !important;
+        z-index: -1 !important;
+    }
+
+    /* Constrain prompt box to 900px width, centered, with pointer-events enabled, flat without shadow */
+    footer ms-prompt-box,
+    ms-prompt-box {
+        pointer-events: auto !important;
+        max-width: 900px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+        padding: 0 16px !important;
+        box-sizing: border-box !important;
+        box-shadow: none !important;
+    }
+
+    ms-prompt-box .prompt-box-container,
+    .prompt-box-container,
+    .dragging-overlay {
+        margin-bottom: 0 !important;
+    }
+
+    /* Hide native token popup dialog so it never pops up over chat */
+    .cdk-overlay-pane:has(.token-count-tooltip),
+    .cdk-overlay-backdrop:has(+ .cdk-overlay-pane .token-count-tooltip) {
+        display: none !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Strict native-matched styling for injected items in the overflow menu */
+    .toolbar-overflow-menu .sl-injected-header-item {
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 6px 8px !important;
+        font-size: 14px !important;
+        font-family: inherit !important;
+    }
+    .toolbar-overflow-menu .sl-injected-header-item .mat-mdc-menu-item-text {
+        display: flex !important;
+        align-items: center !important;
+        font-size: 14px !important;
+    }
+    .toolbar-overflow-menu .sl-injected-header-item .material-symbols-outlined {
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-right: 8px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* Refined, seamless Tokens Section in Left Sidebar (below Manage) */
+    .sl-token-section-header {
+        color: var(--color-v3-text-subtle, rgb(87, 87, 87)) !important;
+        font-size: 12px !important;
+        font-weight: 400 !important;
+        text-transform: uppercase !important;
+        padding: 4px 8px !important;
+        margin-top: 16px !important;
+        letter-spacing: 0.4px !important;
+    }
+
+    .sl-tokens-card {
+        margin: 2px 4px 12px 4px !important;
+        padding: 8px 10px !important;
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-family: Inter, sans-serif !important;
+        box-sizing: border-box !important;
+    }
+
+    .sl-tokens-hero {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: baseline !important;
+        margin-bottom: 6px !important;
+        padding-bottom: 6px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+
+    .sl-tokens-hero-label {
+        font-size: 12px !important;
+        color: #8c8c8c !important;
+        font-weight: 400 !important;
+    }
+
+    .sl-tokens-hero-value {
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: #e3e3e3 !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+
+    .sl-tokens-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 3px !important;
+        font-size: 11px !important;
+    }
+
+    .sl-tokens-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        color: #757575 !important;
+        font-size: 11px !important;
+    }
+
+    .sl-tokens-row span:last-child {
+        color: #b0b0b0 !important;
+        font-size: 11px !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+
+    .sl-tokens-row span.sl-highlight {
+        color: #8ab4f8 !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+    }
+
+    /* ── PART 5: CHATGPT-STYLE TURN NAVIGATOR (Replaces ms-items-scrollbar) ── */
+    /* Hide native ugly scrollbar completely on all viewports */
+    ms-items-scrollbar {
+        display: none !important;
+    }
+
+    /* On mobile / small screens: completely remove turn scrollbar as requested */
+    @media (max-width: 800px) {
+        .sl-chatgpt-toc,
+        ms-items-scrollbar {
+            display: none !important;
+        }
+    }
+
+    /* Desktop Turn Navigator Widget */
+    .sl-chatgpt-toc {
+        position: absolute !important;
+        right: 12px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        z-index: 30 !important;
+        user-select: none !important;
+        font-family: inherit !important;
+    }
+
+    .sl-toc-wrapper {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+    }
+
+    /* Dashes Column: maximum ~9 dashes visible (9 * 3px + 8 * 5px = 67px) */
+    .sl-toc-dashes-container {
+        height: 67px !important;
+        max-height: 67px !important;
+        width: 32px !important;
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .sl-toc-dashes-list {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 5px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
+    }
+
+    /* Crisp integer height (3px) and rounded pill shape for 100% uniform rendering */
+    .sl-toc-dash {
+        height: 3px !important;
+        min-height: 3px !important;
+        max-height: 3px !important;
+        width: 14px !important;
+        border-radius: 9999px !important;
+        background: rgba(255, 255, 255, 0.35) !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+        outline: none !important;
+        transition: width 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease !important;
+        box-sizing: border-box !important;
+        flex-shrink: 0 !important;
+    }
+
+    .sl-toc-dash:hover {
+        background: rgba(255, 255, 255, 0.85) !important;
+        width: 20px !important;
+    }
+
+    .sl-toc-dash.active {
+        background: #ffffff !important;
+        width: 22px !important;
+        box-shadow: 0 0 6px rgba(255, 255, 255, 0.6) !important;
+    }
+
+    /* Slide-out Hover Popover Menu (Frosted glass blur matching native History flyout) */
+    .sl-toc-popover {
+        position: absolute !important;
+        right: calc(100% + 10px) !important;
+        top: 50% !important;
+        transform: translateY(-50%) translateX(6px) !important;
+        width: 280px !important;
+        max-width: 320px !important;
+        background: rgba(30, 30, 30, 0.88) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-radius: 16px !important;
+        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.35) 0px 8px 24px !important;
+        padding: 6px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.16s ease, transform 0.16s ease !important;
+        z-index: 50 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Open on hover of the TOC widget */
+    .sl-chatgpt-toc.sl-hovered .sl-toc-popover,
+    .sl-chatgpt-toc:hover .sl-toc-popover {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: translateY(-50%) translateX(0) !important;
+    }
+
+    .sl-toc-popover-list {
+        list-style: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        max-height: 48vh !important;
+        overflow-y: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent !important;
+        box-sizing: border-box !important;
+    }
+
+    .sl-toc-popover-list::-webkit-scrollbar {
+        width: 4px !important;
+    }
+    .sl-toc-popover-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2) !important;
+        border-radius: 4px !important;
+    }
+
+    .sl-toc-popover-list li {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .sl-toc-item {
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: 30px !important;
+        min-height: 30px !important;
+        padding: 0 10px !important;
+        border-radius: 10px !important;
+        background: transparent !important;
+        border: none !important;
+        cursor: pointer !important;
+        text-align: left !important;
+        transition: background 0.12s ease, color 0.12s ease !important;
+        box-sizing: border-box !important;
+        outline: none !important;
+    }
+
+    .sl-toc-item:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    .sl-toc-item.active {
+        background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    .sl-toc-item-text {
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        color: rgb(212, 212, 212) !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        flex: 1 !important;
+        line-height: 1.2 !important;
+    }
+
+    .sl-toc-item:hover .sl-toc-item-text {
+        color: #ffffff !important;
+    }
+
+    .sl-toc-item.active .sl-toc-item-text {
+        color: #ffffff !important;
+        font-weight: 500 !important;
+    }
+
+    /* ── PART 6: GEMINI-STYLE CHAT MESSAGES & MEDIA ─────────────────────── */
+
+    /* Center the chat column with max-width for optimal reading, clearance for floating header (68px) and floating prompt box (240px) */
+    .chat-session-content {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: flex-end !important;
+        align-content: flex-start !important;
+        max-width: 900px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+        padding: 68px 16px 240px 16px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* All normal turns (model, prompts with text, video turns) take 100% width */
+    .chat-session-content > ms-chat-turn {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Attachment-only turns sit side-by-side in horizontal rows on the right */
+    .chat-session-content > ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)),
+    .chat-session-content > ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) {
+        width: 112px !important;
+        height: 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
+        flex: 0 0 112px !important;
+        display: inline-flex !important;
+        margin: 0 0 8px 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    .chat-session-content > ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container,
+    .chat-session-content > ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container {
+        width: 112px !important;
+        height: 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        flex: 0 0 112px !important;
+        display: block !important;
+        position: relative !important;
+    }
+
+    /* ELIMINATE FULL-WIDTH TURN BORDER & FOCUS OUTLINES COMPLETELY */
+    .chat-turn-container,
+    .chat-turn-container:focus,
+    .chat-turn-container:focus-within,
+    .chat-turn-container.cdk-keyboard-focused,
+    .chat-turn-container.cdk-touch-focused,
+    .chat-turn-container.cdk-focused,
+    .chat-turn-container.cdk-program-focused,
+    .chat-turn-container:has([aria-expanded="true"]),
+    .chat-turn-container:has([aria-haspopup="menu"][aria-expanded="true"]) {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        border-color: transparent !important;
+    }
+
+    /* ── USER ATTACHMENTS (FILES & IMAGES): CLEAN CONTAINER RESET ── */
+    /* Hide turn author label, separator, word counter, and spacers inside user attachment turns */
+    .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .author-label,
+    .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .turn-separator,
+    .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .sl-word-counter,
+    .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .virtual-scroll-container > div:first-child,
+    ms-chat-turn:has(ms-file-chunk, ms-image-chunk) .author-label,
+    ms-chat-turn:has(ms-file-chunk, ms-image-chunk) .turn-separator,
+    ms-chat-turn:has(ms-file-chunk, ms-image-chunk) .sl-word-counter {
+        display: none !important;
+        height: 0 !important;
+    }
+
+    .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 4px 0 !important;
+    }
+
+    /* ── GEMINI-STYLE FILE ATTACHMENT CARDS (112x112px) ── */
+    ms-file-chunk {
+        width: 112px !important;
+        height: 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
+        box-sizing: border-box !important;
+        background: #171717 !important;
+        border-radius: 20px !important;
+        padding: 0 !important;
+        display: block !important;
+        position: relative !important;
+        overflow: hidden !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: none !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    ms-file-chunk:hover {
+        background: #242424 !important;
+        border-color: rgba(255, 255, 255, 0.16) !important;
+    }
+
+    /* Clear internal wrappers */
+    ms-file-chunk .preview-container,
+    ms-file-chunk .token-count {
+        display: none !important;
+    }
+
+    ms-file-chunk .file-chunk-container {
+        width: 100% !important;
+        height: 100% !important;
+        padding: 12px !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+    }
+
+    ms-file-chunk .file-chunk-container > div:first-child {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        flex: 1 1 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+        box-sizing: border-box !important;
+        gap: 0 !important;
+    }
+
+    ms-file-chunk .file-chunk-container > div:last-child {
+        display: none !important;
+    }
+
+    /* Red code icon badge in top left (Gemini Web match) */
+    ms-file-chunk .file-icon {
+        width: 24px !important;
+        height: 24px !important;
+        border-radius: 6px !important;
+        background: #c5221f !important;
+        color: #ffffff !important;
+        font-size: 0px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+        align-self: flex-start !important;
+        position: relative !important;
+    }
+
+    ms-file-chunk .file-icon::after {
+        content: '</>' !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace !important;
+        color: #ffffff !important;
+        letter-spacing: -0.5px !important;
+    }
+
+    /* File name at bottom with 2-line wrap, word break and pinned to bottom edge */
+    ms-file-chunk .name {
+        margin-top: auto !important;
+        flex: 0 0 auto !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        color: #e3e3e3 !important;
+        width: 100% !important;
+        max-width: 88px !important;
+        line-height: 1.25 !important;
+        white-space: normal !important;
+        word-break: break-all !important;
+        overflow-wrap: anywhere !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 2 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        margin-bottom: 0 !important;
+        padding: 0 !important;
+        text-align: left !important;
+        align-self: flex-start !important;
+    }
+
+    /* ── USER ATTACHMENTS (FILES & IMAGES): STRICT 112x112px SQUARE TILES ── */
+    ms-image-chunk,
+    ms-file-chunk,
+    .image-chunk-container,
+    ms-file-chunk .file-chunk-container,
+    ms-image-chunk .image-container,
+    ms-image-chunk > div {
+        width: 112px !important;
+        height: 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
+        min-height: 112px !important;
+        max-height: 112px !important;
+        aspect-ratio: 1 / 1 !important;
+        box-sizing: border-box !important;
+        flex: 0 0 112px !important;
+        border-radius: 20px !important;
+        overflow: hidden !important;
+        background: #171717 !important;
+        margin: 0 !important;
+    }
+
+    ms-image-chunk img,
+    .image-chunk-container img,
+    ms-image-chunk .image-container img {
+        width: 112px !important;
+        height: 112px !important;
+        min-width: 112px !important;
+        max-width: 112px !important;
+        min-height: 112px !important;
+        max-height: 112px !important;
+        aspect-ratio: 1 / 1 !important;
+        object-fit: cover !important;
+        border-radius: 20px !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* ── ATTACHMENT CARD HOVER ACTIONS (INSIDE TILE AT TOP-RIGHT: 12px INSET) ── */
+    .chat-turn-container:has(ms-file-chunk) .actions-container,
+    .chat-turn-container:has(ms-image-chunk) .actions-container,
+    ms-chat-turn:has(ms-file-chunk) .actions-container,
+    ms-chat-turn:has(ms-image-chunk) .actions-container {
+        position: absolute !important;
+        top: 12px !important;
+        right: 12px !important;
+        left: auto !important;
+        bottom: auto !important;
+        width: 28px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: 25 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.15s ease !important;
+    }
+
+    .chat-turn-container:has(ms-file-chunk):hover .actions-container,
+    .chat-turn-container:has(ms-image-chunk):hover .actions-container,
+    ms-chat-turn:has(ms-file-chunk):hover .actions-container,
+    ms-chat-turn:has(ms-image-chunk):hover .actions-container,
+    .chat-turn-container:has(ms-file-chunk) .actions-container:has([aria-expanded="true"]),
+    .chat-turn-container:has(ms-image-chunk) .actions-container:has([aria-expanded="true"]),
+    ms-chat-turn:has(ms-file-chunk) .actions-container:has([aria-expanded="true"]),
+    ms-chat-turn:has(ms-image-chunk) .actions-container:has([aria-expanded="true"]) {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    ms-chat-turn:has(ms-file-chunk) .actions.hover-or-edit,
+    ms-chat-turn:has(ms-image-chunk) .actions.hover-or-edit {
+        position: relative !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        height: auto !important;
+        min-height: 0 !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 0 !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    /* Reset stacking & containment so Chromium backdrop-filter samples media textures */
+    .chat-turn-container:has(ms-file-chunk),
+    .chat-turn-container:has(ms-image-chunk),
+    .chat-turn-container:has(ms-file-chunk) .turn-content,
+    .chat-turn-container:has(ms-image-chunk) .turn-content,
+    .chat-turn-container:has(ms-file-chunk) ms-prompt-chunk,
+    .chat-turn-container:has(ms-image-chunk) ms-prompt-chunk,
+    ms-image-chunk,
+    ms-file-chunk {
+        contain: none !important;
+        isolation: auto !important;
+    }
+
+    /* FULLY CIRCULAR FROSTED-GLASS ACTION BUTTONS FOR MEDIA CARDS (BLURRED BACKGROUND + ZERO SHADOW) */
+    .chat-turn-container:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button,
+    .chat-turn-container:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button,
+    ms-chat-turn:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button,
+    ms-chat-turn:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button,
+    ms-chat-turn:has(ms-file-chunk) .actions-container button,
+    ms-chat-turn:has(ms-image-chunk) .actions-container button,
+    ms-chat-turn:has(ms-file-chunk) ms-chat-turn-options button,
+    ms-chat-turn:has(ms-image-chunk) ms-chat-turn-options button,
+    ms-chat-turn ms-file-chunk ms-chat-turn-options button,
+    ms-chat-turn ms-image-chunk ms-chat-turn-options button,
+    ms-chat-turn ms-file-chunk button,
+    ms-chat-turn ms-image-chunk button,
+    ms-chat-turn .file-chunk-container button,
+    ms-chat-turn .preview-container button,
+    ms-chat-turn ms-chunk-editor button:is(.actions-container button, [aria-label*="options" i]) {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        border-radius: 50% !important;
+        background: rgba(30, 30, 30, 0.45) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        box-shadow: none !important;
+        outline: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+    }
+
+    /* Prevent Angular Material ripples from blocking frosted-glass blur */
+    ms-chat-turn-options button .mat-mdc-button-persistent-ripple,
+    ms-chat-turn-options button .mat-ripple,
+    ms-chat-turn-options button .mat-mdc-button-touch-target,
+    ms-chat-turn ms-image-chunk button .mat-mdc-button-persistent-ripple,
+    ms-chat-turn ms-image-chunk button .mat-ripple,
+    ms-chat-turn ms-file-chunk button .mat-mdc-button-persistent-ripple,
+    ms-chat-turn ms-file-chunk button .mat-ripple {
+        background: transparent !important;
+        pointer-events: none !important;
+    }
+
+    /* HOVER STATE: FROSTED GLASS DARKENING + ZERO SHADOW */
+    .chat-turn-container:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
+    .chat-turn-container:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
+    ms-chat-turn:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
+    ms-chat-turn:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
+    ms-chat-turn:has(ms-file-chunk) .actions-container button:hover,
+    ms-chat-turn:has(ms-image-chunk) .actions-container button:hover,
+    ms-chat-turn:has(ms-file-chunk) ms-chat-turn-options button:hover,
+    ms-chat-turn:has(ms-image-chunk) ms-chat-turn-options button:hover,
+    ms-chat-turn ms-file-chunk ms-chat-turn-options button:hover,
+    ms-chat-turn ms-image-chunk ms-chat-turn-options button:hover,
+    ms-chat-turn ms-file-chunk button:hover,
+    ms-chat-turn ms-image-chunk button:hover,
+    ms-chat-turn .file-chunk-container button:hover,
+    ms-chat-turn .preview-container button:hover,
+    ms-chat-turn ms-chunk-editor button:is(.actions-container button, [aria-label*="options" i]):hover {
+        background: rgba(45, 45, 45, 0.7) !important;
+        border-color: rgba(255, 255, 255, 0.25) !important;
+        box-shadow: none !important;
+        color: #ffffff !important;
+    }
+
+    /* Strictly protect buttons inside prompt-box chips / attachments from being oversized */
+    ms-prompt-box ms-file-chunk button,
+    ms-prompt-box ms-image-chunk button,
+    ms-prompt-box .file-chunk-container button,
+    ms-prompt-box .preview-container button,
+    ms-prompt-box button.remove-button,
+    ms-prompt-box button[aria-label*="Remove" i],
+    ms-prompt-box button[aria-label*="Delete" i] {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        max-width: 18px !important;
+        min-height: 18px !important;
+        max-height: 18px !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 0 0 4px !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+    ms-prompt-box ms-file-chunk button:hover,
+    ms-prompt-box ms-image-chunk button:hover,
+    ms-prompt-box .file-chunk-container button:hover,
+    ms-prompt-box button.remove-button:hover,
+    ms-prompt-box button[aria-label*="Remove" i]:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+        color: #ffffff !important;
+    }
+    ms-prompt-box ms-file-chunk button .material-symbols-outlined,
+    ms-prompt-box ms-image-chunk button .material-symbols-outlined,
+    ms-prompt-box button.remove-button .material-symbols-outlined,
+    ms-prompt-box button[aria-label*="Remove" i] .material-symbols-outlined {
+        font-size: 14px !important;
+        width: 14px !important;
+        height: 14px !important;
+        line-height: 14px !important;
+    }
+
+    ms-chat-turn:has(ms-file-chunk) ms-chat-turn-options .material-symbols-outlined,
+    ms-chat-turn:has(ms-image-chunk) ms-chat-turn-options .material-symbols-outlined,
+    ms-chat-turn:has(ms-video-chunk) ms-chat-turn-options .material-symbols-outlined,
+    ms-file-chunk ms-chat-turn-options .material-symbols-outlined,
+    ms-image-chunk ms-chat-turn-options .material-symbols-outlined {
+        font-size: 18px !important;
+        line-height: 1 !important;
+    }
+
+    /* ── USER PROMPT TURNS: RIGHT ALIGNED GEMINI BUBBLE (NO SHADOW) ── */
+    ms-chat-turn:has(.chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk))) {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+    }
+
+    .chat-turn-container.user {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        margin-left: auto !important;
+        width: fit-content !important;
+        max-width: 82% !important;
+        box-sizing: border-box !important;
+        padding: 6px 0 10px 0 !important;
+    }
+
+    /* Preserve Angular virtual scroll grid stack inside user prompt */
+    .chat-turn-container.user .virtual-scroll-container.user-prompt-container {
+        display: grid !important;
+        justify-items: end !important;
+        max-width: 100% !important;
+        width: fit-content !important;
+        order: 1 !important;
+    }
+
+    .chat-turn-container.user .virtual-scroll-container > * {
+        grid-area: 1 / 1 !important;
+    }
+
+    .chat-turn-container.user .turn-content {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+
+    /* Wrap multiple image/file cards horizontally inside user turns */
+    .chat-turn-container.user .turn-content:has(ms-image-chunk),
+    .chat-turn-container.user .turn-content:has(ms-file-chunk),
+    .chat-turn-container.user ms-prompt-chunk:has(ms-image-chunk),
+    .chat-turn-container.user ms-prompt-chunk:has(ms-file-chunk) {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: flex-end !important;
+        gap: 8px !important;
+    }
+
+    /* Remove Author Label & Word Counter on User Turns */
+    .chat-turn-container.user .author-label,
+    .chat-turn-container.user .turn-separator,
+    .chat-turn-container.user .sl-word-counter {
+        display: none !important;
+    }
+
+    /* Reset transparent wrappers inside user turns */
+    .chat-turn-container.user ms-prompt-chunk,
+    .chat-turn-container.user ms-text-chunk,
+    .chat-turn-container.user ms-autosize-textarea {
+        background: transparent !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    /* User Prompt Pill (Flat, No Shadow, Gemini Luminous Style) */
+    .chat-turn-container.user ms-prompt-chunk:not(:has(ms-file-chunk)):not(:has(ms-video-chunk)):not(:has(ms-image-chunk)):not(:has(textarea)) {
+        background: #1e1f20 !important;
+        border-radius: 28px !important;
+        padding: 12px 24px !important;
+        color: #e3e3e3 !important;
+        font-size: 15px !important;
+        line-height: 1.5 !important;
+        width: fit-content !important;
+        max-width: 100% !important;
+        word-break: break-word !important;
+        box-sizing: border-box !important;
+        box-shadow: none !important;
+        display: inline-block !important;
+        border: none !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk p,
+    .chat-turn-container.user ms-prompt-chunk .user-chunk {
+        margin: 0 !important;
+        padding: 0 !important;
+        color: inherit !important;
+        font-size: inherit !important;
+        line-height: inherit !important;
+    }
+
+    /* ── EDIT MODE STYLING & SYNCHRONIZED SCROLLBAR ── */
+    .chat-turn-container.edit {
+        box-shadow: none !important;
+    }
+
+    .chat-turn-container.edit .author-label {
+        display: none !important;
+    }
+
+    /* Synchronize font, line-height, letter-spacing and wrapping on ms-autosize-textarea, its ::after, and textarea */
+    .chat-turn-container.edit ms-autosize-textarea,
+    .chat-turn-container.edit ms-autosize-textarea::after,
+    .chat-turn-container.edit ms-autosize-textarea textarea,
+    .chat-turn-container.edit ms-autosize-textarea textarea.textarea {
+        font-family: inherit !important;
+        font-size: 15px !important;
+        line-height: 1.6 !important;
+        letter-spacing: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: pre-wrap !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Model Turn Edit Mode Box (Gemini Luminous Editor) */
+    .chat-turn-container.model.edit {
+        background: #1e1f20 !important;
+        border: 1.5px solid #8ab4f8 !important;
+        border-radius: 20px !important;
+        padding: 16px 20px !important;
+        box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.15) !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }
+
+    .chat-turn-container.model.edit ms-autosize-textarea {
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        max-height: 480px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .chat-turn-container.model.edit ms-autosize-textarea textarea.textarea,
+    .chat-turn-container.model.edit ms-autosize-textarea textarea {
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        color: #ffffff !important;
+        width: 100% !important;
+        padding: 0 0 8px 0 !important;
+        overflow: hidden !important;
+        resize: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+    }
+
+    /* User Turn Edit Mode: right-aligned, transparent container, clean inner box */
+    .chat-turn-container.user.edit {
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        width: fit-content !important;
+        max-width: 82% !important;
+        margin-left: auto !important;
+        margin-bottom: 24px !important;
+    }
+
+    .chat-turn-container.user.edit ms-autosize-textarea {
+        background: #1e1f20 !important;
+        border: 1.5px solid #8ab4f8 !important;
+        border-radius: 20px !important;
+        padding: 16px 20px 22px 20px !important;
+        box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2) !important;
+        max-height: 480px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        scroll-padding-bottom: 22px !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+        width: 100% !important;
+        min-width: 320px !important;
+        box-sizing: border-box !important;
+    }
+
+    .chat-turn-container.user.edit ms-autosize-textarea textarea.textarea,
+    .chat-turn-container.user.edit ms-autosize-textarea textarea {
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        padding: 0 0 12px 0 !important;
+        overflow: hidden !important;
+        resize: none !important;
+        max-height: none !important;
+        color: #ffffff !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* General standalone textareas (if any without ms-autosize-textarea) */
+    .chat-turn-container textarea.textarea:not(ms-autosize-textarea textarea) {
+        max-height: 480px !important;
+        overflow-y: auto !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+        resize: none !important;
+    }
+
+    .chat-turn-container.edit .actions-container {
+        margin-top: 10px !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        width: 100% !important;
+    }
+
+    /* Keep actions accessible on thought turns (edit, rerun, options menu with Delete) */
+    ms-chat-turn.thought-activity-host .actions-container,
+    ms-chat-turn:has(ms-thought-chunk) .actions-container {
+        display: flex !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+    }
+
+    /* Model turns: flush horizontal alignment with prompt box and header */
+    .chat-turn-container.model {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* ── ACTION TOOLBARS (GEMINI STYLE: TRANSPARENT, CIRCULAR BORDERLESS) ── */
+    .chat-turn-container .actions-container {
+        position: relative !important;
+        top: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        right: auto !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        height: auto !important;
+        min-height: 32px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .chat-turn-container .actions.hover-or-edit {
+        position: relative !important;
+        top: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        right: auto !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 4px !important;
+    }
+
+    /* Individual action buttons: Circular, borderless, transparent */
+    .chat-turn-container .actions.hover-or-edit button,
+    .chat-turn-container .actions.hover-or-edit ms-chat-turn-options button {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #c4c7c5 !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    .chat-turn-container .actions.hover-or-edit button:hover,
+    .chat-turn-container .actions.hover-or-edit ms-chat-turn-options button:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #ffffff !important;
+    }
+
+    .chat-turn-container .actions.hover-or-edit .material-symbols-outlined,
+    .chat-turn-container .actions.hover-or-edit svg {
+        font-size: 18px !important;
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    /* User Actions: Right-aligned under prompt bubble, hover-only */
+    .chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk)) .actions-container {
+        align-self: flex-end !important;
+        justify-content: flex-end !important;
+        margin-top: 4px !important;
+        order: 10 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.15s ease !important;
+    }
+
+    .chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk)):hover .actions-container,
+    .chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk)):focus-within .actions-container,
+    .chat-turn-container.user.edit .actions-container,
+    .chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk)) .actions-container:has([aria-expanded="true"]) {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    .chat-turn-container.user .actions.hover-or-edit {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    /* Model Actions: Left-aligned at bottom of response, always visible */
+    .chat-turn-container.model .actions-container {
+        align-self: flex-start !important;
+        justify-content: flex-start !important;
+        margin-top: 8px !important;
+        order: 10 !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+    }
+
+    .chat-turn-container.model .actions.hover-or-edit {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+    }
+
+    /* ── WIDESCREEN 16:9 VIDEO PLAYER ── */
+    ms-chat-turn:has(ms-video-chunk) {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+    }
+
+    ms-chat-turn:has(ms-video-chunk) .chat-turn-container,
+    .chat-turn-container:has(ms-video-chunk) {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        margin-left: auto !important;
+        width: fit-content !important;
+        max-width: 560px !important;
+        padding: 0 !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        position: relative !important;
+    }
+
+    /* Video turn action buttons positioned below video card in natural message flow */
+    ms-chat-turn:has(ms-video-chunk) .actions-container,
+    .chat-turn-container:has(ms-video-chunk) .actions-container {
+        position: static !important;
+        top: auto !important;
+        bottom: auto !important;
+        right: auto !important;
+        left: auto !important;
+        width: auto !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        align-self: flex-end !important;
+        margin-top: 6px !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.15s ease !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    ms-chat-turn:has(ms-video-chunk):hover .actions-container,
+    .chat-turn-container:has(ms-video-chunk):hover .actions-container,
+    ms-chat-turn:has(ms-video-chunk) .actions-container:has([aria-expanded="true"]),
+    .chat-turn-container:has(ms-video-chunk) .actions-container:has([aria-expanded="true"]) {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    ms-chat-turn:has(ms-video-chunk) ms-chat-turn-options button {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        border-radius: 50% !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #c4c7c5 !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+
+    ms-chat-turn:has(ms-video-chunk) ms-chat-turn-options button:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #ffffff !important;
+    }
+
+    /* Hide Edit button and remove button on video turns (videos cannot be edited) */
+    .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button.toggle-edit-button,
+    .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button[name="edit-button"],
+    .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button[aria-label="Edit"],
+    .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button[aria-label="Stop editing"],
+    .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit .remove-video-button,
+    ms-chat-turn:has(ms-video-chunk) .actions.hover-or-edit button.toggle-edit-button,
+    ms-chat-turn:has(ms-video-chunk) .actions.hover-or-edit button[name="edit-button"],
+    ms-chat-turn:has(ms-video-chunk) .actions.hover-or-edit button[aria-label="Edit"],
+    ms-chat-turn:has(ms-video-chunk) .actions.hover-or-edit button[aria-label="Stop editing"],
+    ms-chat-turn:has(ms-video-chunk) .actions.hover-or-edit .remove-video-button,
+    ms-chat-turn:has(ms-video-chunk) button.toggle-edit-button,
+    ms-chat-turn:has(ms-video-chunk) button[name="edit-button"],
+    ms-chat-turn:has(ms-video-chunk) button[aria-label="Edit"],
+    ms-chat-turn:has(ms-video-chunk) button[aria-label="Stop editing"],
+    ms-chat-turn:has(ms-video-chunk) .remove-video-button {
+        display: none !important;
+    }
+
+    ms-video-chunk {
+        display: block !important;
+        width: 100% !important;
+        max-width: 560px !important;
+        height: auto !important;
+        margin: 8px 0 !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    ms-video-chunk .video-container-wrapper {
+        width: 100% !important;
+        height: auto !important;
+        border-radius: 20px !important;
+        overflow: hidden !important;
+        background: #141414 !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        box-shadow: none !important;
+    }
+
+    ms-video-chunk .video-container {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9 !important;
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 20px 20px 0 0 !important;
+        background: #000000 !important;
+    }
+
+    ms-video-chunk .video-container iframe {
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
+        border-radius: 20px 20px 0 0 !important;
+    }
+
+    ms-video-chunk .file-chunk-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        aspect-ratio: auto !important;
+        flex: 1 1 auto !important;
+        padding: 10px 48px 10px 14px !important;
+        background: #1e1f20 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        border-radius: 0 0 20px 20px !important;
+        font-size: 13px !important;
+        color: #e3e3e3 !important;
+        border: none !important;
+        box-sizing: border-box !important;
+    }
+
+    /* ── MODEL RESPONSE IMAGES (NATURAL ASPECT, LARGE VIEW) ── */
+    .chat-turn-container.model ms-image-chunk {
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        max-height: 70vh !important;
+        max-width: 100% !important;
+        aspect-ratio: auto !important;
+        flex: 0 1 auto !important;
+        border-radius: 16px !important;
+    }
+
+    .chat-turn-container.model ms-image-chunk img {
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        max-height: 70vh !important;
+        aspect-ratio: auto !important;
+        object-fit: contain !important;
+        border-radius: 16px !important;
+    }
+
+    /* ── TURN FOOTER, TIMESTAMPS & EDITED BADGES ── */
+    /* Hide native multi-line turn footers */
+    .turn-footer {
+        display: none !important;
+    }
+
+    /* Hide any turn-status-badge at the bottom */
+    .sl-turn-status-badge {
+        display: none !important;
+    }
+
+    /* Model turn: only display "• Edited" next to time in .author-label at top */
+    .sl-model-edited-badge {
+        font-size: 11px !important;
+        color: #8c8c8c !important;
+        font-weight: 400 !important;
+        margin-left: 4px !important;
+        user-select: none !important;
+        opacity: 0.85 !important;
+        display: inline !important;
+    }
+
+    /* Filter media menu options: keep ONLY Download, Delete, and Branch from here */
+    .sl-media-menu .copy-rendered-button,
+    .sl-media-menu button:has(.copy-rendered-button),
+    .sl-media-menu .copy-markdown-button,
+    .sl-media-menu button:has(.copy-markdown-button) {
+        display: none !important;
+    }
+
+    /* ── RESPONSIVE & ADAPTIVE BREAKPOINTS ── */
+    @media screen and (max-width: 1400px) {
+        .sl-chatgpt-toc {
+            right: 8px !important;
+        }
+    }
+
+    @media screen and (max-width: 1024px) {
+        .chat-session-content {
+            padding: 0 16px 36px 16px !important;
+        }
+        .chat-turn-container.user {
+            max-width: 88% !important;
+        }
+        .chat-turn-container.user.edit {
+            max-width: 88% !important;
+        }
+    }
+
+    @media screen and (max-width: 768px) {
+        /* Mobile: completely hide turn navigator on small/touch screens */
+        .sl-chatgpt-toc {
+            display: none !important;
+        }
+
+        .chat-session-content {
+            padding: 0 10px 28px 10px !important;
+            max-width: 100% !important;
+        }
+
+        .chat-turn-container.user {
+            max-width: 94% !important;
+        }
+
+        .chat-turn-container.user.edit {
+            max-width: 96% !important;
+            width: 100% !important;
+        }
+
+        .chat-turn-container.user.edit ms-autosize-textarea {
+            min-width: 100% !important;
+            width: 100% !important;
+            padding: 12px 14px 20px 14px !important;
+        }
+
+        /* Compact cards on mobile (96x96px) */
+        ms-file-chunk,
+        .chat-turn-container.user ms-image-chunk,
+        .chat-turn-container.user ms-image-chunk img {
+            width: 96px !important;
+            height: 96px !important;
+            min-width: 96px !important;
+            max-width: 96px !important;
+            min-height: 96px !important;
+            max-height: 96px !important;
+        }
+
+        .chat-turn-container.user ms-prompt-chunk:not(:has(ms-file-chunk)):not(:has(ms-video-chunk)):not(:has(ms-image-chunk)):not(:has(textarea)) {
+            padding: 10px 16px !important;
+            font-size: 14px !important;
+            border-radius: 22px !important;
+        }
+    }
+
+    /* Prevent unstyled / uninjected flash of the prompt-box '+' menu */
+    .mat-mdc-menu-panel:not([data-sl-injected]) > .mat-mdc-menu-content > .camera-menu-item,
+    .mat-mdc-menu-panel:not([data-sl-injected]) > .mat-mdc-menu-content > .youtube-video-menu-item,
+    .mat-mdc-menu-panel:not([data-sl-injected]) > .mat-mdc-menu-content > .sample-media-picker-menu-item {
+        display: none !important;
+    }
+
+    .sl-custom-submenu .mat-mdc-menu-item,
+    .sl-custom-submenu .camera-menu-item,
+    .sl-custom-submenu .youtube-video-menu-item,
+    .sl-custom-submenu .sample-media-picker-menu-item,
+    .sl-custom-submenu-content .mat-mdc-menu-item {
+        display: flex !important;
+    }
