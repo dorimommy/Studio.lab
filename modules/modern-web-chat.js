@@ -1339,47 +1339,46 @@
   }
 
   function jumpToTurn(controlsId, nBtn) {
-    // 1. Wake and restore Smart Optimizer if turns are detached
-    if (window.StudioLab && typeof window.StudioLab.restoreDetached === 'function') {
-      window.StudioLab.restoreDetached();
+    let target = controlsId ? document.getElementById(controlsId) : null;
+
+    // 1. Only restore Smart Optimizer turns if target turn is NOT present in DOM (i.e. detached)
+    const wasDetached = !target;
+    if (wasDetached) {
+      if (window.StudioLab && typeof window.StudioLab.restoreDetached === 'function') {
+        window.StudioLab.restoreDetached();
+      }
+      window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
+      target = controlsId ? document.getElementById(controlsId) : null;
     }
-    window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
 
     // 2. Click native button to update Angular's model
     if (nBtn) {
       try { nBtn.click(); } catch (e) { }
     }
 
-    // 3. Multi-attempt convergence scroll to ensure target lands accurately in viewport
-    let attempts = 0;
-    function ensureInView() {
-      attempts++;
-      const target = controlsId ? document.getElementById(controlsId) : null;
-      const scroller = document.querySelector('ms-autoscroll-container');
-      if (!target || !scroller) return;
+    if (!target) return;
 
-      const scrollerRect = scroller.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const offsetDiff = targetRect.top - scrollerRect.top - 16;
+    // 3. Non-jarring navigation: only scroll if not already on screen
+    const scroller = document.querySelector('ms-autoscroll-container');
+    if (!scroller) return;
 
-      if (Math.abs(offsetDiff) > 20 && attempts <= 8) {
-        scroller.scrollTo({
-          top: Math.max(0, scroller.scrollTop + offsetDiff),
-          behavior: attempts === 1 ? 'smooth' : 'auto'
-        });
-        setTimeout(ensureInView, 120);
-      } else {
-        if (Math.abs(offsetDiff) > 4) {
-          scroller.scrollTop = Math.max(0, scroller.scrollTop + (target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16));
-        }
-        target.classList.add('sl-turn-highlight');
-        setTimeout(() => target.classList.remove('sl-turn-highlight'), 2000);
-      }
+    const scrollerRect = scroller.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+
+    // Check if target is already partially or fully visible in the viewport
+    const isAlreadyVisible = targetRect.bottom > scrollerRect.top + 60 && targetRect.top < scrollerRect.bottom - 60;
+
+    if (isAlreadyVisible) {
+      // Already on screen - do NOT scroll, just highlight!
+      target.classList.add('sl-turn-highlight');
+      setTimeout(() => target.classList.remove('sl-turn-highlight'), 2000);
+      return;
     }
 
-    requestAnimationFrame(() => {
-      ensureInView();
-    });
+    // If out of view, scroll smoothly into view
+    target.scrollIntoView({ behavior: 'smooth', block: wasDetached ? 'start' : 'nearest' });
+    target.classList.add('sl-turn-highlight');
+    setTimeout(() => target.classList.remove('sl-turn-highlight'), 2000);
   }
 
   function getActiveTurnIndex(nativeBtns, scroller) {

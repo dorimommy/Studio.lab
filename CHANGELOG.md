@@ -1,5 +1,19 @@
 # Studio.lab Changelog
 
+## v2.0-preview-4-hotfix-1
+**Smart Optimizer Immediate Chat Entry & Selective Turn Navigator Restoration**
+
+`Optimizer (Smart / Buffered)` module.
+* **Fixed:** `Immediate Optimizer Application upon Chat Entry`.
+  * *Fast-Track Initial Entry:* Introduced an `isInitialEntry` lifecycle state triggered on extension initialization and SPA route changes (`onRouteChange`). As soon as turns load and reach the bottom, older turns are buffered immediately without waiting for a 5-second stationary delay.
+  * *Human Scroll vs. Programmatic Scroll Isolation:* Separated true user scroll interactions (`wheel`, `touchmove`, navigation keys) from passive layout `scroll` events. Angular's turn rendering, autoscrolling, and image loading no longer falsely refresh `lastUserScrollTime` or prevent buffering.
+  * *Adaptive Bottom Detection:* Broadened settling tolerance (`distFromBottom <= 350px` or viewport visibility of the final turn), ensuring chats consistently optimize from 100+ turns down to the user's configured limit within ~500ms of entering.
+
+`Modern Web Chat` module.
+* **Fixed:** `Selective Turn Navigator Restoration & Viewport-Aware Navigation`.
+  * *Preserved Detached State on Attached Clicks:* In `jumpToTurn`, clicking any turn in the Turn Navigator (TOC popover or dash indicators) now verifies if the target turn element already exists in the DOM. If the target turn is already rendered (e.g. the second-to-last turn), `restoreDetached()` and `__sl_restoreAllTurns` are bypassed, keeping all buffered turns safely detached.
+  * *Non-Jarring Viewport Navigation:* If the selected turn is already visible on screen, redundant scrolling is skipped entirely and the turn is gently emphasized with `sl-turn-highlight`. Only off-screen turns trigger smooth navigation (`block: 'nearest'`), eliminating sudden jump-scrolls.
+
 ## v2.0-preview-4
 **Modern Web Chat Major Overhaul, Angular 19 Signals & Architectural Stabilization**
 

@@ -19,6 +19,7 @@
   let pauseUntil = 0;
   let bottomStayStartTime = 0;
   let lastUserScrollTime = 0;
+  let isInitialEntry = true;
   let watcherScope = null;
 
   window.StudioLab.registerModule({
@@ -43,6 +44,7 @@
     ],
     init(ctx) {
       ctxRef = ctx;
+      isInitialEntry = true;
       sync();
     },
     onStateChange() {
@@ -53,6 +55,7 @@
       stop();
       // Never insert old-chat nodes into a newly reused Angular container.
       clearDetachedState();
+      isInitialEntry = true;
       sync();
     },
     dispose() { stop(); restoreDetached(); clearDetachedState(); }
@@ -76,7 +79,7 @@
     if (intervalId) return;
     watcherScope = window.StudioLab.createScope();
     setupSearchAndScrollWatchers();
-    intervalId = setInterval(applySmartOptimizer, 800);
+    intervalId = setInterval(applySmartOptimizer, 500);
     applySmartOptimizer();
 
     // Clean up any legacy intrusive styles
@@ -115,8 +118,13 @@
     // Never detach if:
     // 1. Search palette is open or in navigation pause
     // 2. Chat is actively streaming / generating
-    // 3. User was actively scrolling within the last 2.5s
-    if (isSearchDialogOpen() || now < pauseUntil || isGenerating() || (now - lastUserScrollTime < 2500)) {
+    if (isSearchDialogOpen() || now < pauseUntil || isGenerating()) {
+      bottomStayStartTime = 0;
+      return;
+    }
+
+    // 3. User was actively scrolling manually within the last 1.5s (only checked after initial entry)
+    if (!isInitialEntry && (now - lastUserScrollTime < 1500)) {
       bottomStayStartTime = 0;
       return;
     }
@@ -136,21 +144,28 @@
 
     // Check if user is at the bottom of the chat
     const distFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    const isAtBottom = distFromBottom <= 250;
+    const lastTurn = turns[turns.length - 1];
+    const lastRect = lastTurn ? lastTurn.getBoundingClientRect() : null;
+    const isLastVisible = lastRect ? (lastRect.top < window.innerHeight && lastRect.bottom > 0) : false;
+    const isAtBottom = distFromBottom <= 350 || isLastVisible;
 
     if (!isAtBottom) {
       bottomStayStartTime = 0;
       return;
     }
 
-    // Settling threshold (2500ms of completely stationary idle at bottom) before buffering older turns
-    if (bottomStayStartTime === 0) {
-      bottomStayStartTime = now;
-      return;
+    // Settling threshold (1200ms of completely stationary idle at bottom) before buffering older turns during active chat
+    if (!isInitialEntry) {
+      if (bottomStayStartTime === 0) {
+        bottomStayStartTime = now;
+        return;
+      }
+      if (now - bottomStayStartTime < 1200) {
+        return;
+      }
     }
-    if (now - bottomStayStartTime < 2500) {
-      return;
-    }
+
+    isInitialEntry = false;
 
     if (!detachedParent && turns[0].parentNode) {
       detachedParent = turns[0].parentNode;
@@ -166,9 +181,20 @@
   }
 
   function setupSearchAndScrollWatchers() {
+    const recordUserScroll = () => {
+      if (!isActive()) return;
+      lastUserScrollTime = Date.now();
+    };
+
+    watcherScope.listen(window, 'wheel', recordUserScroll, { passive: true });
+    watcherScope.listen(window, 'touchmove', recordUserScroll, { passive: true });
+
     // 1. Keyboard shortcuts: Restore detached turns when native search is triggered
     // Handles English (KeyF / 'f') and international Cyrillic layouts (where key might be 'а')
     watcherScope.listen(document, 'keydown', (e) => {
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
+        recordUserScroll();
+      }
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyF' || (e.key && e.key.toLowerCase() === 'f') || e.key === '/')) {
         pauseUntil = Date.now() + 20000;
         bottomStayStartTime = 0;
@@ -269,7 +295,7 @@
       }
     });
 
-    // 5. Listen for scroll on chat container to automatically restore when scrolling UP
+    // 5. Listen for scroll on chat container to track position and reset bottom stay
     const watchScroller = () => {
       const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
       const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
@@ -286,13 +312,12 @@
       watcherScope.listen(scroller, 'scroll', () => {
         if (!isActive()) return;
 
-        lastUserScrollTime = Date.now();
         const currentScrollTop = scroller.scrollTop;
         const scrollingUp = currentScrollTop < lastScrollTop;
         lastScrollTop = currentScrollTop;
 
         const distFromBottom = scroller.scrollHeight - currentScrollTop - scroller.clientHeight;
-        if (distFromBottom > 300) {
+        if (distFromBottom > 350) {
           bottomStayStartTime = 0;
         }
       }, { passive: true });
@@ -374,6 +399,8 @@
     detachedParent = null;
     pauseUntil = 0;
     bottomStayStartTime = 0;
+    lastUserScrollTime = 0;
+    isInitialEntry = true;
 
     const banner = document.querySelector('.sl-load-banner');
     if (banner) banner.remove();
