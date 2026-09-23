@@ -1,14 +1,55 @@
 # Studio.lab Changelog
 
-## Unreleased
+## v2.0-preview-4-hotfix-4
+**Dynamic Featured Model Discovery & Native Picker Sync, Zero-Flash Silent Updates & Repository Hygiene**
 
-* Fixed GenerateContent request tracking for Draft Crash Protection across XHR and fetch. Request and completion events now share a request ID and route, and Chat Export accepts the structured payload.
-* Fixed model override forwarding for fetch URLs and XHR request bodies; caller-owned fetch options remain unchanged.
-* Limited Angular LView map interception to a short discovery period and released candidate maps after discovery or timeout.
-* Scoped Modern Web Chat's global input handlers to its enabled lifetime. Redundant header buttons are hidden without removing Angular-owned nodes.
-* Restored paragraph, list, heading, inline code, block code, quote, and rule typography in user bubbles.
-* Passed current and previous route keys to modules on SPA navigation and reduced telemetry console noise.
-* Added tracked regression tests and validation scripts while keeping local captures and snapshots ignored.
+`Modern Web Chat` module.
+* **Fixed:** `Elimination of Hardcoded "Gemini 2.5 Flash" Fallbacks`.
+  * *Clean Model Labeling:* Completely removed deprecated, speculative `gemini-2.5-flash` and `gemini-2.5-pro` fallbacks. Header button and selector labels now authoritatively display the active model from native DOM / URL query params (`?model=...`) or cleanly fall back to `"Select model"`.
+* **Added:** `Dynamic Featured Model Synchronization`.
+  * *Live GAIS Featured Sync:* Implemented `refreshFeaturedModels()` which dynamically reads the 3 live featured models directly from the native Google AI Studio model dialog's "Featured" category (`button[data-test-category-button]`), keeping choices up-to-date with Google's latest releases.
+  * *Zero-Flash Stealth Sync:* Introduced `.sl-syncing-model-picker` CSS safeguards rendering the native dialog completely transparent and non-interactive (`opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;`) during background query and model selection, eliminating screen flash.
+  * *Native Model Selection:* Updated `selectNativeModel()` to natively click the model's button inside Google AI Studio's DOM, ensuring Angular 19 writable signals and internal state update seamlessly without synthetic overrides.
+
+`Repository & Build Configuration`.
+* **Cleaned:** `Dev Folder Exclusion in .gitignore`.
+  * *Clean Repository Scope:* Restored `/Dev/` exclusion in `.gitignore`, keeping internal test suites, development tools, and snapshots safely isolated locally without polluting release branches.
+
+## v2.0-preview-4-hotfix-3
+**Draft Crash Protection Production Contract, Strict Fetch Override, User Bubble Typography & Architecture Hardening**
+
+`Network & Interceptors Layer` (`interceptor.js`).
+* **Fixed:** `Draft Crash Protection Production Event Contract`.
+  * *Structured Event Metadata:* Structured `__sl_requestPayload` to emit `{ version: 1, requestId, route, ts, body }`, fully satisfying `draft-saver.js:129`.
+  * *Guaranteed Completion Signals:* Dispatched matching `__sl_requestFinished` events on `loadend` for XHR and within `window.fetch` (passing `ok: res.ok` or `ok: false` on error), ensuring unsent drafts are properly cleared upon prompt generation and never erroneously restored.
+* **Fixed:** `Strict-Mode Fetch Model Override URL Forwarding`.
+  * *Argument Detachment Fix:* Replaced `_origFetch.apply(this, arguments)` with direct array forwarding (`[input, init]`), resolving JavaScript strict-mode parameter detachment so rewritten URLs and Request objects are actually dispatched.
+  * *Immutable Option Passing:* Avoided mutating caller-owned options by cloning `init` (`init = { ...init, body }`) when rewriting request bodies.
+* **Fixed:** `Angular 19 LView Map Memory Leak Prevention`.
+  * *Bounded Cache & Cleanup:* Capped `_candidateLViewMaps` to 64 entries and introduced `stopMapCapture()`, restoring native `Map.prototype.set` and clearing candidate map references as soon as the Angular context is identified or after a 15-second safety timeout.
+
+`Modern Web Chat` module.
+* **Fixed:** `Global Capture-Listener Lifecycle & Panel Close (X) Isolation`.
+  * *Module Active Guard:* Added `if (!isEnabled()) return;` at the top of `_slGlobalDrawerHandler` so it never intercepts clicks or suppresses native events when Modern Web Chat is disabled.
+  * *Clean Listener Teardown:* Encapsulated capture handlers in `attachGlobalHandlers()` and `detachGlobalHandlers()`, registering them only while the module is active and cleanly removing them during `cleanup()` and `dispose()`.
+  * *Non-Destructive Native Button Hiding:* Replaced destructive `b.remove()` with `hideNativeButton()`, preserving Angular's internal DOM references and restoring original display values on module teardown.
+* **Fixed:** `User Bubble Markdown Typography & Paragraph Margins`.
+  * *Paragraph Spacing Restored:* Removed destructive `margin: 0 !important; padding: 0 !important;` rules on user turn paragraphs. Added `margin: 0 0 0.75em !important; line-height: 1.55 !important;` with zero bottom margin on the final paragraph child, completely eliminating glued text.
+  * *Full Markdown Styling:* Added rich typography inside `.chat-turn-container.user ms-prompt-chunk`:
+    * Styled bullet and numbered lists (`ul`, `ol`, `li`) with `disc` and `decimal` markers and `22px` left padding.
+    * Scaled headings (`h1`–`h4`) with `font-weight: 650` and proportional sizing.
+    * Monospace inline code (`code`) with translucent dark background, and framed code blocks (`pre`) with horizontal scrolling.
+    * Blockquotes (`blockquote`) with `#8ab4f8` accent border and italic text, bold/italic contrast, and horizontal dividers (`hr`).
+
+`Core SPA Lifecycle & Telemetry Module`.
+* **Fixed:** `SPA Route Lifecycle Contract (content.js)`.
+  * *Current & Previous Route Keys:* Updated `readRoute()` and `notifyRouteChange()` to pass `(ctx, currentRoute, previousRoute)` on `onRouteChange` and emit them in `__sl_routeChanged` events, fulfilling module expectations.
+* **Fixed:** `Telemetry Blocker Console Noise Reduction`.
+  * *Filtered Logging:* Removed blanket logging of non-telemetry network requests in `modules/telemetry-blocker.js`, retaining only verified blocked tracking notices.
+
+`Chat Export` module.
+* **Fixed:** `Dual Payload Format Compatibility`.
+  * *Resilient Parsing:* Enhanced `__sl_requestPayload` listener to seamlessly parse both structured metadata objects (`e.detail.body`) and legacy raw JSON strings.
 
 ## v2.0-preview-4-hotfix-2
 **Mobile Viewport Overhaul, Mutual Drawer Closing, Clean Header Hierarchy & Robust UX Alignment**
