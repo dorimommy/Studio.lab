@@ -785,28 +785,40 @@ ms-side-nav.collapsed .sl-sidebar-btn .nav-item-text {
 
 /* ── Load banner (optimizer restore area) ───────────────────────── */
 .sl-load-banner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-  width: 100%;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 4px 0 12px 0 !important;
+  width: 100% !important;
+  margin: 0 !important;
 }
 
 .sl-load-banner button {
-  background: var(--color-v3-surface-2, #1a1a1a);
-  color: #ffffff;
-  border: 1px solid var(--color-v3-outline-var, #444);
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  background: rgba(40, 40, 42, 0.45) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  font-family: 'Google Sans', Roboto, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
 }
 
 .sl-load-banner button:hover {
-  background-color: var(--color-v3-hover, #323232);
-  border-color: #8c8c8c;
+  background: rgba(65, 65, 70, 0.65) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
 }
 
 /* ── Header row (section header with toggle) ───────────────────── */
@@ -908,9 +920,19 @@ ms-side-nav.collapsed .sl-sidebar-btn .nav-item-text {
 
 /* ── Scroll to Bottom Button ──────────────────────────────────────
    Matches native `.scroll-to-bottom` from chat container. */
+/* Ensure mobile sidebars and sliding drawers always render cleanly above prompt box */
+.v3-left-nav,
+ms-navbar-v2,
+ms-right-side-panel,
+ms-side-nav,
+.drawer-container:has(ms-run-settings),
+mat-sidenav,
+.mat-drawer {
+  z-index: 1000 !important;
+}
+
 footer {
   position: relative !important;
-  z-index: 10 !important;
 }
 
 ms-chat-bottom-overlay {
@@ -920,7 +942,6 @@ ms-chat-bottom-overlay {
 
 ms-prompt-box {
   position: relative !important;
-  z-index: 11 !important;
 }
 
 .sl-scroll-bottom-btn {

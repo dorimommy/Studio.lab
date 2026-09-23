@@ -66,6 +66,31 @@
     return false;
   }
 
+  function isToolDisabled(toolName) {
+    const q = toolName.toLowerCase();
+    const swList = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-run-settings button[role="switch"], .mdc-switch'));
+    for (const sw of swList) {
+      const aria = (sw.getAttribute('aria-label') || sw.querySelector('button')?.getAttribute('aria-label') || '').toLowerCase();
+      if (aria.includes(q)) {
+        return sw.getAttribute('aria-disabled') === 'true' ||
+          sw.querySelector('button')?.disabled ||
+          sw.classList.contains('mat-mdc-slide-toggle-disabled');
+      }
+    }
+    return false;
+  }
+
+  function adjustSubmenuPosition(submenu) {
+    if (!submenu) return;
+    submenu.style.transform = 'none';
+    const rect = submenu.getBoundingClientRect();
+    const pad = 8;
+    if (rect.right > window.innerWidth - pad) {
+      const overflow = rect.right - (window.innerWidth - pad);
+      submenu.style.transform = `translateX(-${overflow}px)`;
+    }
+  }
+
   function ensureRunSettingsMounted() {
     let rs = document.querySelector('ms-run-settings');
     if (!rs) {
@@ -82,22 +107,31 @@
     }
   }
 
-  function toggleNativeTool(toolName) {
+  function toggleNativeTool(toolName, forceState) {
     const q = toolName.toLowerCase();
-    // 1. If chip exists in enabled tools row, clicking remove chip toggles it off
-    const chips = Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'));
-    const matchedChip = chips.find(c => (c.textContent || '').toLowerCase().includes(q));
-    if (matchedChip) {
-      const removeBtn = matchedChip.querySelector('button:last-child, button[aria-label*="Remove" i], button:has(.close)');
-      if (removeBtn) {
-        removeBtn.click();
-        return;
+    const isNowActive = typeof forceState === 'boolean' ? forceState : !isToolActive(toolName);
+
+    // 1. Dispatch custom event for signal-level toggle in interceptor / main world
+    window.dispatchEvent(new CustomEvent('__sl_setTool', {
+      detail: { name: toolName, enabled: isNowActive }
+    }));
+
+    // 2. If chip exists in enabled tools row and we are disabling, clicking remove chip toggles it off
+    if (!isNowActive) {
+      const chips = Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'));
+      const matchedChip = chips.find(c => (c.textContent || '').toLowerCase().includes(q));
+      if (matchedChip) {
+        const removeBtn = matchedChip.querySelector('button:last-child, button[aria-label*="Remove" i], button:has(.close)');
+        if (removeBtn) {
+          removeBtn.click();
+          return;
+        }
       }
     }
 
     ensureRunSettingsMounted();
 
-    // 2. Direct toggle via ms-run-settings (100% silent, zero popups or overlay dialogs)
+    // 3. Direct toggle via ms-run-settings switches
     const runSwitches = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-prompt-run-settings mat-slide-toggle'));
     const target = runSwitches.find(s => {
       const aria = (s.getAttribute('aria-label') || s.querySelector('button')?.getAttribute('aria-label') || s.parentElement?.textContent || '').toLowerCase();
@@ -202,8 +236,11 @@
 
         otherBtn.onclick = (e) => {
           e.preventDefault();
-          e.stopPropagation(); // Keep main menu open
+          e.stopPropagation();
+          const isOpen = otherWrapper.classList.toggle('sl-submenu-open');
+          if (isOpen) adjustSubmenuPosition(submenu);
         };
+        otherWrapper.onmouseenter = () => adjustSubmenuPosition(submenu);
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Submenu created and injected successfully.', 'success');
       } else {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('No items found to move to submenu.', 'warn');
@@ -297,14 +334,22 @@
           tWrap.appendChild(tCheck);
           tItem.appendChild(tWrap);
 
+          const tDisabled = isToolDisabled(tool.id);
+          if (tDisabled) {
+            tItem.classList.add('sl-tool-disabled');
+            tItem.style.opacity = '0.45';
+            tItem.style.cursor = 'not-allowed';
+            tItem.title = 'Tool disabled or incompatible with current model';
+          }
+
           tItem.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggleNativeTool(tool.id);
-            setTimeout(() => {
-              const backdrop = document.querySelector('.cdk-overlay-backdrop-showing');
-              if (backdrop) backdrop.click();
-            }, 120);
+            if (isToolDisabled(tool.id)) return;
+            const nowActive = isToolActive(tool.id);
+            const nextActive = !nowActive;
+            toggleNativeTool(tool.id, nextActive);
+            tCheck.style.opacity = nextActive ? '1' : '0';
           };
 
           toolsSubmenu.appendChild(tItem);
@@ -317,7 +362,10 @@
         toolsBtn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
+          const isOpen = toolsWrapper.classList.toggle('sl-submenu-open');
+          if (isOpen) adjustSubmenuPosition(toolsSubmenu);
         };
+        toolsWrapper.onmouseenter = () => adjustSubmenuPosition(toolsSubmenu);
       } else {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
       }
@@ -397,6 +445,16 @@
       return;
     }
 
+    // Hide native unstyled Share item on all chats (we inject our own styled 'Share prompt')
+    const nativeItems = menuContent.querySelectorAll('button.mat-mdc-menu-item:not(.sl-injected-header-item)');
+    nativeItems.forEach(item => {
+      const txt = item.textContent.trim().toLowerCase();
+      const iconTxt = item.querySelector('.material-symbols-outlined, mat-icon')?.textContent.trim().toLowerCase();
+      if (txt === 'share' || txt.startsWith('share') || iconTxt === 'share') {
+        item.style.display = 'none';
+      }
+    });
+
     // Divider separating native items from injected actions
     const divider = document.createElement('div');
     divider.className = 'mat-divider sl-header-menu-divider';
@@ -408,30 +466,34 @@
     // Proxy actions in requested order:
     // 1. Edit title (above Share prompt)
     // 2. Share prompt
-    // 3. Compare mode
+    // 3. Compare mode (desktop only, omitted on mobile <= 768px)
     // 4. Make this an app (at the very bottom)
     const proxyItems = [
       {
         icon: 'edit',
         label: 'Edit title',
-        targetSelector: '.toolbar-left button[aria-label*="Edit"], .toolbar-left button[mattooltip*="Edit"]',
+        targetSelector: 'button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]',
       },
       {
         icon: 'share',
         label: 'Share prompt',
         targetSelector: 'ms-share-prompt button, button[aria-label="Share prompt"]',
-      },
-      {
+      }
+    ];
+
+    if (window.innerWidth > 768 && document.querySelector('button.compare-button, button[aria-label*="Compare"]')) {
+      proxyItems.push({
         icon: 'compare_arrows',
         label: 'Compare mode',
         targetSelector: 'button.compare-button, button[aria-label*="Compare"]',
-      },
-      {
-        icon: 'design_services',
-        label: 'Make this an app',
-        targetSelector: 'button[aria-label="Make this an app"]',
-      }
-    ];
+      });
+    }
+
+    proxyItems.push({
+      icon: 'design_services',
+      label: 'Make this an app',
+      targetSelector: 'button[aria-label="Make this an app"]',
+    });
 
     proxyItems.forEach(item => {
       const btn = document.createElement('button');
@@ -459,15 +521,23 @@
       btn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Close menu backdrop
-        const backdrop = document.querySelector('.cdk-overlay-backdrop');
-        if (backdrop) backdrop.click();
 
-        // Trigger native button click
-        const target = document.querySelector(item.targetSelector);
+        const target = item.targetSelector ? document.querySelector(item.targetSelector) : null;
         if (target) {
-          dispatchPointerClick(target);
+          try {
+            target.click();
+          } catch (_) {
+            dispatchPointerClick(target);
+          }
         }
+
+        // Close menu backdrop after action is triggered
+        setTimeout(() => {
+          const backdrop = document.querySelector('.cdk-overlay-backdrop-showing');
+          if (backdrop && !document.querySelector('mat-dialog-container')) {
+            backdrop.click();
+          }
+        }, 80);
       };
 
       menuContent.appendChild(btn);
@@ -631,6 +701,14 @@
     const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sl-settings-open');
 
     if (shouldOpen) {
+      // Mutual drawer closing: close left nav if currently open
+      const leftNavOverlay = document.querySelector('.sidebar-overlay');
+      if (leftNavOverlay) {
+        leftNavOverlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      }
+      const leftNavClose = document.querySelector('.v3-left-nav.expanded button[aria-label*="close" i], button[aria-label="Close navigation menu"]');
+      if (leftNavClose) leftNavClose.click();
+
       closeCustomDropdowns();
       document.body.classList.add('sl-settings-open');
       if (!hasPanel) {
@@ -639,6 +717,18 @@
       }
     } else {
       document.body.classList.remove('sl-settings-open');
+      // Dismiss any lingering backdrops when closing the drawer (if no modal dialog is open)
+      if (!document.querySelector('mat-dialog-container, .mat-mdc-dialog-container')) {
+        const backdrops = document.querySelectorAll('.cdk-overlay-backdrop-showing:not(.mat-mdc-menu-backdrop)');
+        backdrops.forEach(b => {
+          b.classList.remove('cdk-overlay-backdrop-showing');
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        });
+        const orphanedOverlay = document.querySelector('.sidebar-overlay');
+        if (orphanedOverlay && !document.querySelector('.v3-left-nav.expanded, .nav-content.expanded')) {
+          orphanedOverlay.remove();
+        }
+      }
     }
   }
 
@@ -653,21 +743,32 @@
       closeCustomDropdowns();
     }
 
-    // Handle close button click inside run settings drawer
-    const closeBtn = e.target.closest('button[aria-label="Close run settings panel"], button[aria-label="close" i], .close-button');
-    if (closeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleSettingsDrawer(false);
-      return;
+    // Mutual drawer closing: if user clicks left nav toggle, close right settings drawer
+    if (e.target.closest('button[aria-label*="navigation menu" i], .navbar-toggle-button, button[aria-label*="Open nav" i]')) {
+      if (document.body.classList.contains('sl-settings-open')) {
+        toggleSettingsDrawer(false);
+      }
+    }
+
+    // Handle close button click inside run settings drawer STRICTLY scoped to the panel
+    const panel = e.target.closest('ms-right-side-panel, ms-run-settings, .drawer-container:has(ms-run-settings)');
+    if (panel) {
+      const closeBtn = e.target.closest('button[aria-label="Close run settings panel"], button[aria-label*="close" i], .close-button');
+      if (closeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        window._slLastDrawerCloseTime = Date.now();
+        toggleSettingsDrawer(false);
+        return;
+      }
     }
 
     // Close settings drawer if open and clicked outside ms-right-side-panel and not on settings button
     if (document.body.classList.contains('sl-settings-open')) {
-      const panel = e.target.closest('ms-right-side-panel, ms-run-settings, .drawer-container:has(ms-run-settings)');
       const btn = e.target.closest('.sl-header-settings-btn, button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
       const overlay = e.target.closest('.cdk-overlay-container, .sl-custom-dropdown, mat-dialog-container');
       if (!panel && !btn && !overlay) {
+        window._slLastDrawerCloseTime = Date.now();
         toggleSettingsDrawer(false);
       }
     }
@@ -849,6 +950,22 @@
       const nativeTrigger = await ensureRunSettingsMounted();
       if (nativeTrigger) {
         nativeTrigger.click();
+        // Monitor dialog dismissal to clean up any orphaned backdrop left behind
+        const checkCleanup = () => {
+          const dialog = document.querySelector('mat-dialog-container, .mat-mdc-dialog-container');
+          if (!dialog) {
+            if (!document.body.classList.contains('sl-settings-open')) {
+              const backdrops = document.querySelectorAll('.cdk-overlay-backdrop-showing:not(.mat-mdc-menu-backdrop)');
+              backdrops.forEach(b => {
+                b.classList.remove('cdk-overlay-backdrop-showing');
+                b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              });
+            }
+          } else {
+            setTimeout(checkCleanup, 150);
+          }
+        };
+        setTimeout(checkCleanup, 350);
       }
     };
     dropdown.appendChild(moreBtn);
@@ -915,23 +1032,36 @@
     // Update empty chat state (controls '+' visibility in toolbar-left)
     updateEmptyChatState();
 
-    // 1. Move New Chat '+' button to .toolbar-left right after nav toggle
-    const newChatBtn = document.querySelector('button[data-test-clear="outside"], button[aria-label="New chat"]');
-    if (newChatBtn && newChatBtn.parentElement !== toolbarLeft) {
-      if (toolbarLeft.firstElementChild) {
-        toolbarLeft.firstElementChild.after(newChatBtn);
-      } else {
-        toolbarLeft.appendChild(newChatBtn);
+    // 1. Hide/remove New Chat '+' button completely across both mobile and desktop
+    const newChatBtns = document.querySelectorAll('button[data-test-clear="outside"], button[data-test-clear], button[aria-label*="New chat" i], button[aria-label*="New prompt" i]');
+    newChatBtns.forEach(b => {
+      b.style.setProperty('display', 'none', 'important');
+      b.remove();
+    });
+    toolbarLeft.querySelectorAll('button').forEach(b => {
+      const isNav = b.getAttribute('aria-label')?.toLowerCase().includes('nav') || b.getAttribute('aria-label')?.toLowerCase().includes('menu');
+      const isAdd = b.textContent.trim() === 'add' || b.querySelector('.material-symbols-outlined')?.textContent.trim() === 'add';
+      if (!isNav && isAdd) {
+        b.style.setProperty('display', 'none', 'important');
+        b.remove();
       }
-    }
+    });
+    toolbarRight.querySelectorAll('button').forEach(b => {
+      const isAdd = b.textContent.trim() === 'add' || b.querySelector('.material-symbols-outlined')?.textContent.trim() === 'add';
+      if (isAdd && !b.classList.contains('sl-header-btn')) {
+        b.style.setProperty('display', 'none', 'important');
+        b.remove();
+      }
+    });
 
-    // 2. Move overflow menu '⋮' to .toolbar-left right after New chat
+    // 2. Position overflow menu '⋮' in .toolbar-left right after the navigation menu button [☰]
+    const navBtn = toolbarLeft.querySelector('button[aria-label*="nav" i], button[aria-label*="menu" i]') || toolbarLeft.firstElementChild;
     const overflowMenuWrapper = document.querySelector('.overflow-menu-wrapper');
-    if (overflowMenuWrapper && overflowMenuWrapper.parentElement !== toolbarLeft) {
-      if (newChatBtn && newChatBtn.parentElement === toolbarLeft) {
-        newChatBtn.after(overflowMenuWrapper);
-      } else {
-        toolbarLeft.appendChild(overflowMenuWrapper);
+    if (overflowMenuWrapper && navBtn) {
+      if (overflowMenuWrapper.parentElement !== toolbarLeft) {
+        navBtn.after(overflowMenuWrapper);
+      } else if (navBtn.nextElementSibling !== overflowMenuWrapper) {
+        navBtn.after(overflowMenuWrapper);
       }
     }
 
@@ -1005,7 +1135,8 @@
       }
     }
     if (thinkingBtn) {
-      thinkingBtn.style.display = hasThinkingSetting ? 'inline-flex' : 'none';
+      const isMobile = window.innerWidth <= 768;
+      thinkingBtn.style.display = (hasThinkingSetting && !isMobile) ? 'inline-flex' : 'none';
     }
 
     // C. Settings Button (Run Settings trigger):
@@ -1025,6 +1156,7 @@
 
       settingsBtn.onclick = (e) => {
         e.stopPropagation();
+        if (Date.now() - (window._slLastDrawerCloseTime || 0) < 400) return;
         toggleSettingsDrawer();
       };
       toolbarRight.appendChild(settingsBtn);
@@ -1298,8 +1430,17 @@
   }
 
   function checkNativeSavingState() {
-    const nativeSaving = document.querySelector('.toolbar-saving-indicator, ms-drive-save-indicator, .saving-status.visible');
-    if (nativeSaving) {
+    const indicators = Array.from(document.querySelectorAll('.toolbar-saving-indicator, ms-drive-save-indicator, .saving-status.visible'));
+    const isActivelySaving = indicators.some(el => {
+      // Ignore static save indicators inside menus (e.g. overflow menu "Saved to Drive" checkmark)
+      if (el.closest('.mat-mdc-menu-panel, .toolbar-overflow-menu, .mat-mdc-menu-content')) return false;
+      const text = (el.textContent || '').toLowerCase();
+      const hasSpinner = !!el.querySelector('mat-progress-spinner, mat-spinner, .spinner, .saving-spinner');
+      const isSavingClass = el.classList.contains('saving') || el.classList.contains('is-saving') || (el.classList.contains('saving-status') && el.classList.contains('visible'));
+      return hasSpinner || isSavingClass || text.includes('saving');
+    });
+
+    if (isActivelySaving) {
       showSavingIndicator();
     } else if (savingPillEl && savingPillEl.classList.contains('sl-visible') && !savingHideTimeout) {
       hideSavingIndicator(400);

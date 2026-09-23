@@ -240,6 +240,7 @@
         bottom: -4px !important;
         top: auto !important;
         min-width: 220px;
+        max-width: calc(100vw - 24px) !important;
         background: #1f1f1f !important;
         border: 1px solid #262626 !important;
         border-radius: 12px !important;
@@ -259,8 +260,9 @@
         width: 16px;
         height: 100%;
     }
-    /* Pure CSS hover — no JS events, no flickering */
-    .sl-hover-wrapper:hover > .sl-custom-submenu {
+    /* Pure CSS hover & click toggle support */
+    .sl-hover-wrapper:hover > .sl-custom-submenu,
+    .sl-hover-wrapper.sl-submenu-open > .sl-custom-submenu {
         display: flex !important;
     }
 
@@ -516,9 +518,31 @@
         pointer-events: auto !important;
     }
 
-    /* Hide + button in toolbar-left when in an empty or new chat */
-    body.sl-empty-chat .toolbar-left > button[data-test-clear="outside"],
-    body.sl-empty-chat .toolbar-left > button[aria-label="New chat"] {
+    /* Completely remove New Chat '+' button everywhere across both mobile and PC */
+    button[data-test-clear],
+    button[data-test-clear="outside"],
+    button[aria-label*="New chat" i],
+    button[aria-label*="New prompt" i],
+    .toolbar-left > button[data-test-clear],
+    .toolbar-left > button[aria-label*="New chat" i],
+    .toolbar-right > button[data-test-clear],
+    .toolbar-right > button[aria-label*="New chat" i],
+    .toolbar-left > button:has(> .material-symbols-outlined:is(.add)),
+    .toolbar-right > button:has(> .material-symbols-outlined:is(.add)) {
+        display: none !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Hide native unstyled Share item in overflow menu (we provide styled 'Share prompt' item) */
+    .toolbar-overflow-menu .mat-mdc-menu-item:has(> .material-symbols-outlined:is(.share)):not(.sl-injected-header-item),
+    .toolbar-overflow-menu button.mat-mdc-menu-item[data-test-share]:not(.sl-injected-header-item),
+    .toolbar-overflow-menu button.mat-mdc-menu-item:is([aria-label*="Share" i]):not(.sl-injected-header-item) {
         display: none !important;
     }
 
@@ -556,10 +580,8 @@
     }
 
     /* UNIFORM SQUIRCLE FROSTED-GLASS BUTTONS FOR FLOATING HEADER (matches prompt box 12px squircle) */
-    .toolbar-left > button,
+    .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]),
     .toolbar-left .overflow-menu-wrapper > button,
-    .toolbar-right > button[data-test-clear="outside"],
-    .toolbar-right > button[aria-label="New chat"],
     .toolbar-right .overflow-menu-wrapper > button,
     .sl-header-btn {
         background: rgba(40, 40, 42, 0.35) !important;
@@ -587,7 +609,7 @@
         vertical-align: middle !important;
     }
 
-    .toolbar-left > button,
+    .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]),
     .toolbar-left .overflow-menu-wrapper > button,
     .sl-header-settings-btn {
         width: 32px !important;
@@ -605,10 +627,8 @@
         color: rgba(255, 255, 255, 0.85) !important;
     }
 
-    .toolbar-left > button:hover,
+    .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]):hover,
     .toolbar-left .overflow-menu-wrapper > button:hover,
-    .toolbar-right > button[data-test-clear="outside"]:hover,
-    .toolbar-right > button[aria-label="New chat"]:hover,
     .toolbar-right .overflow-menu-wrapper > button:hover,
     .sl-header-btn:hover {
         background: rgba(65, 65, 70, 0.6) !important;
@@ -616,10 +636,8 @@
         color: #ffffff !important;
     }
 
-    .toolbar-left > button .material-symbols-outlined,
+    .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]) .material-symbols-outlined,
     .toolbar-left .overflow-menu-wrapper > button .material-symbols-outlined,
-    .toolbar-right > button[data-test-clear="outside"] .material-symbols-outlined,
-    .toolbar-right > button[aria-label="New chat"] .material-symbols-outlined,
     .toolbar-right .overflow-menu-wrapper > button .material-symbols-outlined,
     .sl-header-btn .material-symbols-outlined {
         display: inline-flex !important;
@@ -719,20 +737,9 @@
         pointer-events: none !important;
     }
 
-    /* Right side panel styling matching left nav (#191919 background & #262626 border) */
-    body:not(.sl-settings-open) ms-right-side-panel,
-    body:not(.sl-settings-open) .drawer-container {
-        display: none !important;
-        width: 0 !important;
-        min-width: 0 !important;
-        max-width: 0 !important;
-        overflow: hidden !important;
-        pointer-events: none !important;
-        visibility: hidden !important;
-    }
-
-    body.sl-settings-open ms-right-side-panel,
-    body.sl-settings-open .drawer-container:has(ms-run-settings) {
+    /* Right side panel styling matching left nav (#191919 background & #262626 border) with smooth slide animation */
+    ms-right-side-panel,
+    .drawer-container:has(ms-run-settings) {
         display: flex !important;
         position: fixed !important;
         top: 0 !important;
@@ -745,11 +752,19 @@
         background: #191919 !important;
         border-left: 1px solid #262626 !important;
         box-shadow: none !important;
-        pointer-events: auto !important;
-        opacity: 1 !important;
-        animation: slSlideIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+        transform: translateX(100%) !important;
+        transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.22s ease !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
         isolation: isolate !important;
         overflow-y: auto !important;
+    }
+
+    body.sl-settings-open ms-right-side-panel,
+    body.sl-settings-open .drawer-container:has(ms-run-settings) {
+        transform: translateX(0) !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
     }
 
     ms-right-side-panel .overlay-header {
@@ -772,9 +787,21 @@
         background: #191919 !important;
     }
 
-    /* NO BLURRY BACKDROP: user maintains clear interactive view of chat */
+    /* NO PHANTOM BACKDROPS: prevent lingering dark overlays when drawer or dialog is closed */
     .sl-drawer-backdrop {
         display: none !important;
+    }
+
+    body:not(.sl-settings-open):not(:has(.v3-left-nav.expanded)):not(:has(.nav-content.expanded)) .sidebar-overlay {
+        display: none !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+    }
+
+    body:not(.sl-settings-open) .cdk-overlay-backdrop:not(:has(~ .cdk-overlay-pane mat-dialog-container)):not(:has(~ .cdk-overlay-pane .mat-mdc-dialog-container)):not(:has(~ .cdk-overlay-pane .mat-mdc-menu-panel)) {
+        display: none !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
     }
 
     /* Hide duplicated header items inside Run Settings drawer cleanly without breaking DOM clicks */
@@ -932,6 +959,8 @@
     ms-prompt-box .prompt-box-container,
     .prompt-box-container,
     .dragging-overlay {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
         margin-bottom: 0 !important;
     }
 
@@ -1221,9 +1250,49 @@
         font-weight: 500 !important;
     }
 
+    /* ── Load banner (Smart Optimizer restore area) ─────────────────── */
+    .sl-load-banner {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding: 4px 0 12px 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+    }
+
+    .sl-load-banner button {
+        background: rgba(40, 40, 42, 0.45) !important;
+        backdrop-filter: blur(20px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 12px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 0 14px !important;
+        font-family: 'Google Sans', Roboto, sans-serif !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        box-shadow: none !important;
+        cursor: pointer !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: all 0.15s ease !important;
+        white-space: nowrap !important;
+    }
+
+    .sl-load-banner button:hover {
+        background: rgba(65, 65, 70, 0.65) !important;
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        color: #ffffff !important;
+    }
+
     /* ── PART 6: GEMINI-STYLE CHAT MESSAGES & MEDIA ─────────────────────── */
 
-    /* Center the chat column with max-width for optimal reading, clearance for floating header (68px) and floating prompt box (240px) */
+    /* Center the chat column with max-width for optimal reading, clearance for floating header (48px) and floating prompt box (240px) */
     .chat-session-content {
         display: flex !important;
         flex-direction: row !important;
@@ -1233,7 +1302,7 @@
         max-width: 900px !important;
         margin: 0 auto !important;
         width: 100% !important;
-        padding: 68px 16px 240px 16px !important;
+        padding: 48px 16px 240px 16px !important;
         box-sizing: border-box !important;
     }
 
@@ -1789,11 +1858,8 @@
         outline: none !important;
         box-shadow: none !important;
         padding: 0 !important;
-        max-height: 480px !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+        max-height: none !important;
+        overflow: visible !important;
         width: 100% !important;
         box-sizing: border-box !important;
     }
@@ -1806,11 +1872,16 @@
         box-shadow: none !important;
         color: #ffffff !important;
         width: 100% !important;
-        padding: 0 0 8px 0 !important;
-        overflow: hidden !important;
+        padding: 6px 0 12px 0 !important;
+        margin: 0 !important;
+        line-height: 1.6 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
         resize: none !important;
-        max-height: none !important;
+        max-height: 440px !important;
         box-sizing: border-box !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
     }
 
     /* User Turn Edit Mode: right-aligned, transparent container, clean inner box */
@@ -1829,14 +1900,10 @@
         background: #1e1f20 !important;
         border: 1.5px solid #8ab4f8 !important;
         border-radius: 20px !important;
-        padding: 16px 20px 22px 20px !important;
+        padding: 14px 20px 16px 20px !important;
         box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2) !important;
-        max-height: 480px !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scroll-padding-bottom: 22px !important;
-        scrollbar-width: thin !important;
-        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+        max-height: none !important;
+        overflow: visible !important;
         width: 100% !important;
         min-width: 320px !important;
         box-sizing: border-box !important;
@@ -1848,13 +1915,18 @@
         border: none !important;
         outline: none !important;
         box-shadow: none !important;
-        padding: 0 0 12px 0 !important;
-        overflow: hidden !important;
+        padding: 6px 0 12px 0 !important;
+        margin: 0 !important;
+        line-height: 1.6 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
         resize: none !important;
-        max-height: none !important;
+        max-height: 440px !important;
         color: #ffffff !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
     }
 
     /* General standalone textareas (if any without ms-autosize-textarea) */
@@ -2216,7 +2288,7 @@
 
     @media screen and (max-width: 1024px) {
         .chat-session-content {
-            padding: 0 16px 36px 16px !important;
+            padding: 64px 16px 200px 16px !important;
         }
         .chat-turn-container.user {
             max-width: 88% !important;
@@ -2232,8 +2304,26 @@
             display: none !important;
         }
 
+        /* Mobile: hide thinking level in header; restore inside Run Settings drawer */
+        .sl-header-thinking-btn {
+            display: none !important;
+        }
+
+        ms-run-settings ms-thinking-level-setting,
+        ms-run-settings .field-group:has(ms-thinking-level-setting),
+        ms-run-settings ms-thinking-budget-slider,
+        ms-run-settings div:has(> ms-thinking-budget-slider) {
+            position: static !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            height: auto !important;
+            overflow: visible !important;
+            margin: inherit !important;
+            padding: inherit !important;
+        }
+
         .chat-session-content {
-            padding: 0 10px 28px 10px !important;
+            padding: 64px 16px 200px 16px !important;
             max-width: 100% !important;
         }
 
@@ -2249,7 +2339,9 @@
         .chat-turn-container.user.edit ms-autosize-textarea {
             min-width: 100% !important;
             width: 100% !important;
-            padding: 12px 14px 20px 14px !important;
+            padding: 12px 14px 14px 14px !important;
+            max-height: none !important;
+            overflow: visible !important;
         }
 
         /* Compact cards on mobile (96x96px) */

@@ -468,6 +468,13 @@
     overrideModelId = null;
   });
 
+  // Dynamic tool toggling via DynamicStudioAPI signal
+  window.addEventListener('__sl_setTool', (e) => {
+    if (e.detail && e.detail.name) {
+      DynamicStudioAPI.setTool(e.detail.name, e.detail.enabled);
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════════════
   // TELEMETRY & ROUTING PATTERNS
   // ═══════════════════════════════════════════════════════════════════

@@ -163,6 +163,61 @@
       line-height: 1;
     }
 
+    /* ── Mobile Heading Dropdown (H ▾) ─────────────────────────────── */
+    .sl-fmt-heading-dropdown {
+      display: none;
+      position: relative;
+    }
+    .sl-fmt-heading-btn {
+      width: 32px !important;
+      font-weight: 600;
+    }
+    .sl-fmt-heading-menu {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 6px;
+      background: #1f1f1f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 4px;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      z-index: 1001;
+    }
+    .sl-fmt-heading-dropdown.sl-open .sl-fmt-heading-menu {
+      display: flex;
+    }
+    .sl-fmt-heading-item {
+      background: transparent;
+      border: none;
+      color: #d4d4d4;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sl-fmt-heading-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    @media screen and (max-width: 768px) {
+      .sl-fmt-btn[data-action="h1"],
+      .sl-fmt-btn[data-action="h2"],
+      .sl-fmt-btn[data-action="h3"] {
+        display: none !important;
+      }
+      .sl-fmt-heading-dropdown {
+        display: flex !important;
+      }
+    }
+
     /* ── Toggle button (in footer button row) ──────────────────────── */
     .sl-fmt-toggle {
       display: flex;
@@ -368,6 +423,8 @@
     tb.setAttribute('role', 'toolbar');
     tb.setAttribute('aria-label', 'Text formatting options');
 
+    let headingDropdownAdded = false;
+
     buttons.forEach(btn => {
       if (btn.type === 'separator') {
         const sep = document.createElement('div');
@@ -376,9 +433,50 @@
         return;
       }
 
+      // Add compact mobile heading dropdown right before h1
+      if (btn.action === 'h1' && !headingDropdownAdded) {
+        headingDropdownAdded = true;
+        const hDrop = document.createElement('div');
+        hDrop.className = 'sl-fmt-heading-dropdown';
+
+        const hBtn = document.createElement('button');
+        hBtn.type = 'button';
+        hBtn.className = 'sl-fmt-btn sl-fmt-heading-btn';
+        hBtn.title = 'Headings';
+        hBtn.setAttribute('aria-label', 'Headings');
+        hBtn.innerHTML = '<span class="sl-fmt-btn-text">H ▾</span>';
+
+        const hMenu = document.createElement('div');
+        hMenu.className = 'sl-fmt-heading-menu';
+
+        ['h1', 'h2', 'h3'].forEach((hAct, i) => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'sl-fmt-heading-item';
+          item.textContent = `H${i + 1}`;
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            applyFormatting(activeTextarea, hAct);
+            hDrop.classList.remove('sl-open');
+          });
+          hMenu.appendChild(item);
+        });
+
+        hBtn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          hDrop.classList.toggle('sl-open');
+        });
+
+        hDrop.appendChild(hBtn);
+        hDrop.appendChild(hMenu);
+        tb.appendChild(hDrop);
+      }
+
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'sl-fmt-btn';
+      if (btn.action) button.setAttribute('data-action', btn.action);
       button.title = btn.title;
       button.setAttribute('aria-label', btn.title);
 
@@ -982,5 +1080,11 @@
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.dispatchEvent(new Event('change', { bubbles: true }));
   }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.sl-fmt-heading-dropdown')) {
+      document.querySelectorAll('.sl-fmt-heading-dropdown.sl-open').forEach(d => d.classList.remove('sl-open'));
+    }
+  });
 
 })();

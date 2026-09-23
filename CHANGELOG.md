@@ -1,5 +1,44 @@
 # Studio.lab Changelog
 
+## v2.0-preview-4-hotfix-2
+**Mobile Viewport Overhaul, Mutual Drawer Closing, Clean Header Hierarchy & Robust UX Alignment**
+
+`Modern Web Chat` module.
+* **Fixed:** `Header Layout & Element Sequence`.
+  * *Clean Control Hierarchy:* Restructured `.toolbar-left` so the navigation menu drawer toggle `[☰]` is always first, followed immediately by the overflow menu `[⋮]`.
+  * *Absolute New Chat Button Removal:* Completely eliminated the redundant `+` (New chat) button across both desktop and mobile viewports, purging rogue CSS rules that unintentionally styled it as a rectangular button and ensuring Angular cannot re-inject it.
+  * *Responsive Thinking Level Placement:* Moved thinking level selector into the right panel on mobile viewports ($\le 768\text{px}$) matching native Google AI Studio behavior, preventing toolbar crowding while keeping it in the desktop header where space is abundant.
+* **Fixed:** `Mutual Drawer Closing & Phantom Overlay Cleanup`.
+  * *Mutual Drawer Toggling:* Opening the right settings drawer automatically closes the left navigation menu, and triggering the left navigation menu immediately closes the right drawer, eliminating confusing drawer overlaps on mobile.
+  * *Lingering Dimming Overlay Dismissal:* Eliminated stuck `.sidebar-overlay` and orphaned `.cdk-overlay-backdrop` elements after closing drawers or the "More models..." dialog, allowing instant scrolling without requiring clicks on empty space.
+* **Fixed:** `Single Styled "Share prompt" in Overflow Menu`.
+  * *Native Share Item Hidden:* Corrected ligature-based CSS and JS filtering to hide the unstyled native "Share" item on both empty and active chats, displaying only the styled "Share prompt" action.
+* **Fixed:** `Turn Textarea Edit Slicing & Scroll Trapping`.
+  * *Ascender Protection:* Added dedicated top padding (`padding: 6px 0 12px 0`) to user and model turn edit textareas, preventing the tops of capital letters from being horizontally sliced off under the rounded container border.
+  * *Native-Feel Smooth Scrolling:* Moved `overflow-y: auto` directly onto the textarea with thin scrollbar styling, setting `overflow: visible` and `max-height: none` on `ms-autosize-textarea` to prevent scroll traps.
+* **Fixed:** `Prompt Box & Content Spacing Alignment`.
+  * *Desktop Safe Area Clearance:* Reduced desktop chat content top padding from `68px` to `48px`, bringing content closer to the floating header and eliminating excessive dead space.
+  * *Pixel-Perfect 16px Edge Margins:* Eliminated native `12px` horizontal margins on `ms-prompt-box .prompt-box-container`, aligning the prompt box edge-to-edge with the header's 16px clearance.
+* **Fixed:** `Right Sidebar Animation & Close (X) Ghost-Click Loop`.
+  * *Smooth Slide-Out Animation:* Replaced abrupt `display: none` toggles with hardware-accelerated `transform: translateX(100%)` transitions (`0.22s cubic-bezier(0.4, 0, 0.2, 1)`), smoothly matching the left navigation drawer.
+  * *Ghost Re-Open Prevention:* Scoped close button interception strictly to `ms-right-side-panel` and added timestamp debouncing (`_slLastDrawerCloseTime`) on `.sl-header-settings-btn.onclick` to prevent pointer release events from immediately re-triggering the drawer.
+  * *Native Dialog Close Buttons Restored:* Removed global `button[aria-label="close" i]` capture listeners, ensuring native Google AI Studio modals (Camera, Paid API key, Drive picker) close without interference.
+
+`Smart Optimizer` module.
+* **Fixed:** `Restore Button Squircle Styling & Compact Spacing`.
+  * *Header-Matched Squircle Buttons:* Styled `.sl-load-banner button` with frosted-glass squircle aesthetics (`border-radius: 12px`, `height: 32px`, `background: rgba(40, 40, 42, 0.45)`, `backdrop-filter: blur(20px)`), perfectly harmonizing with header buttons.
+  * *Compact Banner Padding:* Reduced banner padding to `4px 0 12px 0`, eliminating awkward gaps above the chat conversation.
+
+`Core Architecture & Styling Engine`.
+* **Fixed:** `Sidebar Z-Index Hierarchy (Modern Web Chat Disabled)`.
+  * *Stacking Context Fix:* In `sl-panel.css`, eliminated forced high `z-index` (10, 11) on `footer` and `ms-prompt-box`. Assigned `z-index: 1000 !important` to mobile sliding drawers (`.v3-left-nav`, `ms-navbar-v2`, `ms-right-side-panel`, `mat-sidenav`), ensuring sidebars never render underneath the prompt box on mobile when Modern Web Chat is toggled off.
+* **Added:** `__sl_setTool Direct Signal Listener`.
+  * *Instant Tool Synchronization:* In `interceptor.js`, added listener for `__sl_setTool` delegating directly to `DynamicStudioAPI.setTool(name, enabled)` for zero-latency tool manipulation in the main world.
+
+`Text Formatter` module.
+* **Added:** `Mobile Combined Heading Dropdown (H ▾)`.
+  * *Compact Space-Saving Control:* On viewports $\le 768\text{px}$, individual `H1`, `H2`, `H3` buttons are condensed into a single `H ▾` dropdown button, saving over 60px of toolbar width and preventing awkward line wraps on mobile.
+
 ## v2.0-preview-4-hotfix-1
 **Smart Optimizer Immediate Chat Entry & Selective Turn Navigator Restoration**
 
