@@ -735,6 +735,16 @@
         pointer-events: none !important;
     }
 
+    /* Programmatic Featured sync/selection must not flash AI Studio's picker. */
+    body.sl-syncing-model-picker mat-dialog-container,
+    body.sl-syncing-model-picker .cdk-overlay-pane:has(mat-dialog-container),
+    body.sl-syncing-model-picker .ms-sliding-right-panel-dialog,
+    body.sl-syncing-model-picker .cdk-overlay-backdrop:not(.mat-mdc-menu-backdrop) {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
     /* Right side panel styling matching left nav (#191919 background & #262626 border) with smooth slide animation */
     ms-right-side-panel,
     .drawer-container:has(ms-run-settings) {

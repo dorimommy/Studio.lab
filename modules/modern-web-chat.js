@@ -93,7 +93,7 @@
     }
   }
 
-  function ensureRunSettingsMounted() {
+  function ensureToolsRunSettingsMounted() {
     let rs = document.querySelector('ms-run-settings');
     if (!rs) {
       const openBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
@@ -131,7 +131,7 @@
       }
     }
 
-    ensureRunSettingsMounted();
+    ensureToolsRunSettingsMounted();
 
     // 3. Direct toggle via ms-run-settings switches
     const runSwitches = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-prompt-run-settings mat-slide-toggle'));
@@ -553,23 +553,13 @@
   let cachedModelName = '';
   let cachedModelId = '';
 
-  const DEFAULT_FEATURED_MODELS = [
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
-  ];
+  let featuredModels = [];
+  let featuredSyncedAt = 0;
+  let featuredSyncPromise = null;
+  let modelDropdownOpening = false;
 
   function getFeaturedModels() {
-    try {
-      const cached = localStorage.getItem('sl_featured_models');
-      if (cached) {
-        const list = JSON.parse(cached);
-        if (Array.isArray(list) && list.length > 0) {
-          return list.slice(0, 3);
-        }
-      }
-    } catch (e) {}
-    return DEFAULT_FEATURED_MODELS;
+    return featuredModels;
   }
 
   function getAvailableThinkingLevels() {
@@ -583,7 +573,7 @@
   let cachedThinkingLevel = 'Low';
 
   function formatModelSlug(slug) {
-    if (!slug) return 'Gemini 2.5 Flash';
+    if (!slug) return 'Select model';
     return slug
       .replace(/^models\//, '')
       .replace(/^gemini-/i, 'Gemini ')
@@ -599,9 +589,25 @@
   }
 
   function getModelDisplayName() {
-    if (cachedModelName) {
+    // The native card and URL are authoritative. A previous custom-menu label
+    // must never mask a model selected in AI Studio itself.
+    const nativeModel = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
+    const nativeName = document.querySelector('ms-model-selector .title')?.textContent.trim();
+    if (nativeModel && nativeName) {
+      cachedModelId = nativeModel.replace(/^models\//, '');
+      cachedModelName = nativeName;
       return cachedModelName;
     }
+    const urlModel = new URLSearchParams(window.location.search).get('model');
+    if (urlModel) {
+      const id = urlModel.replace(/^models\//, '');
+      if (cachedModelId !== id || !cachedModelName) {
+        cachedModelId = id;
+        cachedModelName = getFeaturedModels().find(model => model.id === id)?.name || formatModelSlug(id);
+      }
+      return cachedModelName;
+    }
+    if (cachedModelName) return cachedModelName;
     try {
       if (typeof window.DynamicStudioAPI !== 'undefined' && typeof window.DynamicStudioAPI.getModel === 'function') {
         const m = window.DynamicStudioAPI.getModel();
@@ -623,28 +629,7 @@
       cachedModelName = formatModelSlug(nativeModelTag.textContent.trim());
       return cachedModelName;
     }
-    try {
-      const urlParam = new URLSearchParams(window.location.search).get('model');
-      if (urlParam) {
-        cachedModelId = urlParam;
-        cachedModelName = formatModelSlug(urlParam);
-        return cachedModelName;
-      }
-    } catch (_) {}
-
-    try {
-      const saved = localStorage.getItem('sl_last_selected_model');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.name) {
-          cachedModelName = parsed.name;
-          cachedModelId = parsed.id || '';
-          return cachedModelName;
-        }
-      }
-    } catch (_) {}
-
-    return 'Gemini 2.5 Flash';
+    return 'Select model';
   }
 
   function getSelectedThinkingLevel() {
@@ -703,13 +688,15 @@
     const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sl-settings-open');
 
     if (shouldOpen) {
-      // Mutual drawer closing: close left nav if currently open
-      const leftNavOverlay = document.querySelector('.sidebar-overlay');
-      if (leftNavOverlay) {
-        leftNavOverlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      // On narrow screens the drawers overlap; on desktop they can coexist.
+      if (window.innerWidth <= 768) {
+        const leftNavOverlay = document.querySelector('.sidebar-overlay');
+        if (leftNavOverlay) {
+          leftNavOverlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
+        const leftNavClose = document.querySelector('.v3-left-nav.expanded button[aria-label*="close" i], button[aria-label="Close navigation menu"]');
+        if (leftNavClose) leftNavClose.click();
       }
-      const leftNavClose = document.querySelector('.v3-left-nav.expanded button[aria-label*="close" i], button[aria-label="Close navigation menu"]');
-      if (leftNavClose) leftNavClose.click();
 
       closeCustomDropdowns();
       document.body.classList.add('sl-settings-open');
@@ -746,11 +733,10 @@
       closeCustomDropdowns();
     }
 
-    // Mutual drawer closing: if user clicks left nav toggle, close right settings drawer
-    if (e.target.closest('button[aria-label*="navigation menu" i], .navbar-toggle-button, button[aria-label*="Open nav" i]')) {
-      if (document.body.classList.contains('sl-settings-open')) {
-        toggleSettingsDrawer(false);
-      }
+    const leftNavToggle = e.target.closest('button[aria-label*="navigation menu" i], .navbar-toggle-button, button[aria-label*="Open nav" i]');
+    // Mutual closing remains necessary on mobile, where the drawers overlap.
+    if (window.innerWidth <= 768 && leftNavToggle && document.body.classList.contains('sl-settings-open')) {
+      toggleSettingsDrawer(false);
     }
 
     // Handle close button click inside run settings drawer STRICTLY scoped to the panel
@@ -770,7 +756,8 @@
     if (document.body.classList.contains('sl-settings-open')) {
       const btn = e.target.closest('.sl-header-settings-btn, button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
       const overlay = e.target.closest('.cdk-overlay-container, .sl-custom-dropdown, mat-dialog-container');
-      if (!panel && !btn && !overlay) {
+      const desktopLeftNav = window.innerWidth > 768 && (leftNavToggle || e.target.closest('.v3-left-nav, .nav-content, ms-nav-items-main-v2, .sidebar-overlay'));
+      if (!panel && !btn && !overlay && !desktopLeftNav) {
         window._slLastDrawerCloseTime = Date.now();
         toggleSettingsDrawer(false);
       }
@@ -795,45 +782,112 @@
     globalHandlersAttached = false;
   }
 
+  function findModelDialog() {
+    return Array.from(document.querySelectorAll('mat-dialog-container, .mat-mdc-dialog-container'))
+      .find(dialog => Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
+        .some(button => button.textContent.trim() === 'Featured')) || null;
+  }
+
   function syncFeaturedModelsFromDialog(dialog) {
-    if (!dialog) return;
-    try {
-      const cards = Array.from(dialog.querySelectorAll('button.content-button'));
-      const found = [];
-      cards.forEach(c => {
-        const txt = c.textContent || '';
-        const m = txt.match(/gemini-[\w\.\-]+/i);
-        const titleMatch = txt.match(/(?:spark\s+)?(Gemini\s+[\d\.]+\s+[\w\s]+?)(?:New|Paid|gemini|info|$)/i);
-        if (m && found.length < 3) {
-          const id = m[0];
-          let name = titleMatch ? titleMatch[1].trim() : formatModelSlug(id);
-          name = name.replace(/^spark\s+/i, '').trim();
-          if (!found.some(f => f.id === id)) {
-            found.push({ id, name });
-          }
+    if (!dialog) return false;
+    const featuredTab = Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
+      .find(button => button.textContent.trim() === 'Featured');
+    if (!featuredTab || featuredTab.getAttribute('aria-selected') !== 'true') return false;
+
+    const prefix = 'model-carousel-row-models/';
+    const rows = Array.from(dialog.querySelectorAll('button.content-button[id^="' + prefix + '"]'));
+    const models = rows.slice(0, 3).map(row => ({
+      id: row.id.slice(prefix.length),
+      name: row.querySelector('.model-title-text')?.textContent.trim() || ''
+    }));
+    if (models.length !== 3 || models.some(model => !model.id || !model.name)) return false;
+
+    featuredModels = models;
+    featuredSyncedAt = Date.now();
+    return true;
+  }
+
+  async function waitForModelValue(read, timeout = 2500) {
+    const until = performance.now() + timeout;
+    let value = read();
+    while (!value && performance.now() < until) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      value = read();
+    }
+    return value;
+  }
+
+  async function refreshFeaturedModels() {
+    if (featuredSyncPromise) return featuredSyncPromise;
+    featuredSyncPromise = (async () => {
+      let dialog = findModelDialog();
+      const openedByUs = !dialog;
+      const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
+      if (openedByUs) document.body.classList.add('sl-syncing-model-picker');
+      try {
+        if (!dialog) {
+          const trigger = await ensureRunSettingsMounted();
+          if (!trigger || !isEnabled()) return false;
+          trigger.click();
+          dialog = await waitForModelValue(findModelDialog);
         }
-      });
-      if (found.length >= 3) {
-        localStorage.setItem('sl_featured_models', JSON.stringify(found));
+        if (!dialog) return false;
+        const featuredTab = Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
+          .find(button => button.textContent.trim() === 'Featured');
+        if (featuredTab && featuredTab.getAttribute('aria-selected') !== 'true') featuredTab.click();
+        const synced = await waitForModelValue(() => syncFeaturedModelsFromDialog(dialog));
+        return !!synced;
+      } finally {
+        if (openedByUs) {
+          dialog?.querySelector('button[aria-label="Close panel"]')?.click();
+          await waitForModelValue(() => !findModelDialog(), 2000);
+          if (!hadNativeSelector) document.querySelector('button[aria-label="Close run settings panel"]')?.click();
+          document.body.classList.remove('sl-syncing-model-picker');
+        }
       }
-    } catch (e) {}
+    })();
+    try { return await featuredSyncPromise; }
+    finally { featuredSyncPromise = null; }
   }
 
   async function selectNativeModel(modelId, modelName) {
-    cachedModelName = modelName;
-    cachedModelId = modelId;
+    const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
+    let selected = false;
+    document.body.classList.add('sl-syncing-model-picker');
     try {
-      localStorage.setItem('sl_last_selected_model', JSON.stringify({ id: modelId, name: modelName }));
-    } catch (_) {}
+      const trigger = await ensureRunSettingsMounted();
+      if (!trigger || !isEnabled()) return false;
+      trigger.click();
+      const dialog = await waitForModelValue(findModelDialog);
+      if (!dialog) return false;
+      const featuredTab = Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
+        .find(button => button.textContent.trim() === 'Featured');
+      if (featuredTab && featuredTab.getAttribute('aria-selected') !== 'true') featuredTab.click();
+      await waitForModelValue(() => syncFeaturedModelsFromDialog(dialog));
+      const row = await waitForModelValue(() => Array.from(dialog.querySelectorAll('button.content-button[id]'))
+        .find(button => button.id === 'model-carousel-row-models/' + modelId));
+      if (!row) return false; // Reveal the native picker so the user can choose manually.
 
-    // 1. Immediately update UI button label without any DOM flicker or delay
-    const lbl = document.querySelector('.sl-header-model-btn .model-label');
-    if (lbl) lbl.textContent = modelName;
-
-    // 2. Dispatch __sl_setModel to MAIN world interceptor to update Angular 19 Writable Signal & XHR/fetch override
-    window.dispatchEvent(new CustomEvent('__sl_setModel', {
-      detail: { modelId, model: modelId, modelName }
-    }));
+      window.dispatchEvent(new CustomEvent('__sl_clearModelOverride'));
+      row.click();
+      selected = !!(await waitForModelValue(() => {
+        const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
+        const urlId = new URLSearchParams(window.location.search).get('model');
+        return nativeId === modelId || urlId === modelId;
+      }));
+      if (!selected) return false;
+      cachedModelId = modelId;
+      cachedModelName = modelName;
+      const label = document.querySelector('.sl-header-model-btn .model-label');
+      if (label) label.textContent = modelName;
+      return true;
+    } finally {
+      if (selected) {
+        await waitForModelValue(() => !findModelDialog(), 2000);
+        if (!hadNativeSelector) document.querySelector('button[aria-label="Close run settings panel"]')?.click();
+      }
+      document.body.classList.remove('sl-syncing-model-picker');
+    }
   }
 
   // Listen for model change notifications from interceptor or other components
@@ -849,20 +903,12 @@
     }
   });
 
-  window.addEventListener('__sl_featuredModels', (e) => {
-    if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
-      try {
-        localStorage.setItem('sl_featured_models', JSON.stringify(e.detail));
-      } catch (_) {}
-    }
-  });
-
   async function selectNativeThinkingLevel(level) {
     cachedThinkingLevel = level;
     const lbl = document.querySelector('.sl-header-thinking-btn .thinking-label');
     if (lbl) lbl.textContent = level;
 
-    ensureRunSettingsMounted();
+    await ensureRunSettingsMounted();
     document.body.classList.add('sl-switching-model');
 
     let select = document.querySelector('mat-select[aria-label="Thinking Level"], ms-thinking-level-setting mat-select, ms-run-settings mat-select[aria-label*="hinking"]');
@@ -898,13 +944,25 @@
     }, 150);
   }
 
-  function openModelDropdown(button) {
+  async function openModelDropdown(button) {
     const existing = document.querySelector('.sl-model-dropdown');
     if (existing) {
       existing.remove();
       return;
     }
+    if (modelDropdownOpening) return;
+    modelDropdownOpening = true;
     closeCustomDropdowns();
+    try {
+      if (featuredModels.length !== 3 || Date.now() - featuredSyncedAt > 5 * 60 * 1000) {
+        await refreshFeaturedModels();
+      }
+    } catch (_) {
+      // The native picker remains available through "More models" below.
+    } finally {
+      modelDropdownOpening = false;
+    }
+    if (!isEnabled()) return;
 
     const currentName = getModelDisplayName().toLowerCase();
     const dropdown = document.createElement('div');
@@ -928,16 +986,21 @@
       item.appendChild(itemTitle);
       item.appendChild(check);
 
-      item.onclick = (e) => {
+      item.onclick = async (e) => {
         e.stopPropagation();
         closeCustomDropdowns();
-        const lbl = button.querySelector('.model-label');
-        if (lbl) lbl.textContent = m.name;
-        selectNativeModel(m.id, m.name);
+        await selectNativeModel(m.id, m.name);
       };
 
       dropdown.appendChild(item);
     });
+
+    if (models.length === 0) {
+      const unavailable = document.createElement('div');
+      unavailable.className = 'sl-dropdown-item';
+      unavailable.textContent = 'Featured models unavailable';
+      dropdown.appendChild(unavailable);
+    }
 
     const divider = document.createElement('div');
     divider.className = 'sl-dropdown-divider';
@@ -1926,6 +1989,7 @@
 
   function performDOMUpdates() {
     if (!isEnabled()) return;
+    syncFeaturedModelsFromDialog(findModelDialog());
     relocateToolsBar();
     modifyPlusMenu();
     modifyHeaderMenu();
