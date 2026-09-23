@@ -13,20 +13,35 @@
   // ═══════════════════════════════════════════════════════════════════
   const _candidateLViewMaps = new Set();
   const _origMapSet = Map.prototype.set;
-  Map.prototype.set = function (key, value) {
+  let mapCaptureTimeout;
+  let mapCaptureActive = true;
+  function captureMapSet(key, value) {
     if (typeof key === 'number' && Array.isArray(value) && value.length > 20) {
       _candidateLViewMaps.add(this);
+      // Bound retained maps while waiting for an Angular DOM context to identify the registry.
+      if (_candidateLViewMaps.size > 64) {
+        _candidateLViewMaps.delete(_candidateLViewMaps.values().next().value);
+      }
       window.__NG_LVIEW_MAPS__ = _candidateLViewMaps;
     }
     return _origMapSet.apply(this, arguments);
-  };
+  }
+  Map.prototype.set = captureMapSet;
+
+  function stopMapCapture() {
+    mapCaptureActive = false;
+    if (Map.prototype.set === captureMapSet) Map.prototype.set = _origMapSet;
+    clearTimeout(mapCaptureTimeout);
+    _candidateLViewMaps.clear();
+    if (window.__NG_LVIEW_MAPS__ === _candidateLViewMaps) delete window.__NG_LVIEW_MAPS__;
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // DYNAMIC STUDIO API (Angular Signals & Direct State Mutation)
   // ═══════════════════════════════════════════════════════════════════
   const DynamicStudioAPI = {
     _getMap() {
-      if (window.__NG_LVIEW_MAP__ && window.__NG_LVIEW_MAP__.size > 30) {
+      if (!mapCaptureActive && window.__NG_LVIEW_MAP__) {
         return window.__NG_LVIEW_MAP__;
       }
       // Check candidate maps for the one that has active DOM elements with __ngContext__
@@ -37,6 +52,7 @@
           for (const m of _candidateLViewMaps) {
             if (m.has(ctxId)) {
               window.__NG_LVIEW_MAP__ = m;
+              stopMapCapture();
               return m;
             }
           }
@@ -262,6 +278,13 @@
 
   window.DynamicStudioAPI = DynamicStudioAPI;
 
+  // Stop patching the page's Map prototype even if Angular's registry cannot
+  // be verified. Keep the best candidate for the existing signal fallback.
+  mapCaptureTimeout = setTimeout(() => {
+    DynamicStudioAPI._getMap();
+    stopMapCapture();
+  }, 15000);
+
   window.addEventListener('__sl_captureProfile', (e) => {
     const eventId = e.detail && e.detail.eventId;
     if (!eventId) return;
@@ -417,6 +440,28 @@
   function isGenerateContentUrl(u) {
     if (!u || typeof u !== 'string') return false;
     return u.toLowerCase().includes('generatecontent');
+  }
+
+  let requestSequence = 0;
+  function requestMeta() {
+    return {
+      version: 1,
+      requestId: 'sl_req_' + Date.now() + '_' + (++requestSequence),
+      route: window.location.pathname,
+      ts: Date.now()
+    };
+  }
+
+  function emitRequest(meta, body) {
+    window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
+      detail: { ...meta, body: typeof body === 'string' ? body : null }
+    }));
+  }
+
+  function emitRequestFinished(meta, ok) {
+    window.dispatchEvent(new CustomEvent('__sl_requestFinished', {
+      detail: { ...meta, ok: !!ok }
+    }));
   }
 
   let bypassEnabled = true;
@@ -592,17 +637,21 @@
       modifiedBody = body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId);
     }
 
-    if (modifiedBody && typeof modifiedBody === 'string') {
-      window.dispatchEvent(new CustomEvent('__sl_requestPayload', {
-        detail: modifiedBody
-      }));
-    }
+    const request = requestMeta();
+    emitRequest(request, modifiedBody);
 
     window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
       detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
     }));
 
     const xhr = this;
+    let finished = false;
+    const finish = (ok) => {
+      if (finished) return;
+      finished = true;
+      emitRequestFinished(request, ok);
+    };
+    xhr.addEventListener('loadend', () => finish(xhr.status >= 200 && xhr.status < 300), { once: true });
     let snap = '';
     let snapTime = 0;
     let didLogSanitize = false;
@@ -675,7 +724,12 @@
       if (snap) _dispatchCapture(snap, 'ERROR', snapTime);
     });
 
-    return _origSend.apply(this, arguments);
+    try {
+      return _origSend.call(this, modifiedBody);
+    } catch (error) {
+      finish(false);
+      throw error;
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
@@ -774,19 +828,21 @@
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
     let url = typeof input === 'string' ? input
-      : (input && input.url) ? input.url : '';
+      : (input && (input.url || input.href)) || '';
     const isGen = isGenerateContentUrl(url);
 
     if (isGen && overrideModelId) {
       const rewrittenUrl = url.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
       if (typeof input === 'string') {
         input = rewrittenUrl;
+      } else if (typeof URL !== 'undefined' && input instanceof URL) {
+        input = rewrittenUrl;
       } else if (input && typeof Request !== 'undefined' && input instanceof Request) {
         input = new Request(rewrittenUrl, input);
       }
       url = rewrittenUrl;
       if (init && typeof init.body === 'string' && init.body.includes('models/')) {
-        init.body = init.body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId);
+        init = { ...init, body: init.body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId) };
       }
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in fetch request: ' + overrideModelId,
@@ -796,8 +852,11 @@
 
     const isTelemetry = isTelemetryUrl(url);
     window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
-      detail: { url, method: (init && init.method) || 'GET', ts: Date.now(), isTelemetry }
+      detail: { url, method: (init && init.method) || (input && input.method) || 'GET', ts: Date.now(), isTelemetry }
     }));
+
+    const request = isGen ? requestMeta() : null;
+    if (request) emitRequest(request, init && init.body);
 
     const isSave = /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(url);
     if (isSave) {
@@ -805,12 +864,14 @@
     }
 
     try {
-      const res = await _origFetch.apply(this, arguments);
+      const res = await _origFetch.apply(this, init === undefined ? [input] : [input, init]);
+      if (request) emitRequestFinished(request, res.ok);
       if (isSave) {
         window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
       }
       return res;
     } catch (fetchErr) {
+      if (request) emitRequestFinished(request, false);
       if (isSave) {
         window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
       }

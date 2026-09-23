@@ -9,7 +9,6 @@
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
   let ctxRef = null;
-  let blockedCount = 0;
   let hasLoggedWarning = false;
 
   window.StudioLab.registerModule({
@@ -49,10 +48,7 @@
       const { url, method, isTelemetry } = e.detail || {};
       if (url) {
         if (isTelemetry) {
-          blockedCount++;
-          console.log('%c[Studio.lab] 🛡️ Telemetry blocked: ' + method + ' ' + url, 'color:#ef5350');
-        } else {
-          console.log('%c[Studio.lab] 🟡 Network Request: ' + method + ' ' + url, 'color:#ffca28');
+          console.log('%c[Studio.lab] 🛡️ Telemetry request detected: ' + method + ' ' + url, 'color:#ef5350');
         }
       }
     }

@@ -13,11 +13,16 @@
   // ── Capture from GenerateContent request body ──────────────────
   window.addEventListener('__sl_requestPayload', (e) => {
     try {
-      if (e.detail) {
-        lastPayload = JSON.parse(e.detail);
-        if (window.StudioLab && window.StudioLab.log) {
-          window.StudioLab.log('📦 Chat payload captured (' + (lastPayload[1] ? lastPayload[1].length : '?') + ' turns)', 'info');
-        }
+      const raw = typeof e.detail === 'string' ? e.detail : (e.detail?.body ?? e.detail?.payload);
+      if (typeof raw === 'string') {
+        lastPayload = JSON.parse(raw);
+      } else if (raw && typeof raw === 'object') {
+        lastPayload = raw;
+      } else {
+        return;
+      }
+      if (lastPayload && window.StudioLab && window.StudioLab.log) {
+        window.StudioLab.log('📦 Chat payload captured (' + (lastPayload[1] ? lastPayload[1].length : '?') + ' turns)', 'info');
       }
     } catch (err) {
       if (window.StudioLab && window.StudioLab.log) {

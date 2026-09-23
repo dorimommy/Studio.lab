@@ -1,5 +1,15 @@
 # Studio.lab Changelog
 
+## Unreleased
+
+* Fixed GenerateContent request tracking for Draft Crash Protection across XHR and fetch. Request and completion events now share a request ID and route, and Chat Export accepts the structured payload.
+* Fixed model override forwarding for fetch URLs and XHR request bodies; caller-owned fetch options remain unchanged.
+* Limited Angular LView map interception to a short discovery period and released candidate maps after discovery or timeout.
+* Scoped Modern Web Chat's global input handlers to its enabled lifetime. Redundant header buttons are hidden without removing Angular-owned nodes.
+* Restored paragraph, list, heading, inline code, block code, quote, and rule typography in user bubbles.
+* Passed current and previous route keys to modules on SPA navigation and reduced telemetry console noise.
+* Added tracked regression tests and validation scripts while keeping local captures and snapshots ignored.
+
 ## v2.0-preview-4-hotfix-2
 **Mobile Viewport Overhaul, Mutual Drawer Closing, Clean Header Hierarchy & Robust UX Alignment**
 

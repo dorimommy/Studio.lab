@@ -1,2 +1,5 @@
-/Dev
+/Dev/*
+!/Dev/Tests/
+!/Dev/Scripts/
+/.playwright-cli/
 /_metadata

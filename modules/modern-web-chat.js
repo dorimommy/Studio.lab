@@ -18,6 +18,8 @@
   let mainObserver = null;
   let overlayObserver = null;
   let updateScheduled = false;
+  let globalHandlersAttached = false;
+  const hiddenNativeButtons = new Map();
 
   function isEnabled() {
     if (!ctxRef) {
@@ -738,6 +740,7 @@
     document.removeEventListener('click', window._slGlobalDrawerHandler, true);
   }
   window._slGlobalDrawerHandler = (e) => {
+    if (!isEnabled()) return;
     // Close custom dropdowns if clicked outside
     if (!e.target.closest('.sl-custom-dropdown') && !e.target.closest('.sl-header-btn')) {
       closeCustomDropdowns();
@@ -773,8 +776,24 @@
       }
     }
   };
-  document.addEventListener('pointerdown', window._slGlobalDrawerHandler, true);
-  document.addEventListener('click', window._slGlobalDrawerHandler, true);
+
+  function attachGlobalHandlers() {
+    if (globalHandlersAttached) return;
+    document.addEventListener('pointerdown', window._slGlobalDrawerHandler, true);
+    document.addEventListener('click', window._slGlobalDrawerHandler, true);
+    if (window._slMediaPointerListener) document.addEventListener('pointerdown', window._slMediaPointerListener, true);
+    if (window._slKeydownListener) window.addEventListener('keydown', window._slKeydownListener);
+    globalHandlersAttached = true;
+  }
+
+  function detachGlobalHandlers() {
+    if (!globalHandlersAttached) return;
+    document.removeEventListener('pointerdown', window._slGlobalDrawerHandler, true);
+    document.removeEventListener('click', window._slGlobalDrawerHandler, true);
+    if (window._slMediaPointerListener) document.removeEventListener('pointerdown', window._slMediaPointerListener, true);
+    if (window._slKeydownListener) window.removeEventListener('keydown', window._slKeydownListener);
+    globalHandlersAttached = false;
+  }
 
   function syncFeaturedModelsFromDialog(dialog) {
     if (!dialog) return;
@@ -1024,6 +1043,16 @@
     dropdown.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
   }
 
+  function hideNativeButton(button) {
+    if (!hiddenNativeButtons.has(button)) {
+      hiddenNativeButtons.set(button, {
+        value: button.style.getPropertyValue('display'),
+        priority: button.style.getPropertyPriority('display')
+      });
+    }
+    button.style.setProperty('display', 'none', 'important');
+  }
+
   function reorganizeHeader() {
     const toolbarLeft = document.querySelector('.toolbar-left');
     const toolbarRight = document.querySelector('.toolbar-right');
@@ -1032,25 +1061,22 @@
     // Update empty chat state (controls '+' visibility in toolbar-left)
     updateEmptyChatState();
 
-    // 1. Hide/remove New Chat '+' button completely across both mobile and desktop
-    const newChatBtns = document.querySelectorAll('button[data-test-clear="outside"], button[data-test-clear], button[aria-label*="New chat" i], button[aria-label*="New prompt" i]');
-    newChatBtns.forEach(b => {
-      b.style.setProperty('display', 'none', 'important');
-      b.remove();
-    });
-    toolbarLeft.querySelectorAll('button').forEach(b => {
+    // Hide the header's redundant New Chat controls without removing Angular-owned nodes.
+    const newChatSelector = 'button[data-test-clear="outside"], button[data-test-clear], button[aria-label*="New chat" i], button[aria-label*="New prompt" i]';
+    [...toolbarLeft.querySelectorAll(':scope > button'), ...toolbarRight.querySelectorAll(':scope > button')]
+      .filter(button => button.matches(newChatSelector))
+      .forEach(hideNativeButton);
+    toolbarLeft.querySelectorAll(':scope > button').forEach(b => {
       const isNav = b.getAttribute('aria-label')?.toLowerCase().includes('nav') || b.getAttribute('aria-label')?.toLowerCase().includes('menu');
       const isAdd = b.textContent.trim() === 'add' || b.querySelector('.material-symbols-outlined')?.textContent.trim() === 'add';
       if (!isNav && isAdd) {
-        b.style.setProperty('display', 'none', 'important');
-        b.remove();
+        hideNativeButton(b);
       }
     });
-    toolbarRight.querySelectorAll('button').forEach(b => {
+    toolbarRight.querySelectorAll(':scope > button').forEach(b => {
       const isAdd = b.textContent.trim() === 'add' || b.querySelector('.material-symbols-outlined')?.textContent.trim() === 'add';
       if (isAdd && !b.classList.contains('sl-header-btn')) {
-        b.style.setProperty('display', 'none', 'important');
-        b.remove();
+        hideNativeButton(b);
       }
     });
 
@@ -1913,6 +1939,12 @@
   }
 
   function cleanup() {
+    detachGlobalHandlers();
+    for (const [button, original] of hiddenNativeButtons) {
+      if (original.value) button.style.setProperty('display', original.value, original.priority);
+      else button.style.removeProperty('display');
+    }
+    hiddenNativeButtons.clear();
     if (savingHideTimeout) {
       clearTimeout(savingHideTimeout);
       savingHideTimeout = null;
@@ -1960,6 +1992,7 @@
     stateKey: 'modernWebChatEnabled',
     defaults: { modernWebChatEnabled: false },
     init(ctx) {
+      detachGlobalHandlers();
       ctxRef = ctx;
       if (window._slMediaPointerListener) {
         document.removeEventListener('pointerdown', window._slMediaPointerListener, true);
@@ -1985,7 +2018,6 @@
           });
         }
       };
-      document.addEventListener('pointerdown', window._slMediaPointerListener, true);
 
       if (window._slKeydownListener) {
         window.removeEventListener('keydown', window._slKeydownListener);
@@ -1996,7 +2028,6 @@
           toggleSettingsDrawer(false);
         }
       };
-      window.addEventListener('keydown', window._slKeydownListener);
       this.updateStyles();
     },
     onStateChange() {
@@ -2047,6 +2078,7 @@
       const on = isEnabled();
       let el = styleEl || document.getElementById('sl-modern-web-chat-styles');
       if (on) {
+        attachGlobalHandlers();
         if (!el) {
           el = document.createElement('link');
           el.id = 'sl-modern-web-chat-styles';
@@ -2069,6 +2101,12 @@
         styleEl = null;
         cleanup();
       }
+    },
+    dispose() {
+      cleanup();
+      if (styleEl) styleEl.remove();
+      styleEl = null;
+      ctxRef = null;
     }
   };
 

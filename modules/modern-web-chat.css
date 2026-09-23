@@ -518,15 +518,13 @@
         pointer-events: auto !important;
     }
 
-    /* Completely remove New Chat '+' button everywhere across both mobile and PC */
-    button[data-test-clear],
-    button[data-test-clear="outside"],
-    button[aria-label*="New chat" i],
-    button[aria-label*="New prompt" i],
+    /* Hide only the redundant header control; preserve navigation actions. */
     .toolbar-left > button[data-test-clear],
     .toolbar-left > button[aria-label*="New chat" i],
+    .toolbar-left > button[aria-label*="New prompt" i],
     .toolbar-right > button[data-test-clear],
     .toolbar-right > button[aria-label*="New chat" i],
+    .toolbar-right > button[aria-label*="New prompt" i],
     .toolbar-left > button:has(> .material-symbols-outlined:is(.add)),
     .toolbar-right > button:has(> .material-symbols-outlined:is(.add)) {
         display: none !important;
@@ -1807,13 +1805,81 @@
         border: none !important;
     }
 
-    .chat-turn-container.user ms-prompt-chunk p,
     .chat-turn-container.user ms-prompt-chunk .user-chunk {
-        margin: 0 !important;
-        padding: 0 !important;
         color: inherit !important;
         font-size: inherit !important;
         line-height: inherit !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk p {
+        margin: 0 0 0.75em !important;
+        line-height: 1.55 !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk p:last-child {
+        margin-bottom: 0 !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk :is(ul, ol) {
+        margin: 0.5em 0 0.75em !important;
+        padding-left: 22px !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk ul { list-style: disc outside !important; }
+    .chat-turn-container.user ms-prompt-chunk ol { list-style: decimal outside !important; }
+    .chat-turn-container.user ms-prompt-chunk li { margin: 0 0 0.3em !important; }
+
+    .chat-turn-container.user ms-prompt-chunk :is(h1, h2, h3, h4) {
+        margin: 0.9em 0 0.4em !important;
+        line-height: 1.3 !important;
+        font-weight: 650 !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk :is(h1, h2, h3, h4):first-child {
+        margin-top: 0 !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk h1 { font-size: 1.4em !important; }
+    .chat-turn-container.user ms-prompt-chunk h2 { font-size: 1.25em !important; }
+    .chat-turn-container.user ms-prompt-chunk h3 { font-size: 1.12em !important; }
+    .chat-turn-container.user ms-prompt-chunk h4 { font-size: 1.05em !important; }
+    .chat-turn-container.user ms-prompt-chunk :is(strong, b) { font-weight: 700 !important; }
+    .chat-turn-container.user ms-prompt-chunk :is(em, i) { font-style: italic !important; }
+
+    .chat-turn-container.user ms-prompt-chunk code {
+        padding: 0.12em 0.35em !important;
+        border-radius: 5px !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace !important;
+        font-size: 0.9em !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk pre {
+        margin: 0.7em 0 !important;
+        padding: 0.85em 1em !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 12px !important;
+        background: rgba(0, 0, 0, 0.25) !important;
+        overflow-x: auto !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk pre code {
+        padding: 0 !important;
+        background: none !important;
+        font-size: inherit !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk blockquote {
+        margin: 0.7em 0 !important;
+        padding: 0.15em 0 0.15em 0.85em !important;
+        border-left: 3px solid #8ab4f8 !important;
+        font-style: italic !important;
+    }
+
+    .chat-turn-container.user ms-prompt-chunk hr {
+        margin: 0.85em 0 !important;
+        border: 0 !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.25) !important;
     }
 
     /* ── EDIT MODE STYLING & SYNCHRONIZED SCROLLBAR ── */

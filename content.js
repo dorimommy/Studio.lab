@@ -111,6 +111,7 @@
   let returnFocus = null;
   let liveStatsInterval = null;
   let lastUrl = location.href;
+  let currentRoute = readRoute();
   let activeTab = 'all';
   let searchQuery = '';
   let lastLocalSave = '';
@@ -244,11 +245,17 @@
     });
   }
 
-  function notifyRouteChange() {
+  function readRoute() {
+    return { url: location.href, key: location.pathname.replace(/\/+$/, '') || '/' };
+  }
+
+  function notifyRouteChange(current, previous) {
     modules.forEach((module) => {
-      callModule(module, 'onRouteChange', ctx);
+      callModule(module, 'onRouteChange', ctx, current, previous);
     });
-    window.dispatchEvent(new CustomEvent('__sl_routeChanged', { detail: { url: location.href } }));
+    window.dispatchEvent(new CustomEvent('__sl_routeChanged', {
+      detail: { url: current.url, current, previous }
+    }));
   }
 
   function startRouteWatcher() {
@@ -256,8 +263,10 @@
       if (location.href === lastUrl) return;
 
       lastUrl = location.href;
+      const previousRoute = currentRoute;
+      currentRoute = readRoute();
       injected = false;
-      notifyRouteChange();
+      notifyRouteChange(currentRoute, previousRoute);
       waitForSidebar();
       refreshLiveStats();
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('SPA navigation detected. Module state refreshed.', 'info');
