@@ -37,6 +37,59 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // MS-HEADER DESKTOP ACTION MOUNTING SHIM (For Mobile & Small Screens)
+  // Ensures Google AI Studio's ms-header always mounts its desktop action
+  // controls (including prompt title and native edit dialog trigger) regardless
+  // of viewport width. Modern Web Chat visually handles layout and styling.
+  // ═══════════════════════════════════════════════════════════════════
+  if (typeof Element !== 'undefined' && Element.prototype) {
+    const _origGBCR = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      const rect = _origGBCR.apply(this, arguments);
+      if (this && this.tagName === 'MS-HEADER') {
+        const w = (rect && typeof rect.width === 'number') ? Math.max(rect.width, 1024) : 1024;
+        const h = (rect && typeof rect.height === 'number') ? rect.height : 0;
+        const x = (rect && typeof rect.x === 'number') ? rect.x : 0;
+        const y = (rect && typeof rect.y === 'number') ? rect.y : 0;
+        return typeof DOMRect !== 'undefined'
+          ? new DOMRect(x, y, w, h)
+          : { x, y, width: w, height: h, top: y, bottom: y + h, left: x, right: x + w };
+      }
+      return rect;
+    };
+  }
+
+  if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'function') {
+    const _OrigResizeObserver = window.ResizeObserver;
+    window.ResizeObserver = class extends _OrigResizeObserver {
+      constructor(callback) {
+        super((entries, observer) => {
+          const proxiedEntries = entries.map(entry => {
+            if (entry && entry.target && entry.target.tagName === 'MS-HEADER') {
+              return new Proxy(entry, {
+                get(target, prop) {
+                  if (prop === 'contentRect') {
+                    const cr = target.contentRect;
+                    return new Proxy(cr, {
+                      get(rTarget, rProp) {
+                        if (rProp === 'width') return Math.max(rTarget.width, 1024);
+                        return rTarget[rProp];
+                      }
+                    });
+                  }
+                  return target[prop];
+                }
+              });
+            }
+            return entry;
+          });
+          return callback(proxiedEntries, observer);
+        });
+      }
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // DYNAMIC STUDIO API (Angular Signals & Direct State Mutation)
   // ═══════════════════════════════════════════════════════════════════
   const DynamicStudioAPI = {
@@ -236,6 +289,32 @@
       return list;
     },
 
+    openEditPromptTitleDialog() {
+      const btn = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+      if (btn) {
+        try {
+          btn.click();
+          return true;
+        } catch (_) {}
+      }
+      const map = this._getMap();
+      const header = document.querySelector('ms-header');
+      if (map && header && typeof header.__ngContext__ === 'number' && map.has(header.__ngContext__)) {
+        const lview = map.get(header.__ngContext__);
+        const comp = lview ? lview[8] : null;
+        if (comp && comp.Ffa && typeof comp.Ffa.set === 'function') {
+          comp.nHb?.set(true);
+          comp.Ffa.set(true);
+          document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          setTimeout(() => {
+            const b = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+            b?.click();
+          }, 30);
+          return true;
+        }
+      }
+      return false;
+    },
     setTool(name, enabled) {
       const rs = this.getRunSettingsComponent();
       if (!rs) return false;
@@ -518,6 +597,11 @@
     if (e.detail && e.detail.name) {
       DynamicStudioAPI.setTool(e.detail.name, e.detail.enabled);
     }
+  });
+
+  // Open native Save Prompt (Edit title) dialog
+  window.addEventListener('__sl_openEditPromptTitle', () => {
+    DynamicStudioAPI.openEditPromptTitleDialog();
   });
 
   // ═══════════════════════════════════════════════════════════════════

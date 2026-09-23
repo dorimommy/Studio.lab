@@ -1,5 +1,27 @@
 # Studio.lab Changelog
 
+## v2.0-preview-4-hotfix-5
+**Universal Native "Edit Title" Launch Across Mobile & Desktop, Halved Chat Bottom Spacing & Clean Token Tooltip Teardown**
+
+`Modern Web Chat` & `Network & Interceptors Layer` (`interceptor.js`).
+* **Fixed:** `Universal Native "Edit Title" Dialog Trigger (Mobile & Desktop)`.
+  * *Mobile Root Cause Resolved:* Diagnosed why "Edit title" worked on PC but failed on mobile viewports: Google AI Studio's `ms-header` `ResizeObserver` evaluates `pNe(this, width)` and sets Angular signal `Ffa` to `false` on screens $\le 710\text{px}$, completely unmounting template 11 (`.title-tokencount-container`) and its native rename button from the DOM.
+  * *Transparent Header Action Mounting Shim:* In `interceptor.js`, introduced non-intrusive `Element.prototype.getBoundingClientRect` and `window.ResizeObserver` shims scoped strictly to `MS-HEADER` reporting `width >= 1024`, keeping GAIS's native prompt title and rename triggers mounted in the DOM across all screen sizes while Modern Web Chat CSS keeps them visually hidden (`display: none !important; opacity: 0; width: 0; height: 0;`).
+  * *Signal Fallback & Bridge:* Added `DynamicStudioAPI.openEditPromptTitleDialog()` and `__sl_openEditPromptTitle` event bridge. In the 3-dot overflow menu, tapping "Edit title" clicks the native button or signals the main world to ensure Angular signal `Ffa` is active, reliably opening native `<ms-save-prompt-dialog>` on all devices.
+  * *Dialog Backdrop Race Condition Fix:* Replaced blanket backdrop closures with targeted `.mat-mdc-menu-backdrop` dismissal, preventing in-flight rename dialogs from being accidentally dismissed during mounting.
+
+`Modern Web Chat` module (`modules/modern-web-chat.css`).
+* **Fixed:** `Chat Session Bottom Spacing Halved`.
+  * *Optimal Message Safe-Area:* Cut excessive empty whitespace below the conversation by half across all responsive breakpoints:
+    * Desktop `.chat-session-content` bottom padding reduced from `240px` to `120px`.
+    * Tablet and mobile viewports ($\le 1024\text{px}$ and $\le 768\text{px}$) reduced from `200px` to `100px`.
+    * Eliminates awkward visual gaps while maintaining comfortable clearance above the floating prompt input container.
+
+`Modern Web Chat` module (`modules/modern-web-chat.js`).
+* **Fixed:** `Token Counter Floating Tooltip Overlay Cleanup`.
+  * *Accurate Backdrop Dismissal:* Updated `updateSidebarTokens()` to specifically click the token tooltip backdrop (`.cdk-overlay-pane:has(.token-count-tooltip) ~ .cdk-overlay-backdrop`).
+  * *Complete Teardown on UI Toggle:* Added explicit cleanup in `cleanup()` to query and remove any orphaned `.token-count-tooltip` containers and backdrops when switching from Modern Web Chat back to the default AI Studio layout.
+
 ## v2.0-preview-4-hotfix-4
 **Dynamic Featured Model Discovery & Native Picker Sync, Zero-Flash Silent Updates & Repository Hygiene**
 

@@ -524,6 +524,27 @@
         e.preventDefault();
         e.stopPropagation();
 
+        // Immediately dismiss the menu backdrop without interfering with opening dialogs
+        const menuBackdrop = document.querySelector('.mat-mdc-menu-backdrop');
+        if (menuBackdrop) {
+          menuBackdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
+
+        if (item.label === 'Edit title') {
+          const target = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+          if (target) {
+            try {
+              target.click();
+            } catch (_) {
+              dispatchPointerClick(target);
+            }
+          } else {
+            // Signal main world / DynamicStudioAPI to mount and trigger native edit title dialog
+            window.dispatchEvent(new CustomEvent('__sl_openEditPromptTitle'));
+          }
+          return;
+        }
+
         const target = item.targetSelector ? document.querySelector(item.targetSelector) : null;
         if (target) {
           try {
@@ -532,14 +553,6 @@
             dispatchPointerClick(target);
           }
         }
-
-        // Close menu backdrop after action is triggered
-        setTimeout(() => {
-          const backdrop = document.querySelector('.cdk-overlay-backdrop-showing');
-          if (backdrop && !document.querySelector('mat-dialog-container')) {
-            backdrop.click();
-          }
-        }, 80);
       };
 
       menuContent.appendChild(btn);
@@ -1422,7 +1435,8 @@
                 }
               });
             }
-            document.querySelector('.cdk-overlay-backdrop')?.click();
+            const tokenBackdrop = document.querySelector('.cdk-overlay-backdrop:has(+ .cdk-overlay-pane .token-count-tooltip), .cdk-overlay-pane:has(.token-count-tooltip) ~ .cdk-overlay-backdrop') || document.querySelector('.cdk-overlay-backdrop');
+            tokenBackdrop?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           } catch (err) {}
           if (!cachedTokenBreakdown.usageStr) cachedTokenBreakdown.usageStr = currentText;
           const currentCard = document.querySelector('.sl-tokens-card');
@@ -2027,6 +2041,18 @@
     if (tokenHeader) tokenHeader.remove();
     const tokenCard = document.querySelector('.sl-tokens-card');
     if (tokenCard) tokenCard.remove();
+    // Dismiss any orphaned token count tooltip overlays or backdrops
+    const tokenTooltips = document.querySelectorAll('.cdk-overlay-pane:has(.token-count-tooltip), .token-count-tooltip');
+    tokenTooltips.forEach(t => {
+      const pane = t.closest('.cdk-overlay-pane');
+      if (pane) {
+        const backdrop = pane.previousElementSibling?.classList.contains('cdk-overlay-backdrop')
+          ? pane.previousElementSibling
+          : document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop) backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        pane.remove();
+      }
+    });
     const toc = document.querySelector('.sl-chatgpt-toc');
     if (toc) toc.remove();
     document.querySelectorAll('.sl-card-delete-btn, .sl-user-copy-btn, .sl-model-copy-btn, .sl-turn-status-badge, .sl-model-edited-badge, .sl-media-download-item').forEach(el => el.remove());

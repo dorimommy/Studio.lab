@@ -1310,7 +1310,7 @@
         max-width: 900px !important;
         margin: 0 auto !important;
         width: 100% !important;
-        padding: 48px 16px 240px 16px !important;
+        padding: 48px 16px 120px 16px !important;
         box-sizing: border-box !important;
     }
 
@@ -2364,7 +2364,7 @@
 
     @media screen and (max-width: 1024px) {
         .chat-session-content {
-            padding: 64px 16px 200px 16px !important;
+            padding: 64px 16px 100px 16px !important;
         }
         .chat-turn-container.user {
             max-width: 88% !important;
@@ -2399,7 +2399,7 @@
         }
 
         .chat-session-content {
-            padding: 64px 16px 200px 16px !important;
+            padding: 64px 16px 100px 16px !important;
             max-width: 100% !important;
         }
 
