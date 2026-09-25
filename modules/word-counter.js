@@ -166,10 +166,23 @@
       header.appendChild(badge);
     }
 
-    const newContent = `${wordsCount} words \u2022 ${charsCount} chars`;
+    let wordsElement = badge.querySelector('.sl-word-counter-words');
+    let charsElement = badge.querySelector('.sl-word-counter-chars');
+    if (!wordsElement || !charsElement) {
+      // Migrate older text-only badges without leaving a literal bullet in copied text.
+      badge.textContent = '';
+      wordsElement = document.createElement('span');
+      wordsElement.className = 'sl-word-counter-words';
+      charsElement = document.createElement('span');
+      charsElement.className = 'sl-word-counter-chars';
+      badge.append(wordsElement, charsElement);
+    }
+
+    const newContent = `${wordsCount}:${charsCount}`;
     if (badge.getAttribute('data-content') !== newContent) {
       badge.setAttribute('data-content', newContent);
-      badge.textContent = newContent;
+      wordsElement.textContent = `${wordsCount} words`;
+      charsElement.textContent = `${charsCount} chars`;
     }
   }
 })();

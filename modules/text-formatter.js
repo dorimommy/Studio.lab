@@ -108,8 +108,8 @@
     /* ── Inline toolbar (attached directly inside ms-prompt-box) ─────── */
     .sl-fmt-inline {
       display: none;
-      width: calc(100% - 24px) !important;
-      margin: 0 12px 8px 12px !important;
+      width: 100% !important;
+      margin: 0 0 8px 0 !important;
       box-sizing: border-box !important;
       flex-wrap: wrap !important;
       background: var(--color-v3-surface-container-high, #282a2c) !important;
@@ -280,6 +280,48 @@
     .sl-fmt-btn-cancel:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
     .sl-fmt-btn-submit { background: #a8c7fa; color: #041e49; font-weight: 600; }
     .sl-fmt-btn-submit:hover { background: #b4d0fa; }
+
+    /* AI Studio's Light mode needs a light floating toolbar and dark glyphs. */
+    body.light-theme .sl-fmt-toolbar,
+    body.light-theme .sl-fmt-heading-menu {
+      background: #ffffff !important;
+      border-color: #d7d8da !important;
+      box-shadow: 0 4px 14px rgba(27, 27, 30, 0.14) !important;
+      color: #1b1b1e !important;
+    }
+    body.light-theme .sl-fmt-inline {
+      background: #f4f5f7 !important;
+      box-shadow: none !important;
+    }
+    body.light-theme .sl-fmt-btn,
+    body.light-theme .sl-fmt-heading-item,
+    body.light-theme .sl-fmt-toggle,
+    body.light-theme .sl-fmt-btn-cancel {
+      color: #1b1b1e !important;
+    }
+    body.light-theme .sl-fmt-btn:hover,
+    body.light-theme .sl-fmt-heading-item:hover,
+    body.light-theme .sl-fmt-toggle:hover,
+    body.light-theme .sl-fmt-btn-cancel:hover {
+      background: #e9ebef !important;
+      color: #1b1b1e !important;
+    }
+    body.light-theme .sl-fmt-btn:active,
+    body.light-theme .sl-fmt-toggle.sl-fmt-active {
+      background: #dce6f9 !important;
+      color: #174ea6 !important;
+    }
+    body.light-theme .sl-fmt-toggle {
+      border-color: #d7d8da !important;
+    }
+    body.light-theme .sl-fmt-sep { background: #c6cbd1 !important; }
+    body.light-theme .sl-fmt-modal h2 { color: #1b1b1e !important; }
+    body.light-theme .sl-fmt-modal label { color: #565b61 !important; }
+    body.light-theme .sl-fmt-modal input {
+      background: #ffffff !important;
+      border-color: #c6cbd1 !important;
+      color: #1b1b1e !important;
+    }
   `;
 
   // ═══════════════════════════════════════════════════════════════════

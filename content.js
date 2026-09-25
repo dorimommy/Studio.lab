@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = chrome.runtime.getManifest().version;
+  const VERSION = chrome.runtime.getManifest().version_name || chrome.runtime.getManifest().version;
   const STORAGE_KEY = 'slState';
   const ICONS = {
     bolt: '<path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/>',
@@ -17,6 +17,7 @@
     south: '<path d="M12 4v14"/><path d="m6 12 6 6 6-6"/>',
     calculate: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 11h2"/><path d="M12 11h2"/><path d="M16 11h0"/><path d="M8 15h2"/><path d="M12 15h2"/><path d="M16 15h0"/>',
     rocket_launch: '<path d="M5 19c1.5-.3 3-.9 4-2"/><path d="M6 14 4 10l4-1 7-7 3 3-7 7-1 4-4-2z"/><path d="m14 4 6 6"/><path d="M4 22l4-4"/>',
+    arrow_outward: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
     flash_on: '<path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/>',
     visibility: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/>',
     edit: '<path d="M4 20h4l11-11-4-4L4 16v4z"/><path d="m13 7 4 4"/>',
@@ -116,6 +117,8 @@
   let searchQuery = '';
   let lastLocalSave = '';
   let telemetryStatus = null;
+  let updateStatus = null;
+  let updateCheckPending = null;
   const moduleErrors = new Map();
   const recentErrors = [];
 
@@ -159,6 +162,7 @@
     initialized = true;
     initModules();
     refreshLiveStats();
+    checkUpdates();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -394,10 +398,108 @@
     if (searchInput) searchInput.focus();
 
     refreshDiagnostics();
+    refreshUpdateInfo();
     chrome.runtime.sendMessage({ action: 'getTelemetryStatus' }).then(result => {
       telemetryStatus = result || null;
       refreshDiagnostics();
     }).catch(() => {});
+  }
+
+  function refreshUpdateInfo() {
+    if (!modalEl) return;
+    const status = modalEl.querySelector('[data-sl-update-status]');
+    const button = modalEl.querySelector('[data-sl-check-updates]');
+    const link = modalEl.querySelector('[data-sl-release-link]');
+    if (button) button.disabled = !!updateCheckPending;
+    if (status) {
+      status.textContent = updateCheckPending ? 'Checking for updates…'
+        : !updateStatus ? 'Not checked yet'
+        : !updateStatus.ok ? 'Could not check GitHub'
+        : updateStatus.updateAvailable ? `Update ${updateStatus.latestVersion} available${updateStatus.stale ? ' (cached)' : ''}`
+        : updateStatus.stale ? 'Could not refresh GitHub (cached result)'
+        : 'Up to date';
+    }
+    if (link) {
+      link.hidden = !updateStatus?.updateAvailable || !updateStatus.releaseUrl;
+      if (!link.hidden) link.href = updateStatus.releaseUrl;
+      else link.removeAttribute('href');
+    }
+  }
+
+  async function checkUpdates(force = false) {
+    if (updateCheckPending) return updateCheckPending;
+    if (typeof chrome.runtime?.sendMessage !== 'function') return;
+    updateCheckPending = Promise.resolve().then(() => chrome.runtime.sendMessage({ action: 'checkForUpdates', force }))
+      .then(async result => {
+        updateStatus = result || { ok: false };
+        if (!result?.updateAvailable || !result.latestVersion || !result.releaseUrl) return;
+        const stored = await chrome.storage.local.get(['slDismissedUpdateTag']);
+        if (stored.slDismissedUpdateTag !== result.latestVersion) showUpdatePopup(result);
+      })
+      .catch(() => { updateStatus = { ok: false }; })
+      .finally(() => { updateCheckPending = null; refreshUpdateInfo(); });
+    refreshUpdateInfo();
+    return updateCheckPending;
+  }
+
+  function showUpdatePopup(release) {
+    if (document.querySelector('.sl-update-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'sl-update-overlay';
+    const popup = document.createElement('div');
+    popup.className = 'sl-update-popup';
+    popup.style.setProperty('--sl-update-background', `url("${chrome.runtime.getURL('images/update-space.webp')}")`);
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-modal', 'true');
+    popup.setAttribute('aria-labelledby', 'sl-update-title');
+    popup.setAttribute('aria-describedby', 'sl-update-description');
+    popup.tabIndex = -1;
+    popup.innerHTML = `
+      <div class="sl-update-popup-content">
+        <span class="sl-update-popup-brand"><img src="${chrome.runtime.getURL('images/SL_logotype.svg')}" alt="" aria-hidden="true">Studio.lab</span>
+        <h2 id="sl-update-title">A new version <span>is here!</span></h2>
+        <p id="sl-update-description">Studio.lab <strong data-sl-latest-version></strong> is ready. See what's new before you update.</p>
+        <div class="sl-update-popup-actions">
+          <button type="button">Dismiss</button>
+          <a target="_blank" rel="noopener noreferrer">View release ${renderIcon('arrow_outward', 'detail')}</a>
+        </div>
+      </div>
+      `;
+    popup.querySelector('[data-sl-latest-version]').textContent = `v${String(release.latestVersion).replace(/^v/i, '')}`;
+    const releaseLink = popup.querySelector('.sl-update-popup-actions a');
+    releaseLink.href = release.releaseUrl;
+    const returnFocus = document.activeElement;
+    const closePopup = (rememberDismissal = false) => {
+      if (rememberDismissal) {
+        chrome.storage.local.set({ slDismissedUpdateTag: release.latestVersion }).catch(() => {});
+      }
+      document.removeEventListener('keydown', onKeyDown, true);
+      overlay.remove();
+      if (returnFocus?.isConnected && typeof returnFocus.focus === 'function') returnFocus.focus();
+    };
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        closePopup();
+      } else if (event.key === 'Tab') {
+        const dismissButton = popup.querySelector('button');
+        if (event.shiftKey && (document.activeElement === dismissButton || document.activeElement === popup)) {
+          event.preventDefault();
+          releaseLink.focus();
+        } else if (!event.shiftKey && document.activeElement === releaseLink) {
+          event.preventDefault();
+          dismissButton.focus();
+        }
+      }
+    };
+    popup.querySelector('button').addEventListener('click', () => closePopup(true));
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) closePopup();
+    });
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+    document.addEventListener('keydown', onKeyDown, true);
+    popup.focus();
   }
 
   function closeModal() {
@@ -427,6 +529,7 @@
     bindModalEvents();
     refreshLiveStats();
     refreshDiagnostics();
+    refreshUpdateInfo();
   }
 
   function renderDialog() {
@@ -585,7 +688,6 @@
 
   function renderInfoTab() {
     const activeClass = activeTab === 'info' ? 'active' : '';
-    const loadedModules = modules.map(module => module.title).join(', ');
 
     return `
       <div class="sl-tab-content ${activeClass}" data-sl-tab-content="info" role="tabpanel">
@@ -597,10 +699,21 @@
             </div>
           </div>
           <div class="sl-info-body">
-            <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
-              <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">Active Modules</p>
-              <div style="color: var(--color-v3-text); font-size: 13px; line-height: 1.6;">
-                ${html(loadedModules || 'none')}
+            <div class="sl-info-card sl-health-card">
+              <div class="sl-health-heading">
+                <div>
+                  <p class="sl-health-title" data-sl-diag-badge>All Systems Operational</p>
+                  <p class="sl-health-subtitle">Studio.lab is ready on this page.</p>
+                </div>
+                <span class="sl-health-mark" aria-hidden="true"></span>
+              </div>
+              <div class="sl-health-meta">
+                <span>Installed v${html(VERSION)}</span>
+                <span data-sl-update-status>Checking for updates…</span>
+              </div>
+              <div class="sl-health-actions">
+                <button type="button" class="sl-apply-btn" data-sl-check-updates>Check for updates</button>
+                <a class="sl-apply-btn" data-sl-release-link target="_blank" rel="noopener noreferrer" hidden>View release</a>
               </div>
             </div>
             <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
@@ -608,28 +721,21 @@
                 ${renderIcon('storage', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">Settings are saved locally with Chrome storage.</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                ${renderIcon('visibility_off', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">Zero analytics or external requests.</span>
+                ${renderIcon('visibility_off', 'detail')}<span style="color: var(--color-v3-text); font-size: 13px;">No analytics. Update checks contact only GitHub; no chats or account data are sent.</span>
               </div>
             </div>
             <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--color-v3-outline-var, #2a2a2a);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div>
-                  <p style="margin: 0; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">System Diagnostics & Compatibility</p>
-                  <div data-sl-diag-badge style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; margin-top: 6px; padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(102, 187, 106, 0.35); color: #81c784; background: rgba(102, 187, 106, 0.12);">
-                    <span style="color:#66bb6a; font-size: 10px;">●</span> All Systems Operational
-                  </div>
-                </div>
-                <button type="button" class="sl-diag-copy-btn" data-sl-copy-diagnostics style="background: rgba(255, 255, 255, 0.08); color: #e3e3e3; border: 1px solid rgba(255, 255, 255, 0.16); padding: 0 16px; height: 32px; border-radius: 16px; font-family: 'Google Sans', Roboto, Inter, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s ease;">
-                  <span class="material-symbols-outlined notranslate" style="font-size: 16px; color: #a8c7fa;">content_copy</span>
-                  <span>Copy Diagnostics</span>
-                </button>
-              </div>
+              <p style="margin: 0 0 10px; font-size: 13px; font-weight: 500; color: var(--color-v3-text);">System Diagnostics & Compatibility</p>
               <p style="font-size: 12px; color: #a8abb0; margin: 0 0 10px 0; line-height: 1.5;">
                 Exports a sanitized technical report to attach to bug reports. Never includes chat messages, prompt text, user emails, or API credentials.
               </p>
+              <button type="button" class="sl-apply-btn sl-diag-copy-btn" data-sl-copy-diagnostics>
+                <span class="material-symbols-outlined notranslate" aria-hidden="true">content_copy</span>
+                <span class="sl-copy-label">Copy Diagnostics</span>
+              </button>
               <details style="margin-top: 8px;">
                 <summary style="cursor: pointer; font-size: 12px; color: var(--color-v3-text); user-select: none; padding: 4px 0;">View Diagnostic Snapshot</summary>
-                <pre data-sl-diagnostics style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.4); border-radius: 6px; font-size: 11px; max-height: 220px; overflow: auto; color: #a9b7c6; font-family: monospace; white-space: pre-wrap; word-break: break-all;"></pre>
+                <pre class="sl-diagnostics-snapshot" data-sl-diagnostics></pre>
               </details>
             </div>
             <div class="sl-info-card" style="background: var(--color-v3-surface-container-high); border-radius: 12px; padding: 16px;">
@@ -660,7 +766,7 @@
     return `
       <div class="sl-donation-wrap">
         <a href="https://ko-fi.com/astierdoriana" target="_blank" rel="noreferrer" class="sl-donation-banner">
-          <img src="${chrome.runtime.getURL('images/Banner.png')}" alt="Support Studio.lab" class="sl-banner-img">
+          <img src="${chrome.runtime.getURL('images/Support_Banner.png')}" alt="Support Studio.lab" class="sl-banner-img">
         </a>
         <div class="sl-footer">Unofficial extension. Not affiliated with Google or AI Studio.</div>
       </div>
@@ -726,7 +832,7 @@
     const copyBtn = modalEl.querySelector('[data-sl-copy-diagnostics]');
     if (copyBtn) {
       copyBtn.addEventListener('click', async () => {
-        const btnText = copyBtn.querySelector('span');
+        const btnText = copyBtn.querySelector('.sl-copy-label');
         try {
           const diag = getDiagnostics();
           await navigator.clipboard.writeText(JSON.stringify(diag, null, 2));
@@ -737,6 +843,9 @@
         }
       });
     }
+
+    const checkUpdatesBtn = modalEl.querySelector('[data-sl-check-updates]');
+    if (checkUpdatesBtn) checkUpdatesBtn.addEventListener('click', () => checkUpdates(true));
 
     updateModalState();
     applySearchFilter();
@@ -974,18 +1083,20 @@
     if (statusBadge) {
       const hasErrors = moduleErrors.size > 0 || recentErrors.length > 0;
       const missing = diag.domHealth.missingCount;
+      const healthCard = statusBadge.closest('.sl-health-card');
+      const subtitle = healthCard?.querySelector('.sl-health-subtitle');
       if (hasErrors) {
-        statusBadge.innerHTML = `<span style="color:#ef5350;">●</span> ${moduleErrors.size} Module Error(s) Reported`;
-        statusBadge.style.borderColor = 'rgba(239, 83, 80, 0.4)';
-        statusBadge.style.color = '#ef5350';
+        statusBadge.textContent = `${moduleErrors.size} Module Error(s) Reported`;
+        if (healthCard) healthCard.dataset.health = 'error';
+        if (subtitle) subtitle.textContent = 'Some modules need attention. See diagnostics below.';
       } else if (missing > 3) {
-        statusBadge.innerHTML = `<span style="color:#ffca28;">▲</span> UI Elements Unmounted (${missing} missing)`;
-        statusBadge.style.borderColor = 'rgba(255, 202, 40, 0.4)';
-        statusBadge.style.color = '#ffca28';
+        statusBadge.textContent = `UI Elements Unmounted (${missing} missing)`;
+        if (healthCard) healthCard.dataset.health = 'warning';
+        if (subtitle) subtitle.textContent = 'AI Studio may have changed. Review compatibility below.';
       } else {
-        statusBadge.innerHTML = `<span style="color:#66bb6a;">●</span> All Systems Operational`;
-        statusBadge.style.borderColor = 'rgba(102, 187, 106, 0.4)';
-        statusBadge.style.color = '#66bb6a';
+        statusBadge.textContent = 'All Systems Operational';
+        if (healthCard) healthCard.dataset.health = 'ok';
+        if (subtitle) subtitle.textContent = 'Studio.lab is ready on this page.';
       }
     }
   }

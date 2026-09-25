@@ -49,37 +49,30 @@
   //  NATIVE DOM REARRANGEMENT
   // ══════════════════════════════════════════════════════════════════
 
-  function isToolActive(toolName) {
-    const q = toolName.toLowerCase();
-    const chips = Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'));
-    if (chips.some(c => (c.textContent || '').toLowerCase().includes(q))) return true;
+  function getToolControl(toolName) {
+    const name = toolName.toLowerCase();
+    const row = Array.from(document.querySelectorAll('ms-run-settings .settings-item.settings-tool, ms-prompt-run-settings .settings-item.settings-tool'))
+      .find(item => item.querySelector('h3')?.textContent.trim().toLowerCase() === name);
+    const toggle = row?.querySelector('mat-slide-toggle');
+    return toggle ? { toggle, button: toggle.querySelector('button'), input: toggle.querySelector('input') } : null;
+  }
 
-    // Check active switch in run settings or dialog
-    const swList = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-run-settings button[role="switch"], .mdc-switch'));
-    for (const sw of swList) {
-      const aria = (sw.getAttribute('aria-label') || sw.querySelector('button')?.getAttribute('aria-label') || '').toLowerCase();
-      if (aria.includes(q)) {
-        return sw.getAttribute('aria-checked') === 'true' ||
-          sw.querySelector('button')?.getAttribute('aria-checked') === 'true' ||
-          sw.classList.contains('mdc-switch--checked') ||
-          sw.classList.contains('mdc-switch--selected');
-      }
+  function isToolActive(toolName) {
+    const control = getToolControl(toolName);
+    if (control) {
+      return control.toggle.classList.contains('mat-mdc-slide-toggle-checked') ||
+        control.button?.getAttribute('aria-checked') === 'true' || !!control.input?.checked;
     }
-    return false;
+    return Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'))
+      .some(chip => (chip.textContent || '').toLowerCase().includes(toolName.toLowerCase()));
   }
 
   function isToolDisabled(toolName) {
-    const q = toolName.toLowerCase();
-    const swList = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-run-settings button[role="switch"], .mdc-switch'));
-    for (const sw of swList) {
-      const aria = (sw.getAttribute('aria-label') || sw.querySelector('button')?.getAttribute('aria-label') || '').toLowerCase();
-      if (aria.includes(q)) {
-        return sw.getAttribute('aria-disabled') === 'true' ||
-          sw.querySelector('button')?.disabled ||
-          sw.classList.contains('mat-mdc-slide-toggle-disabled');
-      }
-    }
-    return false;
+    const control = getToolControl(toolName);
+    if (!control) return false;
+    return !!(control.button?.disabled || control.input?.disabled ||
+      control.button?.getAttribute('aria-disabled') === 'true' ||
+      control.toggle.classList.contains('mat-mdc-slide-toggle-disabled'));
   }
 
   function adjustSubmenuPosition(submenu) {
@@ -93,59 +86,43 @@
     }
   }
 
-  function ensureToolsRunSettingsMounted() {
-    let rs = document.querySelector('ms-run-settings');
-    if (!rs) {
-      const openBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
-      if (openBtn) openBtn.click();
+  async function ensureToolsRunSettingsMounted(toolName) {
+    if (getToolControl(toolName)) return true;
+    if (await waitForModelValue(() => getToolControl(toolName), 250)) return true;
+    const panel = document.querySelector('ms-run-settings');
+    const openBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
+    if ((!panel || !panel.classList.contains('expanded')) && openBtn) openBtn.click();
+    const toolsGroup = Array.from(document.querySelectorAll('ms-prompt-run-settings .field-group, ms-run-settings .field-group'))
+      .find(group => /\bTools\b/i.test(group.textContent || ''));
+    if (toolsGroup && !toolsGroup.querySelector('mat-slide-toggle')) {
+      toolsGroup.querySelector('button[aria-label*="xpand" i], button.expand-icon, .group-header')?.click();
     }
-    const toolsGroup = Array.from(document.querySelectorAll('ms-prompt-run-settings .field-group, ms-run-settings .field-group')).find(g => g.textContent.includes('Tools'));
-    if (toolsGroup) {
-      const expandBtn = toolsGroup.querySelector('button[aria-label*="xpand" i], button.expand-icon, .group-header');
-      const hasSwitches = toolsGroup.querySelector('mat-slide-toggle, button[role="switch"]');
-      if (!hasSwitches && expandBtn) {
-        expandBtn.click();
-      }
-    }
+    return !!(await waitForModelValue(() => getToolControl(toolName), 1200));
   }
 
-  function toggleNativeTool(toolName, forceState) {
-    const q = toolName.toLowerCase();
-    const isNowActive = typeof forceState === 'boolean' ? forceState : !isToolActive(toolName);
+  async function toggleNativeTool(toolName) {
+    if (!(await ensureToolsRunSettingsMounted(toolName))) return false;
+    const control = getToolControl(toolName);
+    if (!control?.button || isToolDisabled(toolName)) return false;
+    const expected = !isToolActive(toolName);
+    // One native click is authoritative. The former signal + synthetic pointer
+    // sequence could toggle twice and leave the custom checkmark out of sync.
+    control.button.click();
+    return !!(await waitForModelValue(() => isToolActive(toolName) === expected, 1200));
+  }
 
-    // 1. Dispatch custom event for signal-level toggle in interceptor / main world
-    window.dispatchEvent(new CustomEvent('__sl_setTool', {
-      detail: { name: toolName, enabled: isNowActive }
-    }));
-
-    // 2. If chip exists in enabled tools row and we are disabling, clicking remove chip toggles it off
-    if (!isNowActive) {
-      const chips = Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'));
-      const matchedChip = chips.find(c => (c.textContent || '').toLowerCase().includes(q));
-      if (matchedChip) {
-        const removeBtn = matchedChip.querySelector('button:last-child, button[aria-label*="Remove" i], button:has(.close)');
-        if (removeBtn) {
-          removeBtn.click();
-          return;
-        }
-      }
-    }
-
-    ensureToolsRunSettingsMounted();
-
-    // 3. Direct toggle via ms-run-settings switches
-    const runSwitches = Array.from(document.querySelectorAll('ms-run-settings mat-slide-toggle, ms-prompt-run-settings mat-slide-toggle'));
-    const target = runSwitches.find(s => {
-      const aria = (s.getAttribute('aria-label') || s.querySelector('button')?.getAttribute('aria-label') || s.parentElement?.textContent || '').toLowerCase();
-      return aria.includes(q) || (q.includes('url') && aria.includes('url')) || (q.includes('search') && aria.includes('search')) || (q.includes('maps') && aria.includes('maps')) || (q.includes('code') && aria.includes('code')) || (q.includes('function') && aria.includes('function')) || (q.includes('structured') && aria.includes('structured'));
+  function syncToolsSubmenu(submenu) {
+    submenu.querySelectorAll('.sl-tools-menu-item').forEach(item => {
+      const name = item.dataset.slTool;
+      const active = isToolActive(name);
+      const disabled = isToolDisabled(name);
+      item.setAttribute('aria-pressed', String(active));
+      item.disabled = disabled;
+      item.classList.toggle('sl-tool-disabled', disabled);
+      item.title = disabled ? 'Tool unavailable with current settings' : '';
+      const check = item.querySelector('.sl-tool-check');
+      if (check) check.style.opacity = active ? '1' : '0';
     });
-    if (target) {
-      const btn = target.querySelector('.mat-mdc-slide-toggle-touch-target') || target.querySelector('button') || target;
-      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => {
-        btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
-      });
-      return;
-    }
   }
 
   function modifyPlusMenu() {
@@ -305,6 +282,8 @@
         TOOLS_LIST.forEach(tool => {
           const tItem = document.createElement('button');
           tItem.className = 'mat-mdc-menu-item mat-mdc-focus-indicator sl-tools-menu-item';
+          tItem.type = 'button';
+          tItem.dataset.slTool = tool.id;
           const tWrap = document.createElement('span');
           tWrap.className = 'mat-mdc-menu-item-text';
           tWrap.style.cssText = 'display:flex; align-items:center; width:100%; justify-content:space-between;';
@@ -326,7 +305,7 @@
 
           const tActive = isToolActive(tool.id);
           const tCheck = document.createElement('span');
-          tCheck.className = 'material-symbols-outlined notranslate';
+          tCheck.className = 'material-symbols-outlined notranslate sl-tool-check';
           tCheck.style.fontSize = '18px';
           tCheck.style.color = '#8ab4f8';
           tCheck.style.opacity = tActive ? '1' : '0';
@@ -336,22 +315,13 @@
           tWrap.appendChild(tCheck);
           tItem.appendChild(tWrap);
 
-          const tDisabled = isToolDisabled(tool.id);
-          if (tDisabled) {
-            tItem.classList.add('sl-tool-disabled');
-            tItem.style.opacity = '0.45';
-            tItem.style.cursor = 'not-allowed';
-            tItem.title = 'Tool disabled or incompatible with current model';
-          }
-
-          tItem.onclick = (e) => {
+          tItem.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
             if (isToolDisabled(tool.id)) return;
-            const nowActive = isToolActive(tool.id);
-            const nextActive = !nowActive;
-            toggleNativeTool(tool.id, nextActive);
-            tCheck.style.opacity = nextActive ? '1' : '0';
+            tItem.disabled = true;
+            try { await toggleNativeTool(tool.id); }
+            finally { if (toolsSubmenu.isConnected) syncToolsSubmenu(toolsSubmenu); }
           };
 
           toolsSubmenu.appendChild(tItem);
@@ -360,14 +330,21 @@
         toolsWrapper.appendChild(toolsBtn);
         toolsWrapper.appendChild(toolsSubmenu);
         content.appendChild(toolsWrapper);
+        syncToolsSubmenu(toolsSubmenu);
 
         toolsBtn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
           const isOpen = toolsWrapper.classList.toggle('sl-submenu-open');
-          if (isOpen) adjustSubmenuPosition(toolsSubmenu);
+          if (isOpen) {
+            syncToolsSubmenu(toolsSubmenu);
+            adjustSubmenuPosition(toolsSubmenu);
+          }
         };
-        toolsWrapper.onmouseenter = () => adjustSubmenuPosition(toolsSubmenu);
+        toolsWrapper.onmouseenter = () => {
+          syncToolsSubmenu(toolsSubmenu);
+          adjustSubmenuPosition(toolsSubmenu);
+        };
       } else {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
       }
@@ -565,6 +542,29 @@
 
   let cachedModelName = '';
   let cachedModelId = '';
+  let cachedModelRoute = window.location.pathname;
+  const modelsByChatRoute = new Map();
+
+  function syncModelRoute() {
+    const route = window.location.pathname;
+    if (route === cachedModelRoute) return;
+    cachedModelRoute = route;
+    const saved = modelsByChatRoute.get(route);
+    cachedModelId = saved?.id || '';
+    cachedModelName = saved?.name || '';
+  }
+
+  function rememberModel(id, name) {
+    syncModelRoute();
+    cachedModelId = (id || '').replace(/^models\//, '');
+    cachedModelName = name || formatModelSlug(cachedModelId);
+    const route = window.location.pathname;
+    if (cachedModelName && /^\/prompts\/[^/]+/.test(route)) {
+      modelsByChatRoute.delete(route);
+      modelsByChatRoute.set(route, { id: cachedModelId, name: cachedModelName });
+      if (modelsByChatRoute.size > 32) modelsByChatRoute.delete(modelsByChatRoute.keys().next().value);
+    }
+  }
 
   let featuredModels = [];
   let featuredSyncedAt = 0;
@@ -602,21 +602,20 @@
   }
 
   function getModelDisplayName() {
+    syncModelRoute();
     // The native card and URL are authoritative. A previous custom-menu label
     // must never mask a model selected in AI Studio itself.
     const nativeModel = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
     const nativeName = document.querySelector('ms-model-selector .title')?.textContent.trim();
     if (nativeModel && nativeName) {
-      cachedModelId = nativeModel.replace(/^models\//, '');
-      cachedModelName = nativeName;
+      rememberModel(nativeModel, nativeName);
       return cachedModelName;
     }
     const urlModel = new URLSearchParams(window.location.search).get('model');
     if (urlModel) {
       const id = urlModel.replace(/^models\//, '');
       if (cachedModelId !== id || !cachedModelName) {
-        cachedModelId = id;
-        cachedModelName = getFeaturedModels().find(model => model.id === id)?.name || formatModelSlug(id);
+        rememberModel(id, getFeaturedModels().find(model => model.id === id)?.name || formatModelSlug(id));
       }
       return cachedModelName;
     }
@@ -625,8 +624,7 @@
       if (typeof window.DynamicStudioAPI !== 'undefined' && typeof window.DynamicStudioAPI.getModel === 'function') {
         const m = window.DynamicStudioAPI.getModel();
         if (m) {
-          cachedModelId = m;
-          cachedModelName = formatModelSlug(m);
+          rememberModel(m, formatModelSlug(m));
           return cachedModelName;
         }
       }
@@ -634,12 +632,12 @@
 
     const titleEl = document.querySelector('ms-run-settings ms-model-selector .title, ms-run-settings ms-model-selector .model-title, ms-run-settings .model-card .title, ms-model-selector .title, ms-model-selector h3');
     if (titleEl && titleEl.textContent.trim()) {
-      cachedModelName = titleEl.textContent.trim();
+      rememberModel('', titleEl.textContent.trim());
       return cachedModelName;
     }
     const nativeModelTag = document.querySelector('ms-model-selector span[data-test-id="model-name"], ms-model-selector .model-name, ms-model-selector .subtitle');
     if (nativeModelTag && nativeModelTag.textContent.trim()) {
-      cachedModelName = formatModelSlug(nativeModelTag.textContent.trim());
+      rememberModel(nativeModelTag.textContent.trim(), formatModelSlug(nativeModelTag.textContent.trim()));
       return cachedModelName;
     }
     return 'Select model';
@@ -864,6 +862,38 @@
   }
 
   async function selectNativeModel(modelId, modelName) {
+    // The direct signal is safe only for ordinary text models in an existing
+    // chat: new-chat and specialized models need AI Studio's own route flow.
+    // Keep the fast path there, but require the native card to confirm it.
+    const canTryDirect = /^\/prompts\/(?!new_chat$)[^/]+$/.test(window.location.pathname) &&
+      /^gemini-\d+(?:\.\d+)?-(?:flash(?:-lite)?|pro)$/.test(modelId);
+    if (canTryDirect) {
+      const requestId = 'sl-model-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      const directResult = await new Promise(resolve => {
+        const onResult = event => {
+          if (event.detail?.requestId !== requestId) return;
+          clearTimeout(timer);
+          window.removeEventListener('__sl_modelDirectResult', onResult);
+          resolve(!!event.detail.applied);
+        };
+        const timer = setTimeout(() => {
+          window.removeEventListener('__sl_modelDirectResult', onResult);
+          resolve(false);
+        }, 500);
+        window.addEventListener('__sl_modelDirectResult', onResult);
+        window.dispatchEvent(new CustomEvent('__sl_trySetModel', { detail: { modelId, requestId } }));
+      });
+      if (directResult && await waitForModelValue(() =>
+        document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() === modelId, 1000)) {
+        rememberModel(modelId, modelName);
+        const label = document.querySelector('.sl-header-model-btn .model-label');
+        if (label) label.textContent = modelName;
+        return true;
+      }
+    }
+
+    // For new chats and specialized models, the hidden native picker is still
+    // visually seamless and completes the host's URL/capability workflow.
     const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
     let selected = false;
     document.body.classList.add('sl-syncing-model-picker');
@@ -886,11 +916,11 @@
       selected = !!(await waitForModelValue(() => {
         const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
         const urlId = new URLSearchParams(window.location.search).get('model');
-        return nativeId === modelId || urlId === modelId;
+        return nativeId === modelId &&
+          (window.location.pathname !== '/prompts/new_chat' || urlId === modelId);
       }));
       if (!selected) return false;
-      cachedModelId = modelId;
-      cachedModelName = modelName;
+      rememberModel(modelId, modelName);
       const label = document.querySelector('.sl-header-model-btn .model-label');
       if (label) label.textContent = modelName;
       return true;
@@ -905,10 +935,8 @@
 
   // Listen for model change notifications from interceptor or other components
   window.addEventListener('__sl_modelChanged', (e) => {
-    if (e.detail) {
-      if (e.detail.modelName) cachedModelName = e.detail.modelName;
-      else if (e.detail.modelId) cachedModelName = formatModelSlug(e.detail.modelId);
-      if (e.detail.modelId) cachedModelId = e.detail.modelId;
+    if (e.detail?.modelId || e.detail?.modelName) {
+      rememberModel(e.detail.modelId || '', e.detail.modelName || formatModelSlug(e.detail.modelId));
       const lbl = document.querySelector('.sl-header-model-btn .model-label');
       if (lbl && cachedModelName) {
         lbl.textContent = cachedModelName;
@@ -977,7 +1005,12 @@
     }
     if (!isEnabled()) return;
 
-    const currentName = getModelDisplayName().toLowerCase();
+    const currentName = getModelDisplayName();
+    const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '');
+    const urlId = new URLSearchParams(window.location.search).get('model')?.replace(/^models\//, '');
+    const currentId = window.location.pathname === '/prompts/new_chat'
+      ? (urlId || nativeId || cachedModelId)
+      : (nativeId || cachedModelId || urlId);
     const dropdown = document.createElement('div');
     dropdown.className = 'sl-custom-dropdown sl-model-dropdown';
 
@@ -985,7 +1018,7 @@
     models.forEach(m => {
       const item = document.createElement('div');
       item.className = 'sl-dropdown-item';
-      const isSelected = currentName.includes(m.name.toLowerCase()) || currentName.includes(m.id.toLowerCase());
+      const isSelected = currentId ? currentId === m.id : currentName === m.name;
       if (isSelected) item.classList.add('active');
 
       const itemTitle = document.createElement('span');
@@ -2124,8 +2157,7 @@
       this.updateStyles();
     },
     onRouteChange(ctx) {
-      cachedModelName = '';
-      cachedModelId = '';
+      syncModelRoute();
       if (isEnabled()) {
         try { performDOMUpdates(); } catch (e) { }
       }

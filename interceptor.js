@@ -571,11 +571,28 @@
   // ═══════════════════════════════════════════════════════════════════
   let overrideModelId = null;
 
+  // Fast, signal-only selection for existing text chats. Unlike __sl_setModel,
+  // this does not install a network override or claim success on failure.
+  window.addEventListener('__sl_trySetModel', (e) => {
+    const modelId = e.detail?.modelId;
+    const requestId = e.detail?.requestId;
+    if (!modelId || !requestId) return;
+    let applied = false;
+    try { applied = DynamicStudioAPI.setModel(modelId); } catch (_) {}
+    window.dispatchEvent(new CustomEvent('__sl_modelDirectResult', {
+      detail: { requestId, applied }
+    }));
+  });
+
   window.addEventListener('__sl_setModel', (e) => {
     const id = e.detail && (e.detail.modelId || e.detail.model);
     const modelName = e.detail && e.detail.modelName;
     if (id) {
       overrideModelId = id.replace(/^models\//, '');
+      if (document.documentElement) {
+        document.documentElement.dataset.slActiveModel = overrideModelId;
+        document.documentElement.dataset.slActiveModelName = modelName || overrideModelId;
+      }
       const setOk = DynamicStudioAPI.setModel(id);
       window.dispatchEvent(new CustomEvent('__sl_modelChanged', {
         detail: { modelId: overrideModelId, modelName: modelName || overrideModelId, signalApplied: setOk }

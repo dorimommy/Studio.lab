@@ -1,5 +1,71 @@
 # Studio.lab Changelog
 
+## v2.0
+**Full Studio.lab 2.0 Release: Reliable Native Controls, Responsive Workspace & Update Discovery**
+
+`What the v2.0 Preview Series Delivered` (`preview-1` through `preview-4-hotfix-5`).
+* **Added:** `Text Formatter` with inline and floating Markdown controls, keyboard shortcuts, and a compact heading menu on mobile; fixed prompt-bar alignment and light-theme readability before release.
+* **Added:** `Draft Crash Protection` with per-chat autosave and restoration. Hardened it against Angular's late form initialization, failed requests, and stale completion events so unsent text is not cleared incorrectly.
+* **Rebuilt:** `Modern Web Chat` as a 2.0 workspace feature, moving its styles into a dedicated stylesheet and refining responsive headers, drawers, native menus, media tiles, editing, saving status, and the turn navigator. Its earlier alpha predates this release.
+* **Fixed:** Long-chat optimization and navigation: buffering waits for real user interaction and streaming state, native search restores detached turns, and selecting an already-rendered turn no longer needlessly restores the whole chat or jumps the viewport.
+* **Fixed:** Mobile and desktop native controls, including reliable Edit title, drawer close-button isolation, model-dialog availability, and cleanup of token tooltip overlays when Modern Web Chat is disabled.
+* **Hardened:** AI Studio integration with SPA route events, bounded Angular signal discovery, safe DOM insertion, correctly forwarded XHR/fetch requests, and matching request-completion events. The final model-selection behavior is specified below and supersedes the preview-era direct-signal description.
+
+`Release Identity & Manifest`.
+* **Changed:** `Preview` Graduation to Full `v2.0`.
+  * *Clean Extension Name:* Removed `Preview version 4` from the extension name. The numeric manifest version remains `2.0`; the preview-only `version_name` override is gone, so Settings also displays `v2.0`.
+  * *Local Release Asset:* Bundled the trailer's original Earth-and-Moon frame as a compact WebP background for the update announcement. The banner resolves the asset through the extension URL, so the image loads inside AI Studio.
+  * *Updated Artwork:* Replaced the old extension icons and support banner with the new assets in `images/`. Restored the system-architecture illustration in README; the new logo remains available for branding.
+
+`Modern Web Chat` module (`modules/modern-web-chat.js`, `modules/modern-web-chat.css`).
+* **Fixed:** `Mobile Model Name Desynchronization after Library Navigation`.
+  * *Per-Chat Model Memory:* Model names are tracked by chat route instead of reusing a stale global label. Returning to a chat no longer requires opening the right panel to replace `Select model` with the selected model.
+  * *Verified Hybrid Selection:* Existing text chats retain the fast direct-signal path, with native-card confirmation. New chats and specialized models use AI Studio's hidden native picker so route and capabilities update correctly; new-chat selection verifies both card and URL.
+  * *New Featured Models Remain Selectable:* A newly discovered Featured entry now selects through the native picker when the direct path is unsuitable; the custom model menu no longer appears to accept a click while leaving the previous model active.
+  * *Single Active Model:* Featured checkmarks now compare exact model IDs, so selecting Flash TTS cannot also mark Flash.
+* **Fixed:** `Light Theme Compatibility`.
+  * *Theme-Aware Surfaces:* Custom header controls, model/thinking menus, Run Settings drawer, token widgets, turn navigation, and message/edit surfaces use a readable light palette when AI Studio is in Light mode.
+  * *Prompt & Upload Menus:* Prompt-box hovers, Other uploads, Tools flyouts, and their selected states now follow the native light palette.
+* **Fixed:** `Tools Submenu Selection and Compatibility`.
+  * *Single Native Toggle:* Removed the duplicate signal-plus-synthetic-click path that could leave custom checkmarks out of sync. A choice clicks its actual AI Studio switch once and reads back the result.
+  * *Persistent, Accurate Menu:* The submenu stays open after a selection; checkmarks and disabled incompatible tools are refreshed from native controls.
+* **Fixed:** `Desktop/Mobile Drawer Behavior`.
+  * *Independent Desktop Panels:* Opening the left navigation no longer closes the right settings drawer on wide screens. Mobile retains mutual closing to prevent overlap.
+* **Polished:** `Prompt-Area Fade`.
+  * *Theme-Matched Surface:* The bottom gradient now derives from the current AI Studio surface color instead of a fixed black strip.
+
+`Composer, Drafts & Formatting`.
+* **Fixed:** `Text Formatter in Light Mode`.
+  * *Visible Controls:* The floating and inline toolbars, toggle, heading flyout, and link editor now use light surfaces with readable dark icons and hover states.
+* **Fixed:** `Full-Width Text Formatter`.
+  * *Prompt-Bar Alignment:* The inline formatting toolbar now spans the prompt bar without the former inset margins.
+* **Polished:** `Restored Draft Banner`.
+  * *Consistent Controls:* Refined the banner and its actions; discarding a draft immediately removes the stale restored-draft indicator.
+
+`Word Counter` module (`modules/word-counter.js`, `sl-panel.css`).
+* **Fixed:** `Native-Style Turn Metadata`.
+  * *Separate Elements:* Word and character counts are rendered as independent spans instead of one text string.
+  * *Visual-Only Separators:* The separator between words and characters is drawn with CSS, matching AI Studio's timestamp separator; copying a turn header no longer includes a literal bullet from Word Counter.
+
+`Studio.lab Settings & Update Experience` (`content.js`, `background.js`, `sl-panel.css`).
+* **Fixed:** `Settings Light Theme Contrast`.
+  * *Native Hover & Readable Controls:* The Studio.lab Settings entry matches AI Studio's native menu hover; search and tabs retain clear text, borders, and selected states.
+  * *Diagnostic Snapshot:* The technical JSON preview uses a consistent dark code surface and high-contrast text in both themes.
+* **Redesigned:** `Info Tab`.
+  * *Operational Status First:* Removed the growing Active Modules list and moved system health into its own card. Diagnostics and Community & Updates remain available without a duplicate status badge.
+  * *Unified Action Styling:* Update and diagnostics actions use the same button treatment as the other Settings modules; the diagnostics copy confirmation updates the correct text label.
+  * *Production Controls Only:* Removed the local `Preview update notification` button and its demo-only behavior from Info, while retaining manual update checks and the real release link.
+* **Added:** `GitHub Release Checks`.
+  * *Bounded Network Access:* Checks the public Studio.lab Releases endpoint, caches results for 24 hours, compares full and preview versions, and falls back to cached status when GitHub is temporarily unavailable. No chat, prompt, account, or credential data is sent.
+  * *Per-Version Dismissal:* A dismissed release stays dismissed without hiding a later version. The Info tab retains a manual check; dismissing the real announcement saves only that release tag.
+* **Added:** `Update Announcement`.
+  * *Trailer-Matched Visual:* The centered announcement uses the actual starfield, Moon, and Earth frame with the supplied logo, blue-highlighted headline, and two pill actions arranged like the provided mockup. Text uses 100% line height and zero letter spacing, with a regular-weight Studio.lab wordmark.
+  * *Readable Actions:* Explicit foreground colors prevent Google AI Studio link styles from washing out button text; the action row sits 10px lower to match the reference. The dialog also supports keyboard dismissal and focus restoration.
+
+`Repository & Verification`.
+* **Updated:** `Privacy Documentation and Release Validation`.
+  * *Accurate Disclosure:* README and Settings state that update checks contact only GitHub rather than claiming zero outbound requests.
+
 ## v2.0-preview-4-hotfix-5
 **Universal Native "Edit Title" Launch Across Mobile & Desktop, Halved Chat Bottom Spacing & Clean Token Tooltip Teardown**
 

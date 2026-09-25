@@ -225,6 +225,7 @@
       restoring = true;
       try { if (textarea === activeTextarea && textarea.isConnected) applyText(textarea, ''); }
       finally { restoring = false; }
+      removeIndicator();
     };
     const close = document.createElement('button');
     close.type = 'button';

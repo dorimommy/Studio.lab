@@ -19,7 +19,7 @@ The extension operates without build tools or external dependencies. It relies o
 *   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
 *   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object with the central `registry.js`.
 
-![Architecture Banner](images/Architecture-banner.png)
+![Studio.lab system architecture](images/Architecture-banner.png)
 
 ## Installation
 
@@ -33,7 +33,7 @@ The extension operates without build tools or external dependencies. It relies o
 
 Studio.lab is built with strict adherence to local-only execution:
 *   Zero external dependencies, trackers, or analytics.
-*   Zero outbound network requests.
+*   No analytics or tracking. The extension checks the public GitHub Releases API at most once every 24 hours to notify you about updates; it does not send chats, prompts, account details, or API credentials.
 *   State is maintained exclusively via local browser storage.
 *   The source code is provided completely unobfuscated for comprehensive security auditing.
 
@@ -58,7 +58,7 @@ If you are experiencing general issues with the Google AI Studio platform itself
 
 ### Support the Development
 
-[![Support Studio.lab](images/Banner.png)](https://ko-fi.com/astierdoriana)
+[![Support Studio.lab](images/Support_Banner.png)](https://ko-fi.com/astierdoriana)
 
 If this extension ensures your workflow continuity and mitigates data loss, consider supporting the development through Ko-Fi. 
 

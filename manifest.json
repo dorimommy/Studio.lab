@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Studio.lab (Preview version 4)",
+  "name": "Studio.lab",
   "version": "2.0",
+  "version_name": "2.0",
   "description": "Unofficial performance optimizer, bypass, and workspace extension for Google AI Studio.",
   "permissions": [
     "storage",
     "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
   ],
   "declarative_net_request": {
     "rule_resources": [
@@ -17,15 +21,15 @@
     ]
   },
   "icons": {
-    "16": "images/16.png",
-    "64": "images/64.png",
-    "128": "images/128.png"
+    "16": "images/SL_PFP_16.png",
+    "64": "images/SL_PFP_64.png",
+    "128": "images/SL_PFP_128.png"
   },
   "action": {
     "default_icon": {
-      "16": "images/16.png",
-      "64": "images/64.png",
-      "128": "images/128.png"
+      "16": "images/SL_PFP_16.png",
+      "64": "images/SL_PFP_64.png",
+      "128": "images/SL_PFP_128.png"
     }
   },
   "background": {
@@ -71,7 +75,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "images/Banner.png",
+        "images/Support_Banner.png",
+        "images/SL_logotype.svg",
+        "images/update-space.webp",
         "modules/modern-web-chat.css"
       ],
       "matches": [
