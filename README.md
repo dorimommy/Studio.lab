@@ -1,12 +1,12 @@
 # Studio.lab
 
-An unofficial performance optimizer and content bypass extension for Google AI Studio. 
+An unofficial performance optimizer and workspace extension for Google AI Studio.
 
-Studio.lab resolves critical platform limitations—such as client-side content filter aborts and DOM memory leaks—by intercepting network requests before framework initialization and implementing custom memory management routines. This transforms Google AI Studio into a highly stable environment for long-context workflows.
+Studio.lab adds response recovery, chat memory management, and workspace controls for long-context workflows. Response Recovery keeps available streamed content visible when client-side processing interrupts a response; it cannot recover content the server never returned.
 
 ## Features & Version History
 
-All features, including bypass mechanisms, DOM virtualization, UI improvements, and telemetry blocking, are tracked and documented in the changelog.
+All features, including Response Recovery, DOM virtualization, UI improvements, and telemetry blocking, are tracked and documented in the changelog.
 
 👉 **[See CHANGELOG.md](CHANGELOG.md) for a complete list of features and version history.**
 
@@ -14,7 +14,7 @@ All features, including bypass mechanisms, DOM virtualization, UI improvements, 
 
 The extension operates without build tools or external dependencies. It relies on a decoupled architecture where a core shell orchestrates isolated feature modules.
 
-*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to patch `XMLHttpRequest` and `fetch` before the host application initializes. It handles telemetry blocking, payload spoofing, and abort neutralization.
+*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to patch `XMLHttpRequest` and `fetch` before the host application initializes. It handles telemetry blocking, schema-aware response recovery, model selection, and stream lifecycle handling.
 *   **`content.js`**: Operates in the `ISOLATED` world. Functions as the primary controller. It handles state persistence, injects the native-styled control panel into the host sidebar, and triggers the module lifecycle inside safe error boundaries.
 *   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
 *   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object with the central `registry.js`.

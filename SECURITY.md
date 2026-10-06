@@ -15,4 +15,4 @@ Because the extension has no backend and cannot expose sensitive user data to ex
 ## Security Architecture Notes
 * **Zero External Dependencies:** We do not load any remote scripts or assets.
 * **Zero Telemetry:** The extension does not collect or transmit any analytical data.
-* **Local Only:** All settings and bypass states live exclusively in your local browser storage.
+* **Local Only:** All settings and Response Recovery preferences live exclusively in your local browser storage.

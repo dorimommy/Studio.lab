@@ -40,11 +40,11 @@
 
   const GROUPS = [
     {
-      id: 'bypass',
+      id: 'response-recovery',
       tabId: 'injection',
-      title: 'CONTENT BYPASS',
-      description: 'Bypass content filters and blocked response streams.',
-      enabledKey: 'bypassEnabled'
+      title: 'RESPONSE RECOVERY',
+      description: 'Keep available content visible when response streams are interrupted.',
+      enabledKey: 'responseRecoveryEnabled'
     },
     {
       id: 'optimizer',
@@ -76,7 +76,7 @@
   ];
 
   const DEFAULT_STATE = {
-    bypassEnabled: true,
+    responseRecoveryEnabled: true,
     optimizerEnabled: false,
     optimizerMode: 'smart',
     keepLast: 15,
@@ -155,8 +155,9 @@
 
   chrome.storage.local.get([STORAGE_KEY], (data) => {
     if (data && data[STORAGE_KEY]) {
-      Object.assign(state, data[STORAGE_KEY]);
+      Object.assign(state, migrateStoredState(data[STORAGE_KEY]));
       normalizeState();
+      if (Object.prototype.hasOwnProperty.call(data[STORAGE_KEY], 'bypassEnabled')) saveState();
     }
 
     initialized = true;
@@ -176,8 +177,9 @@
     }
 
     const prev = snapshotState();
-    Object.assign(state, incoming);
+    Object.assign(state, migrateStoredState(incoming));
     normalizeState();
+    if (Object.prototype.hasOwnProperty.call(incoming, 'bypassEnabled')) saveState();
     notifyModules(prev);
     updateModalState();
   });
@@ -195,11 +197,22 @@
     return initial;
   }
 
+  function migrateStoredState(stored) {
+    const migrated = Object.assign({}, stored);
+    // Read the previous storage key before defaults are merged, preserving disabled preferences.
+    if (!Object.prototype.hasOwnProperty.call(migrated, 'responseRecoveryEnabled') &&
+        Object.prototype.hasOwnProperty.call(migrated, 'bypassEnabled')) {
+      migrated.responseRecoveryEnabled = migrated.bypassEnabled;
+    }
+    delete migrated.bypassEnabled;
+    return migrated;
+  }
+
   function normalizeState() {
     if (!['smart', 'hard'].includes(state.optimizerMode)) state.optimizerMode = 'smart';
 
     state.keepLast = Math.max(2, parseInt(state.keepLast, 10) || 15);
-    state.bypassEnabled = !!state.bypassEnabled;
+    state.responseRecoveryEnabled = !!state.responseRecoveryEnabled;
     state.optimizerEnabled = !!state.optimizerEnabled;
     state.autoKeep = !!state.autoKeep;
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;

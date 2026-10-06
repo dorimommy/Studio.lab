@@ -1,5 +1,73 @@
 # Studio.lab Changelog
 
+## v2.1
+
+**Full Studio.lab 2.1 Release: Response Recovery, Reliable Native Controls & Chat Export**
+
+`Response Recovery & Network Integration` (`interceptor.js`, `modules/response-recovery.js`, `modules/default-profile.js`, `content.js`).
+
+* **Changed:** `Response Recovery Identity and Preference Migration`.
+  * *Consistent Naming:* Updated the interface, module filename and ID, state key, event bridge, manifest, and documentation to use Response Recovery.
+  * *Preserved Preferences:* Existing enabled and disabled preferences migrate before defaults are applied. An explicit current preference takes priority, including `false`, and external settings updates use the same migration.
+* **Fixed:** `Protocol Field Recovery Without Content Rewrites`.
+  * *Scoped Status Changes:* Recovery edits verified response status, finish-reason, and feedback fields while preserving prompt text, generated content, media, signatures, and usage data. Unknown framing passes through; incomplete streams retain their unfinished content.
+* **Fixed:** `Model Override Isolation and Lifecycle`.
+  * *Exact Model Fields:* XHR and fetch overrides change the model URL or protocol field without rewriting model-looking text in prompts or history. `fetch(Request)` honors caller options and reads a clone without consuming the original body.
+  * *Current Native Selection:* Successful profile, direct, and native selections, plus chat-route changes, clear stale overrides. A native model mounted later establishes the fallback baseline instead of incorrectly cancelling recovery.
+* **Fixed:** `Native Stop and Reused XHR Controls`.
+  * *Actual Stop Detection:* Explicit Stop and navigation cancellation reach the native abort path. The current Run/Stop button is recognized by its rendered Stop label when AI Studio omits a Stop class or accessible label; cancelled replies are not captured as completed answers.
+  * *Native XHR Restoration:* Reopening a generation XHR restores its original response getters and abort behavior before an unrelated request. Reopened save requests cannot attribute the next response to an earlier save.
+* **Fixed:** `Image Search Profile Selection`.
+  * *Correct Native Signal:* Image Search updates its own control rather than enabling Google Search through the general search-name match.
+
+`Modern Web Chat` module (`modules/modern-web-chat.js`, `modules/modern-web-chat.css`, `interceptor.js`).
+
+* **Fixed:** `Generated Images and Attachment Downloads`.
+  * *Preserved Image Dimensions:* Model images retain their dimensions and aspect ratio, including image-only replies and replies with captions. The 112px thumbnail rules remain scoped to user attachments.
+  * *Selected Media Target:* Download is associated with the selected media chunk, trigger, and native menu. Unrelated menus and ambiguous menus containing several attachments receive no guessed download action.
+* **Fixed:** `Native Thinking Controls and Confirmed Selection`.
+  * *Available Native Choices:* Thinking levels come from enabled native options instead of inferred model names. The displayed selection changes only after the native value confirms it.
+  * *Thinking Budget Access:* Models with a native thinking budget retain their operable budget control in Run Settings instead of receiving an unsupported level menu.
+* **Fixed:** `Keyboard Navigation and Menu Focus`.
+  * *Accessible Controls:* Model and thinking choices use focusable buttons with menu roles and selected-state attributes. Arrow keys, Home, End, Tab, and Escape support navigation, dismissal, and focus restoration; upload and tool submenus also support keyboard entry and exit.
+* **Fixed:** `Turn Navigator Reattachment and Teardown`.
+  * *Current Native Scroller:* The navigator reconnects when AI Studio replaces its scroller or native turn buttons, removing old listeners and scheduled updates.
+  * *Disabled State Respected:* Resize cannot rebuild navigation after the module is disabled. Reenabling attaches one active navigator to the current chat.
+* **Fixed:** `Retained Native Menus and Header Cleanup`.
+  * *Restored Host Controls:* Teardown restores moved upload items, their order and display values, native Share, and menu markers. Injected controls, viewer handlers, pending callbacks, and token overlays are removed so retained native menus can be enhanced again after reenabling.
+* **Fixed:** `Retained Model Catalog Search`.
+  * *Unfiltered Featured Selection:* Custom model selection and Featured refresh clear a retained native search query, then wait for the enabled Featured category and requested row. Filtered native results cannot replace the Featured cache.
+  * *Preserved Manual Browsing:* Opening More models retains the user's native search query. Internal picker actions no longer cancel an opening custom menu.
+* **Fixed:** `Responsive Header State`.
+  * *Module-Scoped Geometry:* The desktop-action mounting shim follows the Modern Web Chat enabled state. Disabling restores native header geometry and refreshes existing header observations without requiring a physical resize.
+
+`Chat Export` module (`modules/chat-export.js`, `interceptor.js`).
+
+* **Fixed:** `Latest Completed Answer and Chat Isolation`.
+  * *Complete Current Context:* JSON and Markdown include the latest completed model reply once, joining streaming text deltas while keeping reasoning and media parts separate. Markdown uses native turn roles.
+  * *Request Ownership:* Captures follow the current chat route and request ID. Late, failed, incomplete, or cancelled responses cannot append an answer to a different request or chat.
+* **Fixed:** `Verified First Text-Chat Autosave`.
+  * *Confirmed Saved Route:* The first autosave preserves export across the native transition from a new text chat only when its completed transcript, model, system instructions, save result, and chat epoch match the exact returned prompt ID.
+  * *Pending Route Quarantine:* Navigation may precede the save response or generation response clone. The candidate stays unavailable for export until ownership is confirmed; failed, unrelated, or unsupported media saves do not authorize transfer. Pending save candidates are bounded and cleared with capture teardown.
+* **Fixed:** `Same-Path New Chat Reset`.
+  * *Immediate Invalidation:* Starting another new chat invalidates previous captures and pending saves before the native action, even when the pathname remains unchanged.
+  * *Modified Link Clicks:* Ctrl, Meta, Shift, Alt, and non-primary clicks on New Chat links do not reset the current tab when opening or handling the link elsewhere.
+
+`Composer, Counts & Scrolling` (`modules/word-counter.js`, `modules/text-formatter.js`, `modules/scroll-bottom.js`).
+
+* **Fixed:** `Streaming Word Counts Without Duplication`.
+  * *Text Mutation Coverage:* Counts update when streaming changes a Text node or adds a new turn. Nested `ms-prompt-chunk.text-chunk` and `ms-text-chunk` content is counted once.
+* **Fixed:** `Numeric Input and Link Editing`.
+  * *Markdown Marker Spacing:* Enter after plain numbers such as `-42` or `1.25` no longer starts a list. Properly spaced Markdown markers retain list continuation.
+  * *Supported Input Selection:* The link editor avoids unsupported selection-range calls on `input[type="url"]`.
+* **Fixed:** `Scroll Listener and Timer Cleanup`.
+  * *Detached Scroller Release:* Route changes and teardown remove listeners from the previous scroller before clearing its reference, and cancel pending scroll callbacks and timers.
+
+`Toolbar Activation` (`background.js`).
+
+* **Fixed:** `Chrome Action Without a Tab URL`.
+  * *Available Content-Script Bridge:* The extension action reaches the AI Studio content script when Chrome omits `tab.url`, without adding tab-reading permissions.
+
 ## v2.0
 **Full Studio.lab 2.0 Release: Reliable Native Controls, Responsive Workspace & Update Discovery**
 
@@ -189,7 +257,7 @@
 
 `Modern Web Chat` module.
 * **Fixed:** `Selective Turn Navigator Restoration & Viewport-Aware Navigation`.
-  * *Preserved Detached State on Attached Clicks:* In `jumpToTurn`, clicking any turn in the Turn Navigator (TOC popover or dash indicators) now verifies if the target turn element already exists in the DOM. If the target turn is already rendered (e.g. the second-to-last turn), `restoreDetached()` and `__sl_restoreAllTurns` are bypassed, keeping all buffered turns safely detached.
+  * *Preserved Detached State on Attached Clicks:* In `jumpToTurn`, clicking any turn in the Turn Navigator (TOC popover or dash indicators) now verifies if the target turn element already exists in the DOM. If the target turn is already rendered (e.g. the second-to-last turn), `restoreDetached()` and `__sl_restoreAllTurns` are skipped, keeping all buffered turns safely detached.
   * *Non-Jarring Viewport Navigation:* If the selected turn is already visible on screen, redundant scrolling is skipped entirely and the turn is gently emphasized with `sl-turn-highlight`. Only off-screen turns trigger smooth navigation (`block: 'nearest'`), eliminating sudden jump-scrolls.
 
 ## v2.0-preview-4
@@ -201,8 +269,8 @@
   * *DynamicStudioAPI & Zero-Flicker Mutation:* Direct programmatic inspection and mutation of Angular 19 Writable Signals (`model.set()`, `temperature.set()`, `thinkingBudget.set()`, `maxOutputTokens.set()`, `enableSearchAsATool.set()`, `enableCodeExecution.set()`).
   * *Purge of Invisible DOM Hacks:* Completely removed `injectInvisibleCSS()`, `toggleInvisibleDOM()`, and `opacity: 0.0001` DOM-hiding hacks along with modal dialog click-polling. Settings and models apply instantaneously with zero UI flicker or dialog popups.
   * *Clean System Instructions Injection:* Injects instructions via native prototype descriptor (`HTMLTextAreaElement.prototype.value`) and synthetic `input` events, binding directly to Angular's `FormControl` before silently dismissing the slide panel.
-* **Fixed:** `Bypass Toggle & Abort Delegation`.
-  * *Native Abort Delegation:* In `interceptor.js`, `xhr.abort` now checks `bypassEnabled`. If bypass is disabled in settings, abort calls delegate cleanly to the host environment's native abort routine, restoring user cancellation for streaming generations.
+* **Fixed:** `Response Recovery Toggle & Abort Delegation`.
+  * *Native Abort Delegation:* In `interceptor.js`, `xhr.abort` now checks `responseRecoveryEnabled`. If Response Recovery is disabled in settings, abort calls delegate cleanly to the host environment's native abort routine, restoring user cancellation for streaming generations.
 * **Consolidated:** `Unified XMLHttpRequest Open Patch & Telemetry Logging`.
   * *Consolidated Patching:* Merged duplicate `XMLHttpRequest.prototype.open` monkey-patches in `interceptor.js` into a single unified implementation handling model swapping, telemetry logging, and runtime model discovery (`ListModels`).
 * **Cleaned:** `Production Media Download Fallback`.
@@ -327,7 +395,7 @@
 * **Added:** Health Check Mechanism. The extension monitors DOM readiness on load. If critical UI elements fail to appear within 10 seconds (e.g., due to an undocumented UI update by Google), a fallback toast notification alerts the user.
 * **Enhanced:** Advanced Telemetry & API Interceptor. The telemetry blocker was heavily expanded. Beyond Manifest V3 declarative rules, `fetch` and `XMLHttpRequest` are dynamically intercepted in the `MAIN` world to deeply inspect payloads, log blocked requests to the console, and dynamically spoof `BenefitTier` and `UserRestrictions` directly within the network layer.
 * **Changed:** Scrolling Optimization. Completely refactored `scroll-bottom.js`. Replaced expensive `setInterval` and `MutationObserver` polling loops with a highly efficient `ResizeObserver` tied strictly to the content container. This drastically reduces CPU footprint and battery drain during lengthy text generations.
-* **Removed:** Codebase Cleansing. Completely purged the legacy `bypass-old.js` content blocking mechanism and its associated state logic from the registry.
+* **Removed:** Codebase Cleansing. Completely purged the legacy DOM response-recovery mechanism and its associated state logic from the registry.
 
 ## v1.2-release
 * **Added:** Telemetry blocker (Blocks tracking using Manifest V3 declarativeNetRequest rules).

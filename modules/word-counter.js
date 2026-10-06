@@ -61,10 +61,16 @@
 
         const targets = new Set();
         mutations.forEach((mutation) => {
-          const target = mutation.target;
+          const target = mutation.target.nodeType === 3 ? mutation.target.parentElement : mutation.target;
           const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
           const turn = target && target.closest ? target.closest(turnSel) : null;
           if (turn) targets.add(turn);
+          for (const node of mutation.addedNodes || []) {
+            if (node.nodeType !== 1) continue;
+            const addedTurn = node.closest?.(turnSel);
+            if (addedTurn) targets.add(addedTurn);
+            node.querySelectorAll?.(turnSel).forEach(item => targets.add(item));
+          }
         });
 
         targets.forEach(queueTurnUpdate);
@@ -139,6 +145,9 @@
     const textChunks = turnNode.querySelectorAll(textSel);
     const parts = [];
     textChunks.forEach(chunk => {
+      // Native ms-prompt-chunk.text-chunk can wrap ms-text-chunk. Count only
+      // the innermost matching chunk so the wrapper's text is not duplicated.
+      if (chunk.querySelector?.(textSel)) return;
       const t = chunk.innerText;
       if (t) parts.push(t);
     });

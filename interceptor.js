@@ -38,15 +38,25 @@
 
   // ═══════════════════════════════════════════════════════════════════
   // MS-HEADER DESKTOP ACTION MOUNTING SHIM (For Mobile & Small Screens)
-  // Ensures Google AI Studio's ms-header always mounts its desktop action
-  // controls (including prompt title and native edit dialog trigger) regardless
-  // of viewport width. Modern Web Chat visually handles layout and styling.
+  // Desktop actions are needed only while Modern Web Chat supplies their
+  // mobile layout. Preserve native geometry while the module is disabled.
   // ═══════════════════════════════════════════════════════════════════
+  let modernWebChatEnabled = false;
+  const headerObservers = new Set();
+  window.addEventListener('__sl_modernWebChatToggle', (event) => {
+    const enabled = event.detail?.enabled === true;
+    if (enabled === modernWebChatEnabled) return;
+    modernWebChatEnabled = enabled;
+    // A setting change need not physically resize the header. Replay its last
+    // native observation so Angular also updates the mounted action controls.
+    headerObservers.forEach(observer => observer.refreshHeader());
+  });
+
   if (typeof Element !== 'undefined' && Element.prototype) {
     const _origGBCR = Element.prototype.getBoundingClientRect;
     Element.prototype.getBoundingClientRect = function () {
       const rect = _origGBCR.apply(this, arguments);
-      if (this && this.tagName === 'MS-HEADER') {
+      if (modernWebChatEnabled && this && this.tagName === 'MS-HEADER') {
         const w = (rect && typeof rect.width === 'number') ? Math.max(rect.width, 1024) : 1024;
         const h = (rect && typeof rect.height === 'number') ? rect.height : 0;
         const x = (rect && typeof rect.x === 'number') ? rect.x : 0;
@@ -63,9 +73,15 @@
     const _OrigResizeObserver = window.ResizeObserver;
     window.ResizeObserver = class extends _OrigResizeObserver {
       constructor(callback) {
-        super((entries, observer) => {
+        let notify;
+        super((entries, observer) => notify(entries, observer));
+        this.headerEntries = new Map();
+        notify = (entries, observer) => {
+          entries.forEach(entry => {
+            if (entry.target?.tagName === 'MS-HEADER') this.headerEntries.set(entry.target, entry);
+          });
           const proxiedEntries = entries.map(entry => {
-            if (entry && entry.target && entry.target.tagName === 'MS-HEADER') {
+            if (modernWebChatEnabled && entry?.target?.tagName === 'MS-HEADER') {
               return new Proxy(entry, {
                 get(target, prop) {
                   if (prop === 'contentRect') {
@@ -73,7 +89,8 @@
                     return new Proxy(cr, {
                       get(rTarget, rProp) {
                         if (rProp === 'width') return Math.max(rTarget.width, 1024);
-                        return rTarget[rProp];
+                        const value = rTarget[rProp];
+                        return typeof value === 'function' ? value.bind(rTarget) : value;
                       }
                     });
                   }
@@ -84,7 +101,24 @@
             return entry;
           });
           return callback(proxiedEntries, observer);
-        });
+        };
+        this.refreshHeader = () => {
+          if (this.headerEntries.size) notify([...this.headerEntries.values()], this);
+        };
+      }
+      observe(target, options) {
+        super.observe(target, options);
+        if (target?.tagName === 'MS-HEADER') headerObservers.add(this);
+      }
+      unobserve(target) {
+        super.unobserve(target);
+        this.headerEntries.delete(target);
+        if (!this.headerEntries.size) headerObservers.delete(this);
+      }
+      disconnect() {
+        super.disconnect();
+        this.headerEntries.clear();
+        headerObservers.delete(this);
       }
     };
   }
@@ -321,6 +355,13 @@
       const q = (name || '').toLowerCase();
       const val = !!enabled;
 
+      if (q.includes('image')) {
+        if (rs.enableImageSearch && typeof rs.enableImageSearch.set === 'function') {
+          rs.enableImageSearch.set(val);
+          return true;
+        }
+        return false;
+      }
       if (q.includes('search') || q.includes('grounding')) {
         if (rs.enableSearchAsATool && typeof rs.enableSearchAsATool.set === 'function') {
           rs.enableSearchAsATool.set(val);
@@ -342,12 +383,6 @@
       if (q.includes('browse') || q.includes('url')) {
         if (rs.enableBrowseAsATool && typeof rs.enableBrowseAsATool.set === 'function') {
           rs.enableBrowseAsATool.set(val);
-          return true;
-        }
-      }
-      if (q.includes('image')) {
-        if (rs.enableImageSearch && typeof rs.enableImageSearch.set === 'function') {
-          rs.enableImageSearch.set(val);
           return true;
         }
       }
@@ -492,9 +527,8 @@
     // 1. Set model via DynamicStudioAPI (Signals) or fallback to model override in XHR
     if (profile.model) {
       const ok = DynamicStudioAPI.setModel(profile.model);
-      if (!ok) {
-        overrideModelId = profile.model.replace(/^models\//, '');
-      }
+      if (ok) clearModelOverride();
+      else installModelOverride(profile.model);
     }
 
     // 2. Set temperature via Signals
@@ -522,10 +556,12 @@
   }
 
   let requestSequence = 0;
+  let chatEpoch = 0;
   function requestMeta() {
     return {
       version: 1,
       requestId: 'sl_req_' + Date.now() + '_' + (++requestSequence),
+      epoch: chatEpoch,
       route: window.location.pathname,
       ts: Date.now()
     };
@@ -543,10 +579,44 @@
     }));
   }
 
-  let bypassEnabled = true;
+  function promptOperation(url) {
+    try {
+      const parsed = new URL(url, 'https://aistudio.google.com');
+      if (!['aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com'].includes(parsed.hostname)) return null;
+      return parsed.pathname.match(/^\/\$rpc\/google\.internal\.alkali\.applications\.makersuite\.v1\.MakerSuiteService\/(CreatePrompt|UpdatePrompt)$/)?.[1] || null;
+    } catch (_) { return null; }
+  }
 
-  window.addEventListener('__aisu_toggle', (e) => {
-    bypassEnabled = !!e.detail;
+  function promptSaveMeta(operation) {
+    const meta = requestMeta();
+    return { version: 1, saveId: meta.requestId, epoch: meta.epoch, route: meta.route, ts: meta.ts, operation };
+  }
+
+  function emitPromptSaveRequest(meta, body) {
+    window.dispatchEvent(new CustomEvent('__sl_promptSaveRequest', {
+      detail: { ...meta, body: typeof body === 'string' ? body : null }
+    }));
+  }
+
+  function emitPromptSaveResult(meta, body, ok) {
+    let name = null;
+    if (ok) {
+      try {
+        const prompt = typeof body === 'string' ? JSON.parse(body.replace(/^\s*\)\]\}'[^\r\n]*[\r\n]+/, '')) : body;
+        const value = Array.isArray(prompt) ? prompt[0] : null;
+        if (typeof value === 'string' && /^prompts\/[A-Za-z0-9_-]+$/.test(value) &&
+            !/^prompts\/new_(?:chat|image|video|comparison)$/.test(value)) name = value;
+      } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('__sl_promptSaveResult', {
+      detail: { ...meta, ok: !!ok && !!name, complete: true, name }
+    }));
+  }
+
+  let responseRecoveryEnabled = true;
+
+  window.addEventListener('__sl_responseRecoveryToggle', (e) => {
+    responseRecoveryEnabled = !!e.detail;
   });
 
   // ── Save originals BEFORE Angular ──────────────────────────────────
@@ -570,6 +640,74 @@
   // the model in the XHR URL. No clicks, no Angular hacks.
   // ═══════════════════════════════════════════════════════════════════
   let overrideModelId = null;
+  let overrideBaseModel = null;
+  const activeGenerationXhrs = new Set();
+
+  function clearModelOverride() {
+    overrideModelId = null;
+    overrideBaseModel = null;
+    if (document.documentElement) {
+      delete document.documentElement.dataset.slActiveModel;
+      delete document.documentElement.dataset.slActiveModelName;
+    }
+  }
+
+  function installModelOverride(id) {
+    if (typeof id !== 'string' || !/^(?:models\/)?[\w.-]+$/.test(id)) return;
+    overrideModelId = id.replace(/^models\//, '');
+    overrideBaseModel = DynamicStudioAPI.getModel();
+  }
+
+  function currentModelOverride() {
+    if (!overrideModelId) return null;
+    const nativeModel = DynamicStudioAPI.getModel();
+    if (nativeModel && !overrideBaseModel) {
+      // Settings mount lazily. Their first readable value establishes the
+      // baseline; it does not prove that the user changed the model.
+      overrideBaseModel = nativeModel;
+    } else if (nativeModel && nativeModel !== overrideBaseModel && nativeModel !== overrideModelId) {
+      clearModelOverride(); // A native selection supersedes the fallback.
+    }
+    return overrideModelId;
+  }
+
+  window.addEventListener('__sl_routeChanged', (event) => {
+    const current = event.detail?.current?.key;
+    const previous = event.detail?.previous?.key;
+    if (current && previous && current !== previous) clearModelOverride();
+  });
+  document.addEventListener('click', event => {
+    const resetButton = event.target?.closest?.('button[data-test-clear="outside"][aria-label="New chat"]');
+    let resetsChat = resetButton?.getAttribute?.('data-test-clear') === 'outside' &&
+      resetButton?.getAttribute?.('aria-label') === 'New chat';
+    if (!resetsChat && event.isTrusted === true && event.button === 0 &&
+        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      const anchor = event.target?.closest?.('a[href]');
+      try {
+        const url = anchor && new URL(anchor.href, 'https://aistudio.google.com');
+        resetsChat = !!url && url.origin === 'https://aistudio.google.com' && url.pathname.replace(/\/+$/, '') === '/prompts/new_chat' &&
+          !anchor.download && (!anchor.target || anchor.target === '_self');
+      } catch (_) {}
+    }
+    if (resetsChat) {
+      // The same-path New Chat action reuses Angular's component. Invalidate
+      // ownership before its handler runs, including native proxy clicks.
+      chatEpoch++;
+      activeGenerationXhrs.forEach(xhr => { xhr.__slUserCancelled = true; });
+      window.dispatchEvent(new CustomEvent('__sl_chatReset', {
+        detail: { version: 1, epoch: chatEpoch, route: window.location.pathname }
+      }));
+    }
+    const explicitStop = event.target?.closest?.('button.stop, [data-test-id="stop-button"], ms-run-button button[aria-label*="Stop" i]');
+    const runButton = event.target?.closest?.('ms-run-button button');
+    // The native Run/Stop button currently has no Stop class or aria-label.
+    // Its rendered label changes to Stop, while optional shortcut hints can
+    // occupy separate lines. Scope this text check to the native control.
+    const nativeStop = runButton && /(?:^|\n)\s*Stop\s*(?:\n|$)/i.test(runButton.innerText || '');
+    if (explicitStop || nativeStop) {
+      activeGenerationXhrs.forEach(xhr => { xhr.__slUserCancelled = true; });
+    }
+  }, true);
 
   // Fast, signal-only selection for existing text chats. Unlike __sl_setModel,
   // this does not install a network override or claim success on failure.
@@ -579,6 +717,7 @@
     if (!modelId || !requestId) return;
     let applied = false;
     try { applied = DynamicStudioAPI.setModel(modelId); } catch (_) {}
+    if (applied) clearModelOverride();
     window.dispatchEvent(new CustomEvent('__sl_modelDirectResult', {
       detail: { requestId, applied }
     }));
@@ -588,14 +727,16 @@
     const id = e.detail && (e.detail.modelId || e.detail.model);
     const modelName = e.detail && e.detail.modelName;
     if (id) {
-      overrideModelId = id.replace(/^models\//, '');
-      if (document.documentElement) {
-        document.documentElement.dataset.slActiveModel = overrideModelId;
-        document.documentElement.dataset.slActiveModelName = modelName || overrideModelId;
-      }
+      const activeModelId = id.replace(/^models\//, '');
       const setOk = DynamicStudioAPI.setModel(id);
+      if (setOk) clearModelOverride();
+      else installModelOverride(id);
+      if (document.documentElement) {
+        document.documentElement.dataset.slActiveModel = activeModelId;
+        document.documentElement.dataset.slActiveModelName = modelName || activeModelId;
+      }
       window.dispatchEvent(new CustomEvent('__sl_modelChanged', {
-        detail: { modelId: overrideModelId, modelName: modelName || overrideModelId, signalApplied: setOk }
+        detail: { modelId: activeModelId, modelName: modelName || activeModelId, signalApplied: setOk }
       }));
       console.log(
         '%c[Studio.lab] 🔄 Model override / signal set: ' + id + (setOk ? ' (Signal OK)' : ' (XHR fallback)'),
@@ -605,9 +746,7 @@
   });
 
   // Clear override when user manually changes model via native UI
-  window.addEventListener('__sl_clearModelOverride', () => {
-    overrideModelId = null;
-  });
+  window.addEventListener('__sl_clearModelOverride', clearModelOverride);
 
   // Dynamic tool toggling via DynamicStudioAPI signal
   window.addEventListener('__sl_setTool', (e) => {
@@ -647,14 +786,122 @@
     return false;
   }
 
+  function rewriteModelUrl(rawUrl, modelId) {
+    if (!modelId) return rawUrl;
+    try {
+      const url = new URL(rawUrl, window.location.href || 'https://aistudio.google.com/');
+      const pathname = url.pathname.replace(/\/models\/[^/:]+(?=:(?:stream)?generatecontent$)/i, '/models/' + modelId);
+      if (pathname === url.pathname) return rawUrl;
+      url.pathname = pathname;
+      return url.href;
+    } catch (_) { return rawUrl; }
+  }
+
+  // JSON token ranges let us edit schema fields without reserializing prompt
+  // text, signatures, images, whitespace, or an unfinished streaming suffix.
+  function readJsonNode(raw, offset = 0) {
+    let pos = offset;
+    const whitespace = () => { while (/\s/.test(raw[pos] || '') && pos < raw.length) pos++; };
+    const read = (depth) => {
+      if (depth > 100) throw new Error('JSON nesting limit');
+      whitespace();
+      const start = pos, ch = raw[pos];
+      if (ch === '[' || ch === '{') {
+        const array = ch === '[', close = array ? ']' : '}';
+        const node = { kind: array ? 'array' : 'object', start, end: ++pos, complete: false, items: [], fields: new Map() };
+        whitespace();
+        if (raw[pos] === close) { node.end = ++pos; node.complete = true; return node; }
+        while (pos < raw.length) {
+          let key;
+          if (!array) {
+            const keyNode = read(depth + 1);
+            if (!keyNode.complete) return node;
+            if (keyNode.kind !== 'string') throw new Error('Invalid JSON key');
+            key = keyNode.value;
+            whitespace();
+            if (pos === raw.length) return node;
+            if (raw[pos++] !== ':') throw new Error('Invalid JSON object');
+          }
+          const child = read(depth + 1);
+          node.items.push(child);
+          if (!array) node.fields.set(key, child);
+          node.end = child.end;
+          if (!child.complete) return node;
+          whitespace();
+          if (pos === raw.length) return node;
+          if (raw[pos] === close) { node.end = ++pos; node.complete = true; return node; }
+          if (raw[pos++] !== ',') throw new Error('Invalid JSON separator');
+          whitespace();
+        }
+        return node;
+      }
+      if (ch === '"') {
+        pos++;
+        while (pos < raw.length) {
+          if (raw[pos] === '\\') { pos += 2; continue; }
+          if (raw[pos++] === '"') {
+            const token = raw.slice(start, pos);
+            return { kind: 'string', start, end: pos, complete: true,
+              value: token.length <= 512 ? JSON.parse(token) : undefined };
+          }
+        }
+        return { kind: 'string', start, end: raw.length, complete: false };
+      }
+      while (pos < raw.length && !/[\s,\]}]/.test(raw[pos])) pos++;
+      const token = raw.slice(start, pos);
+      if (!token || !/^(?:null|true|false|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)$/.test(token)) {
+        if (pos === raw.length) return { kind: 'primitive', start, end: pos, complete: false };
+        throw new Error('Invalid JSON token');
+      }
+      // A final digit can still be followed by more digits in the next chunk.
+      if (pos === raw.length && /^-?\d/.test(token)) return { kind: 'primitive', start, end: pos, complete: false };
+      return { kind: 'primitive', start, end: pos, complete: true, value: JSON.parse(token) };
+    };
+    return read(0);
+  }
+
+  function replaceJsonRanges(raw, replacements) {
+    let result = raw;
+    replacements.sort((a, b) => b.start - a.start).forEach(({ start, end, value }) => {
+      result = result.slice(0, start) + value + result.slice(end);
+    });
+    return result;
+  }
+
+  function rewriteModelBody(body, modelId) {
+    if (!modelId || typeof body !== 'string') return body;
+    try {
+      const root = readJsonNode(body);
+      if (!root.complete || body.slice(root.end).trim()) return body;
+      // MakerSuite's GenerateContentRequest proto field 1 is root[0]. The
+      // public REST schema uses root.model. Never descend into contents/tools.
+      const field = root.kind === 'array' && root.items[1]?.kind === 'array' ? root.items[0]
+        : root.kind === 'object' ? root.fields.get('model') : null;
+      if (field?.kind !== 'string' || typeof field.value !== 'string' ||
+          !/^(?:models\/)?[\w.-]+$/.test(field.value)) return body;
+      return replaceJsonRanges(body, [{ start: field.start, end: field.end,
+        value: JSON.stringify((field.value.startsWith('models/') ? 'models/' : '') + modelId) }]);
+    } catch (_) { return body; }
+  }
+
+  function emitResponse(meta, body, ok) {
+    if (!ok || typeof body !== 'string' || !body) return;
+    window.dispatchEvent(new CustomEvent('__sl_responsePayload', {
+      detail: { ...meta, body, ok: true, complete: true }
+    }));
+  }
+
   // ── Patch open (with model override & telemetry logging) ───────────
   XMLHttpRequest.prototype.open = function (method, url) {
+    // A reopened XHR must not attribute its new response to an older save.
+    if (this.__slPromptSaveFinish) this.__slPromptSaveFinish(false);
     const rawUrl = typeof url === 'string' ? url : (url != null ? String(url) : '');
     let processedUrl = rawUrl;
 
     // Apply model override to GenerateContent requests
-    if (overrideModelId && isGenerateContentUrl(processedUrl)) {
-      processedUrl = processedUrl.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+    const modelOverride = currentModelOverride();
+    if (modelOverride && isGenerateContentUrl(processedUrl)) {
+      processedUrl = rewriteModelUrl(processedUrl, modelOverride);
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in request: ' + overrideModelId,
         'color:#87a9ff'
@@ -669,13 +916,22 @@
 
     this.__aisuUrl = processedUrl;
     this.__aisuIsGen = isGenerateContentUrl(processedUrl);
+    this.__slPromptOperation = String(method).toUpperCase() === 'POST' ? promptOperation(processedUrl) : null;
+    this.__slModelOverride = modelOverride;
+    if (this.__slPatchedGeneration) {
+      // Native XHR objects may be reopened for unrelated requests.
+      delete this.abort;
+      delete this.responseText;
+      delete this.response;
+      this.__slPatchedGeneration = false;
+    }
 
     // Save / Sync detection (prompt auto-saving or Drive sync)
-    if (/prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(processedUrl)) {
+    if (this.__slPromptOperation || /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(processedUrl)) {
       window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: true, url: processedUrl } }));
       this.addEventListener('loadend', function () {
         window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url: processedUrl } }));
-      });
+      }, { once: true });
     }
 
     if (processedUrl.includes('ListModels')) {
@@ -729,14 +985,29 @@
 
   // ── Patch send ─────────────────────────────────────────────────────
   XMLHttpRequest.prototype.send = function (body) {
+    if (this.__slPromptOperation) {
+      const xhr = this;
+      const save = promptSaveMeta(this.__slPromptOperation);
+      emitPromptSaveRequest(save, body);
+      let finished = false;
+      const finishSave = ok => {
+        if (finished) return;
+        finished = true;
+        if (xhr.__slPromptSaveFinish === finishSave) delete xhr.__slPromptSaveFinish;
+        let response;
+        try { response = xhr.responseType === 'json' ? _nativeR?.call(xhr) : _nativeRT?.call(xhr); } catch (_) {}
+        emitPromptSaveResult(save, response, ok);
+      };
+      this.__slPromptSaveFinish = finishSave;
+      this.addEventListener('loadend', () => finishSave(xhr.status >= 200 && xhr.status < 300), { once: true });
+      try { return _origSend.apply(this, arguments); }
+      catch (error) { finishSave(false); throw error; }
+    }
     if (!this.__aisuIsGen) {
       return _origSend.apply(this, arguments);
     }
 
-    let modifiedBody = body;
-    if (overrideModelId && typeof body === 'string' && body.includes('models/')) {
-      modifiedBody = body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId);
-    }
+    const modifiedBody = rewriteModelBody(body, this.__slModelOverride);
 
     const request = requestMeta();
     emitRequest(request, modifiedBody);
@@ -746,20 +1017,25 @@
     }));
 
     const xhr = this;
+    xhr.__slPatchedGeneration = true;
+    xhr.__slUserCancelled = false;
+    activeGenerationXhrs.add(xhr);
     let finished = false;
     const finish = (ok) => {
       if (finished) return;
       finished = true;
+      activeGenerationXhrs.delete(xhr);
+      try { emitResponse(request, xhr.responseText, ok); } catch (_) {}
       emitRequestFinished(request, ok);
     };
-    xhr.addEventListener('loadend', () => finish(xhr.status >= 200 && xhr.status < 300), { once: true });
+    xhr.addEventListener('loadend', () => finish(!xhr.__slUserCancelled && xhr.status >= 200 && xhr.status < 300), { once: true });
     let snap = '';
     let snapTime = 0;
     let didLogSanitize = false;
 
-    // ── 1. ABORT BLOCK (Core Bypass Feature) ─────────────────────────
+    // ── 1. ABORT BLOCK (Response Recovery) ─────────────────────────
     xhr.abort = function () {
-      if (!bypassEnabled) {
+      if (!responseRecoveryEnabled || xhr.__slUserCancelled || window.location.pathname !== request.route) {
         return _origAbort.apply(this, arguments);
       }
       console.log('%c[Studio.lab] 🚫 abort() blocked — preserving stream', 'color:#ff9800;font-weight:bold');
@@ -767,12 +1043,17 @@
     };
 
     // ── 2. RESPONSE SANITIZATION ─────────────────────────────────────
+    let lastRaw, lastSanitized;
+    const sanitize = raw => {
+      if (raw !== lastRaw) { lastRaw = raw; lastSanitized = _sanitize(raw); }
+      return lastSanitized;
+    };
     if (_nativeRT) {
       Object.defineProperty(xhr, 'responseText', {
         get: function () {
           const raw = _nativeRT.call(this);
-          if (!raw || !bypassEnabled) return raw;
-          const clean = _sanitize(raw);
+          if (!raw || !responseRecoveryEnabled) return raw;
+          const clean = sanitize(raw);
           if (clean !== raw && !didLogSanitize) {
             didLogSanitize = true;
             console.log(
@@ -792,8 +1073,8 @@
           const rt = this.responseType;
           if (!rt || rt === 'text') {
             const raw = _nativeR.call(this);
-            if (!bypassEnabled) return raw;
-            return (raw && typeof raw === 'string') ? _sanitize(raw) : raw;
+            if (!responseRecoveryEnabled) return raw;
+            return (raw && typeof raw === 'string') ? sanitize(raw) : raw;
           }
           return _nativeR.call(this);
         },
@@ -835,21 +1116,94 @@
 
   // ═══════════════════════════════════════════════════════════════════
   function _sanitize(raw) {
-    let s = raw;
-    s = s.replace(/\[\],\d+/g, '[],1');
-    s = s.replace(/\[null,\d+\]/g, '[null,1]');
-    s = s.replace(
-      /"The model output could not be generated[^"]*"/g,
-      'null'
-    );
-    s = s.replace(/"SAFETY"/g, '"STOP"');
-    s = s.replace(/"RECITATION"/g, '"STOP"');
-    s = s.replace(/"PROHIBITED_CONTENT"/g, '"STOP"');
-    s = s.replace(/"IMAGE_SAFETY"/g, '"STOP"');
-    s = s.replace(/"SPII"/g, '"STOP"');
-    s = s.replace(/"BLOCKLIST"/g, '"STOP"');
-    s = s.replace(/"blocked"\s*:\s*true/g, '"blocked":false');
-    return s;
+    if (typeof raw !== 'string' || !raw) return raw;
+    const replacements = [];
+    const blockedNames = new Set(['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'IMAGE_SAFETY',
+      'SPII', 'BLOCKLIST', 'IMAGE_PROHIBITED_CONTENT', 'MODEL_ARMOR']);
+    const blockedFinishCodes = new Set([3, 4, 7, 8, 11, 14, 17]);
+    const blockedPromptCodes = new Set([1, 3, 4, 5]);
+    const replace = (node, value) => {
+      if (node?.complete) replacements.push({ start: node.start, end: node.end, value });
+    };
+    const blockedFinish = node => node?.complete &&
+      (blockedNames.has(node.value) || blockedFinishCodes.has(node.value));
+    const clearRatings = node => {
+      if (node?.kind !== 'array') return;
+      node.items.forEach(rating => {
+        const blocked = rating.fields?.get('blocked');
+        if (blocked?.value === true) replace(blocked, 'false');
+      });
+    };
+    const contentIsModel = node => node?.kind === 'array' && node.items[0]?.kind === 'array' &&
+      node.items[1]?.value === 'model';
+    const nativeFrame = node => {
+      if (node?.kind !== 'array' || node.items[0]?.kind !== 'array') return false;
+      const candidates = node.items[0].items;
+      const feedback = node.items[1];
+      const hasFeedback = feedback?.kind === 'array' && blockedPromptCodes.has(feedback.items[0]?.value);
+      if (!hasFeedback && (!candidates.length || !candidates.every(candidate =>
+        candidate.kind === 'array' && (contentIsModel(candidate.items[0]) ||
+          (node.items.length >= 3 && (candidate.items[0]?.value === null ||
+            candidate.items[0]?.kind === 'array' && candidate.items[0].items.length === 0)))))) return false;
+      candidates.forEach(candidate => {
+        if (blockedFinish(candidate.items[1])) {
+          replace(candidate.items[1], typeof candidate.items[1].value === 'number' ? '1' : '"STOP"');
+          // Proto fields 2 and 4 are finishReason and finishMessage. Parts and
+          // token usage have their own nested arrays and are never inspected.
+          if (candidate.items[3]?.kind === 'string') replace(candidate.items[3], 'null');
+        }
+      });
+      if (hasFeedback) replace(feedback, 'null');
+      return true;
+    };
+    const response = node => {
+      if (node.kind === 'object') {
+        const candidates = node.fields.get('candidates');
+        if (candidates?.kind === 'array') candidates.items.forEach(candidate => {
+          if (candidate.kind !== 'object') return;
+          const reason = candidate.fields.get('finishReason');
+          if (blockedFinish(reason)) {
+            replace(reason, typeof reason.value === 'number' ? '1' : '"STOP"');
+            if (candidate.fields.get('finishMessage')?.kind === 'string') replace(candidate.fields.get('finishMessage'), 'null');
+          }
+          clearRatings(candidate.fields.get('safetyRatings'));
+        });
+        const feedback = node.fields.get('promptFeedback');
+        if (feedback?.kind === 'object' && blockedNames.has(feedback.fields.get('blockReason')?.value)) replace(feedback, 'null');
+        return;
+      }
+      if (nativeFrame(node)) return;
+      // ServerStreaming returns [frames], REST streaming returns [responses].
+      // Limit traversal to those envelope levels; parts can themselves contain
+      // arrays, objects, tool arguments, and literal status-looking strings.
+      if (node.kind === 'array') node.items.forEach(frame => {
+        if (frame.kind === 'object') response(frame);
+        else if (!nativeFrame(frame) && frame.kind === 'array') frame.items.forEach(nativeFrame);
+      });
+    };
+    try {
+      if (/^\s*data:/.test(raw)) {
+        const pattern = /(?:^|\n)data:\s*/g;
+        let match;
+        while ((match = pattern.exec(raw))) {
+          if (raw.slice(pattern.lastIndex, pattern.lastIndex + 6) === '[DONE]') continue;
+          response(readJsonNode(raw, pattern.lastIndex));
+        }
+      } else {
+        let offset = raw.startsWith(")]}'") ? raw.indexOf('\n') + 1 : 0;
+        while (offset < raw.length) {
+          const node = readJsonNode(raw, offset);
+          // Unknown length-prefixed transports must retain both their byte
+          // counts and payloads; only the verified JSON envelopes are edited.
+          if (node.kind !== 'array' && node.kind !== 'object') return raw;
+          response(node);
+          if (!node.complete) break;
+          offset = node.end;
+          while (/\s/.test(raw[offset] || '') && offset < raw.length) offset++;
+        }
+      }
+      return replaceJsonRanges(raw, replacements);
+    } catch (_) { return raw; } // Unknown/malformed encodings pass through intact.
   }
 
   function _dispatchCapture(rawText, trigger, snapTime) {
@@ -931,20 +1285,36 @@
     let url = typeof input === 'string' ? input
       : (input && (input.url || input.href)) || '';
     const isGen = isGenerateContentUrl(url);
+    // Capture ownership before reading a Request body asynchronously.
+    const request = isGen ? requestMeta() : null;
+    const operation = String(init?.method || input?.method || 'GET').toUpperCase() === 'POST' ? promptOperation(url) : null;
+    const save = operation ? promptSaveMeta(operation) : null;
+    const modelOverride = isGen ? currentModelOverride() : null;
+    let requestBody = init && typeof init.body === 'string' ? init.body : null;
+    const isRequest = typeof Request !== 'undefined' && input instanceof Request;
+    let effectiveRequest = null;
+    if ((isGen || save) && isRequest) {
+      try {
+        effectiveRequest = init === undefined ? input.clone() : new Request(input.clone(), init);
+        requestBody = await effectiveRequest.clone().text();
+      } catch (_) { /* A disturbed/unreadable body retains native fetch behavior. */ }
+    }
 
-    if (isGen && overrideModelId) {
-      const rewrittenUrl = url.replace(/models\/[^:\/]+/, 'models/' + overrideModelId);
+    if (modelOverride) {
+      const rewrittenUrl = rewriteModelUrl(url, modelOverride);
+      const rewrittenBody = rewriteModelBody(requestBody, modelOverride);
       if (typeof input === 'string') {
         input = rewrittenUrl;
       } else if (typeof URL !== 'undefined' && input instanceof URL) {
         input = rewrittenUrl;
-      } else if (input && typeof Request !== 'undefined' && input instanceof Request) {
-        input = new Request(rewrittenUrl, input);
+      } else if (isRequest && effectiveRequest) {
+        const redirected = new Request(rewrittenUrl, effectiveRequest);
+        input = rewrittenBody !== requestBody ? new Request(redirected, { body: rewrittenBody }) : redirected;
+        init = undefined; // The caller's init was merged into effectiveRequest.
       }
       url = rewrittenUrl;
-      if (init && typeof init.body === 'string' && init.body.includes('models/')) {
-        init = { ...init, body: init.body.replace(/models\/gemini-[a-zA-Z0-9\.\-_]+/g, 'models/' + overrideModelId) };
-      }
+      if (init && typeof init.body === 'string' && rewrittenBody !== requestBody) init = { ...init, body: rewrittenBody };
+      requestBody = rewrittenBody;
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in fetch request: ' + overrideModelId,
         'color:#87a9ff;font-weight:bold'
@@ -956,23 +1326,43 @@
       detail: { url, method: (init && init.method) || (input && input.method) || 'GET', ts: Date.now(), isTelemetry }
     }));
 
-    const request = isGen ? requestMeta() : null;
-    if (request) emitRequest(request, init && init.body);
+    if (request) emitRequest(request, requestBody);
+    if (save) emitPromptSaveRequest(save, requestBody);
 
-    const isSave = /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(url);
+    const isSave = !!save || /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(url);
     if (isSave) {
       window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: true, url } }));
     }
 
     try {
       const res = await _origFetch.apply(this, init === undefined ? [input] : [input, init]);
-      if (request) emitRequestFinished(request, res.ok);
+      if (request) {
+        if (res.ok && typeof res.clone === 'function') {
+          // Read a clone in parallel; the page receives its original streaming
+          // body immediately. Export/cleanup waits for the entire generation.
+          try {
+            res.clone().text().then(body => {
+              emitResponse(request, body, true);
+              emitRequestFinished(request, true);
+            }).catch(() => emitRequestFinished(request, false));
+          } catch (_) { emitRequestFinished(request, false); }
+        } else emitRequestFinished(request, res.ok);
+      }
+      if (save) {
+        if (res.ok && typeof res.clone === 'function') {
+          try {
+            res.clone().text().then(body => emitPromptSaveResult(save, body, true))
+              .catch(() => emitPromptSaveResult(save, null, false));
+          } catch (_) { emitPromptSaveResult(save, null, false); }
+        } else emitPromptSaveResult(save, null, false);
+      }
       if (isSave) {
         window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
       }
       return res;
     } catch (fetchErr) {
       if (request) emitRequestFinished(request, false);
+      if (save) emitPromptSaveResult(save, null, false);
       if (isSave) {
         window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: false, url } }));
       }
@@ -1010,7 +1400,7 @@
   window.addEventListener('__sl_requestBuildInfo', emitBuildInfo);
 
   console.log(
-    '%c[Studio.lab] ⚡ Angular Bypass + Telemetry Shield active (MAIN world)',
+    '%c[Studio.lab] ⚡ Response Recovery + Telemetry Shield active (MAIN world)',
     'color:#87a9ff;font-weight:bold;font-size:12px'
   );
 })();

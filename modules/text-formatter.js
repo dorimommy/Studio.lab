@@ -745,7 +745,6 @@
 
     setTimeout(() => {
       urlInput.focus();
-      urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
     }, 50);
 
     function close() {
@@ -993,9 +992,9 @@
       const currentLine = val.substring(lineStart, pos);
 
       const taskMatch = currentLine.match(/^(\s*)([-*+])\s+\[([ xX])\]\s*(.*)$/);
-      const olMatch = currentLine.match(/^(\s*)(\d+)\.\s*(.*)$/);
-      const ulMatch = currentLine.match(/^(\s*)([-*+])\s*(.*)$/);
-      const quoteMatch = currentLine.match(/^(\s*)(>+)\s*(.*)$/);
+      const olMatch = currentLine.match(/^(\s*)(\d+)\.\s+(.*)$/);
+      const ulMatch = currentLine.match(/^(\s*)([-*+])\s+(.*)$/);
+      const quoteMatch = currentLine.match(/^(\s*)(>+)\s+(.*)$/);
 
       if (taskMatch) {
         const [, indent, bullet, , text] = taskMatch;

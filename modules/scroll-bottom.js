@@ -13,6 +13,7 @@
   let isGenerating = false;
   let generatingTimeout = null;
   let startRetryTimeout = null;
+  let routeTimeout = null;
 
   window.StudioLab.registerModule({
     id: 'scroll-bottom',
@@ -40,10 +41,17 @@
         scrollButton.remove();
         scrollButton = null;
       }
-      activeScroller = null;
       stopResizeObserver();
       clearTimeout(startRetryTimeout);
-      setTimeout(start, 500); // re-init on route change
+      clearTimeout(routeTimeout);
+      routeTimeout = setTimeout(start, 500); // re-init on route change
+    },
+    dispose() {
+      clearTimeout(routeTimeout);
+      clearTimeout(startRetryTimeout);
+      stopResizeObserver();
+      if (scrollButton) scrollButton.remove();
+      scrollButton = null;
     }
   });
 
@@ -91,6 +99,9 @@
     if (activeScroller) {
       activeScroller.removeEventListener('scroll', handleScroll);
     }
+    activeScroller = null;
+    clearTimeout(generatingTimeout);
+    generatingTimeout = null;
     setGenerating(false);
   }
 

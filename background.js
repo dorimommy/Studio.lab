@@ -1,8 +1,13 @@
 'use strict';
 chrome.action.onClicked.addListener(tab => {
-  let url;
-  try { url = new URL(tab.url); } catch (_) { return; }
-  if (url.protocol !== 'https:' || url.hostname !== 'aistudio.google.com') return;
+  if (!Number.isInteger(tab?.id) || tab.id < 0) return;
+  // Chrome omits tab.url without tabs/activeTab permission. Only our
+  // AI Studio content script handles this message, so no URL access is needed.
+  if (tab.url) {
+    let url;
+    try { url = new URL(tab.url); } catch (_) { return; }
+    if (url.protocol !== 'https:' || url.hostname !== 'aistudio.google.com') return;
+  }
   chrome.tabs.sendMessage(tab.id, { action: 'openStudioLab' }).catch(() => {
     console.warn('[Studio.lab] Reload AI Studio to connect the extension.');
   });

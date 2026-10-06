@@ -670,6 +670,15 @@
         line-height: 18px !important;
     }
 
+    .sl-header-btn[hidden] { display: none !important; }
+    .sl-header-btn:focus-visible,
+    .sl-dropdown-item:focus-visible,
+    .sl-toc-dash:focus-visible,
+    .sl-toc-item:focus-visible {
+        outline: 2px solid var(--color-v3-primary, #8ab4f8) !important;
+        outline-offset: 2px !important;
+    }
+
     /* Hide native toolbar saving indicators so they don't crowd the right button row */
     .toolbar-saving-indicator,
     ms-drive-save-indicator,
@@ -751,6 +760,13 @@
         pointer-events: none !important;
     }
 
+    body.sl-reading-thinking-options .cdk-overlay-pane:has(.mat-mdc-select-panel),
+    body.sl-reading-thinking-options .cdk-overlay-backdrop:has(+ .cdk-overlay-pane .mat-mdc-select-panel) {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
     /* Right side panel styling matching left nav (#191919 background & #262626 border) with smooth slide animation */
     ms-right-side-panel,
     .drawer-container:has(ms-run-settings) {
@@ -820,11 +836,7 @@
 
     /* Hide duplicated header items inside Run Settings drawer cleanly without breaking DOM clicks */
     ms-run-settings .settings-model-selector,
-    ms-run-settings ms-model-selector,
-    ms-run-settings ms-thinking-level-setting,
-    ms-run-settings .field-group:has(ms-thinking-level-setting),
-    ms-run-settings ms-thinking-budget-slider,
-    ms-run-settings div:has(> ms-thinking-budget-slider) {
+    ms-run-settings ms-model-selector {
         position: absolute !important;
         opacity: 0 !important;
         pointer-events: none !important;
@@ -1189,7 +1201,8 @@
 
     /* Open on hover of the TOC widget */
     .sl-chatgpt-toc.sl-hovered .sl-toc-popover,
-    .sl-chatgpt-toc:hover .sl-toc-popover {
+    .sl-chatgpt-toc:hover .sl-toc-popover,
+    .sl-chatgpt-toc:focus-within .sl-toc-popover {
         opacity: 1 !important;
         pointer-events: auto !important;
         transform: translateY(-50%) translateX(0) !important;
@@ -1331,8 +1344,8 @@
     }
 
     /* Attachment-only turns sit side-by-side in horizontal rows on the right */
-    .chat-session-content > ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)),
-    .chat-session-content > ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) {
+    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)),
+    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) {
         width: 112px !important;
         height: 112px !important;
         min-width: 112px !important;
@@ -1343,8 +1356,8 @@
         box-sizing: border-box !important;
     }
 
-    .chat-session-content > ms-chat-turn:has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container,
-    .chat-session-content > ms-chat-turn:has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container {
+    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container,
+    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) .chat-turn-container {
         width: 112px !important;
         height: 112px !important;
         min-width: 112px !important;
@@ -2317,8 +2330,23 @@
         width: auto !important;
         height: auto !important;
         min-width: 0 !important;
+        min-height: 0 !important;
         max-height: 70vh !important;
         max-width: 100% !important;
+        aspect-ratio: auto !important;
+        flex: 0 1 auto !important;
+        border-radius: 16px !important;
+    }
+
+    .chat-turn-container.model ms-image-chunk .image-container,
+    .chat-turn-container.model ms-image-chunk > div,
+    .chat-turn-container.model .image-chunk-container {
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
         aspect-ratio: auto !important;
         flex: 0 1 auto !important;
         border-radius: 16px !important;
@@ -2328,6 +2356,8 @@
         width: auto !important;
         height: auto !important;
         min-width: 0 !important;
+        max-width: 100% !important;
+        min-height: 0 !important;
         max-height: 70vh !important;
         aspect-ratio: auto !important;
         object-fit: contain !important;
