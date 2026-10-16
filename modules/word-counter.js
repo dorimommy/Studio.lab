@@ -1,6 +1,3 @@
-/**
- * Studio.lab module: word-counter
- */
 (function () {
   'use strict';
 
@@ -8,6 +5,13 @@
 
   let ctxRef = null;
   let observer = null;
+  let bodyTimer = null;
+  let routeTimer = null;
+  let frameId = null;
+  const pendingTurns = new Set();
+  const priorityTurns = new Set();
+  const TURNS_PER_FRAME = 20;
+  const TEXT_BLOCK_TAGS = /^(?:ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|BR|DD|DIV|DL|DT|FIGCAPTION|FIGURE|H[1-6]|HR|LI|OL|P|PRE|SECTION|TABLE|TD|TH|TR|UL)$/;
 
   window.StudioLab.registerModule({
     id: 'word-counter',
@@ -33,26 +37,27 @@
     },
     onRouteChange() {
       clearTimeout(routeTimer);
-      timers.forEach(clearTimeout);
-      timers.clear();
-      if (isActive()) routeTimer = setTimeout(updateAllTurns, 300);
+      clearQueue();
+      if (isActive()) routeTimer = setTimeout(() => {
+        routeTimer = null;
+        updateAllTurns();
+      }, 300);
     },
     dispose: stop
   });
-
-  let routeTimer = null;
-  const timers = new Map();
 
   function isActive() {
     return !!(ctxRef && ctxRef.state.wordCounterEnabled);
   }
 
   function startObserver() {
-    if (observer) return;
+    if (observer || bodyTimer !== null) return;
 
     const run = () => {
+      bodyTimer = null;
+      if (!isActive()) return;
       if (!document.body) {
-        setTimeout(run, 100);
+        bodyTimer = setTimeout(run, 100);
         return;
       }
 
@@ -62,6 +67,9 @@
         const targets = new Set();
         mutations.forEach((mutation) => {
           const target = mutation.target.nodeType === 3 ? mutation.target.parentElement : mutation.target;
+          if (isCounterNode(target)) return;
+          const changedNodes = [...(mutation.addedNodes || []), ...(mutation.removedNodes || [])];
+          if (changedNodes.length && changedNodes.every(isCounterNode)) return;
           const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
           const turn = target && target.closest ? target.closest(turnSel) : null;
           if (turn) targets.add(turn);
@@ -73,7 +81,7 @@
           }
         });
 
-        targets.forEach(queueTurnUpdate);
+        targets.forEach(turn => queueTurnUpdate(turn));
       });
 
       observer.observe(document.body, {
@@ -88,39 +96,92 @@
     run();
   }
 
+  function isCounterNode(node) {
+    const element = node?.nodeType === 3 ? node.parentElement : node;
+    const badge = element?.closest?.('.sl-word-counter');
+    return !!(badge && (badge.classList?.contains('sl-word-counter') || badge.className === 'sl-word-counter'));
+  }
+
+  function scheduleQueue() {
+    if (frameId !== null || !isActive() || (!pendingTurns.size && !priorityTurns.size)) return;
+    frameId = requestAnimationFrame(processQueue);
+  }
+
   function queueTurnUpdate(turn) {
-    if (timers.has(turn)) return;
+    pendingTurns.delete(turn);
+    priorityTurns.add(turn);
+    scheduleQueue();
+  }
 
-    const timer = setTimeout(() => {
-      timers.delete(turn);
+  function processQueue() {
+    frameId = null;
+    if (!isActive()) return;
+    let processed = 0;
+    while (processed < TURNS_PER_FRAME && (priorityTurns.size || pendingTurns.size)) {
+      const queue = priorityTurns.size ? priorityTurns : pendingTurns;
+      const turn = queue.values().next().value;
+      queue.delete(turn);
+      if (turn.isConnected === false) continue;
       updateTurnWordCount(turn);
-    }, 300);
+      processed++;
+    }
+    scheduleQueue();
+  }
 
-    timers.set(turn, timer);
+  function clearQueue() {
+    if (frameId !== null) cancelAnimationFrame(frameId);
+    frameId = null;
+    pendingTurns.clear();
+    priorityTurns.clear();
   }
 
   function stop() {
     if (observer) observer.disconnect();
     observer = null;
+    clearTimeout(bodyTimer);
+    bodyTimer = null;
     clearTimeout(routeTimer);
-    timers.forEach(clearTimeout);
-    timers.clear();
+    routeTimer = null;
+    clearQueue();
     removeCounters();
   }
 
   function updateAllTurns() {
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    document.querySelectorAll(turnSel).forEach(updateTurnWordCount);
+    const turns = document.querySelectorAll(turnSel);
+    for (let index = turns.length - 1; index >= 0; index--) {
+      if (!priorityTurns.has(turns[index])) pendingTurns.add(turns[index]);
+    }
+    if (frameId === null) processQueue();
   }
 
   function removeCounters() {
     document.querySelectorAll('.sl-word-counter').forEach(element => element.remove());
   }
 
+  function readChunkText(chunk) {
+    if (!chunk.childNodes) return chunk.innerText || chunk.textContent || '';
+    const parts = [];
+    function visit(node) {
+      if (node.nodeType === 3) {
+        parts.push(node.textContent || '');
+        return;
+      }
+      if (node.nodeType !== 1 || node.hidden || node.style?.display === 'none' || /^(?:SCRIPT|STYLE|TEMPLATE)$/.test(node.tagName)) return;
+      const block = TEXT_BLOCK_TAGS.test(node.tagName);
+      if (block) parts.push(' ');
+      for (const child of node.childNodes) visit(child);
+      if (block) parts.push(' ');
+    }
+    // Reading innerText would force layout for turns skipped by content-visibility.
+    visit(chunk);
+    return parts.join('');
+  }
+
   function updateTurnWordCount(turnNode) {
     if (!isActive()) return;
 
-    // Detect turn type from container class (works even when .author-label is missing)
+    // The container retains the role when .author-label is missing.
     const container = turnNode.querySelector('.chat-turn-container');
     if (!container) return;
     const isModel = container.classList.contains('model');
@@ -128,10 +189,9 @@
       container.querySelector('[data-turn-role="User"]'));
     if (!isModel && !isUser) return;
 
-    // Find .author-label — may be in this turn or a previous sibling (thinking turn case)
     let header = turnNode.querySelector('.author-label');
     if (!header && isModel) {
-      // Thinking turn above might hold the author-label
+      // A preceding thinking turn may own the model's author label.
       const prev = turnNode.previousElementSibling;
       const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
       if (prev && prev.tagName === turnSel.toUpperCase()) {
@@ -140,7 +200,14 @@
     }
     if (!header) return;
 
-    // Extract text ONLY from ms-text-chunk — works for both user and model turns
+    const next = turnNode.nextElementSibling;
+    if (isModel && next?.matches?.('ms-chat-turn') && !next.querySelector('.author-label') &&
+        next.querySelector('.chat-turn-container')?.classList.contains('model')) {
+      // The following answer owns the label shared with its thinking turn.
+      if (!header.querySelector('.sl-word-counter')) queueTurnUpdate(next);
+      return;
+    }
+
     const textSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.TEXT_CHUNK : 'ms-text-chunk';
     const textChunks = turnNode.querySelectorAll(textSel);
     const parts = [];
@@ -148,18 +215,15 @@
       // Native ms-prompt-chunk.text-chunk can wrap ms-text-chunk. Count only
       // the innermost matching chunk so the wrapper's text is not duplicated.
       if (chunk.querySelector?.(textSel)) return;
-      const t = chunk.innerText;
+      const t = readChunkText(chunk);
       if (t) parts.push(t);
     });
     let text = parts.join('\n');
 
-    // Normalize whitespace
     const trimmed = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // Word count: split by whitespace
-    const words = trimmed ? trimmed.split(/\s+/).filter(w => w.length > 0) : [];
-    const wordsCount = words.length;
-    // Character count: total including spaces (matches Word Counter extension convention)
+    const wordsCount = trimmed ? trimmed.split(/\s+/).length : 0;
+    // Include normalized spaces to match the Word Counter extension.
     const charsCount = trimmed.length;
 
     if (wordsCount === 0 && charsCount === 0) {

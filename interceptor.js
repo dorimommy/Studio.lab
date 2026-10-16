@@ -1,16 +1,8 @@
-/**
- * interceptor.js — Studio.lab | world: MAIN, run_at: document_start
- *
- * XHR interceptor that sanitizes GenerateContent responses before Angular
- * processes them. Neutralizes block signals and prevents stream abort.
- */
+// Runs in MAIN at document_start, before Angular consumes GenerateContent responses.
 (function () {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════════════
-  // ANGULAR 19 LVIEW REGISTRY INTERCEPTOR
-  // Captures Angular's internal LView Map before bootstrap
-  // ═══════════════════════════════════════════════════════════════════
+  // Capture Angular's internal LView map before bootstrap.
   const _candidateLViewMaps = new Set();
   const _origMapSet = Map.prototype.set;
   let mapCaptureTimeout;
@@ -36,11 +28,7 @@
     if (window.__NG_LVIEW_MAPS__ === _candidateLViewMaps) delete window.__NG_LVIEW_MAPS__;
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // MS-HEADER DESKTOP ACTION MOUNTING SHIM (For Mobile & Small Screens)
-  // Desktop actions are needed only while Modern Web Chat supplies their
-  // mobile layout. Preserve native geometry while the module is disabled.
-  // ═══════════════════════════════════════════════════════════════════
+  // Modern Web Chat needs desktop actions mounted on small screens; native geometry applies otherwise.
   let modernWebChatEnabled = false;
   const headerObservers = new Set();
   window.addEventListener('__sl_modernWebChatToggle', (event) => {
@@ -123,15 +111,12 @@
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // DYNAMIC STUDIO API (Angular Signals & Direct State Mutation)
-  // ═══════════════════════════════════════════════════════════════════
   const DynamicStudioAPI = {
     _getMap() {
       if (!mapCaptureActive && window.__NG_LVIEW_MAP__) {
         return window.__NG_LVIEW_MAP__;
       }
-      // Check candidate maps for the one that has active DOM elements with __ngContext__
+      // A live DOM context identifies Angular's registry among candidate maps.
       const probeEls = document.querySelectorAll('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
       for (const el of probeEls) {
         const ctxId = el.__ngContext__;
@@ -145,7 +130,6 @@
           }
         }
       }
-      // Fallback: pick candidate map with most entries
       let best = window.__NG_LVIEW_MAP__ || null;
       let maxLen = best ? best.size : 0;
       for (const m of _candidateLViewMaps) {
@@ -162,7 +146,6 @@
       const map = this._getMap();
       if (!map) return null;
 
-      // 1. Try direct lookup via DOM element __ngContext__
       const rs = document.querySelector('ms-run-settings, ms-prompt-run-settings');
       if (rs && typeof rs.__ngContext__ === 'number' && map.has(rs.__ngContext__)) {
         const lview = map.get(rs.__ngContext__);
@@ -178,7 +161,6 @@
         }
       }
 
-      // 2. Scan map entries if not found via DOM
       for (const [key, lview] of map.entries()) {
         if (!Array.isArray(lview)) continue;
         for (let i = 0; i < lview.length; i++) {
@@ -266,39 +248,42 @@
       return false;
     },
 
-    setSystemInstructions(text, callback) {
+    setSystemInstructions(text, callback, guard = () => true) {
       if (typeof text !== 'string') {
-        if (callback) callback();
+        if (callback) callback(false);
         return;
       }
-
+      const apply = (input) => {
+        if (!input || !guard()) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, text);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return guard() && input.value === text;
+      };
       let textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
       if (textarea) {
-        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(textarea, text);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        if (callback) callback();
+        if (callback) callback(apply(textarea));
+        else apply(textarea);
         return;
       }
-
       const btn = document.querySelector('ms-system-instructions-panel button');
-      if (!btn) {
-        if (callback) callback();
+      if (!btn || !guard()) {
+        if (callback) callback(false);
         return;
       }
-
       btn.click();
-      setTimeout(() => {
+      let attempts = 0;
+      const waitForPanel = () => {
+        if (!guard()) { if (callback) callback(false); return; }
         textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
-        if (textarea) {
-          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-          setter.call(textarea, text);
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        if (!textarea && ++attempts < 30) { setTimeout(waitForPanel, 50); return; }
+        const applied = apply(textarea);
         const closeBtn = document.querySelector('button[aria-label="Close panel"]');
-        if (closeBtn) closeBtn.click();
-        if (callback) callback();
-      }, 80);
+        if (textarea && guard() && closeBtn) closeBtn.click();
+        if (callback) callback(applied);
+      };
+      setTimeout(waitForPanel, 50);
     },
 
     getTools() {
@@ -486,7 +471,6 @@
   function applyTools(tools, next) {
     if (!tools || !tools.length) return next();
 
-    // 1. Direct Signals application
     let appliedAll = true;
     for (const item of tools) {
       const ok = DynamicStudioAPI.setTool(item.name, item.checked);
@@ -496,7 +480,6 @@
       return next();
     }
 
-    // 2. Fallback: DOM switch toggles
     const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
     let i = 0;
     function nextToggle() {
@@ -524,28 +507,39 @@
     const profile = e.detail && e.detail.profile;
     if (!eventId || !profile) return;
 
-    // 1. Set model via DynamicStudioAPI (Signals) or fallback to model override in XHR
     if (profile.model) {
       const ok = DynamicStudioAPI.setModel(profile.model);
       if (ok) clearModelOverride();
       else installModelOverride(profile.model);
     }
 
-    // 2. Set temperature via Signals
     if (typeof profile.temperature !== 'undefined') {
       DynamicStudioAPI.setTemperature(profile.temperature);
     }
 
-    // 3. Set system instructions (silent slide panel injection, zero dialog popups)
     DynamicStudioAPI.setSystemInstructions(profile.systemInstructions, () => {
-      // 4. Apply tools
       applyTools(profile.tools, () => {
         window.dispatchEvent(new CustomEvent('__sl_result_' + eventId, { detail: true }));
       });
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────
+  let catalogNavigation = 0;
+  window.addEventListener('__sl_routeChanged', () => { catalogNavigation++; });
+  window.addEventListener('__sl_applyCatalogPrompt', (event) => {
+    const { requestId, text, route } = event.detail || {};
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
+        typeof text !== 'string' || !text.trim() || text.length > 16000 ||
+        route !== location.href) return;
+    const epoch = chatEpoch;
+    const navigation = catalogNavigation;
+    const guard = () => location.href === route && chatEpoch === epoch && catalogNavigation === navigation;
+    DynamicStudioAPI.setSystemInstructions(text, applied => {
+      window.dispatchEvent(new CustomEvent('__sl_catalogPromptResult_' + requestId,
+        { detail: { ok: applied === true && guard() } }));
+    }, guard);
+  });
+
 
   const URL_MARKER = 'GenerateContent';
   const EVENT_NAME = '__aisu_xhrCapture';
@@ -619,7 +613,7 @@
     responseRecoveryEnabled = !!e.detail;
   });
 
-  // ── Save originals BEFORE Angular ──────────────────────────────────
+  // Capture native methods before Angular patches them.
   const _origOpen  = XMLHttpRequest.prototype.open;
   const _origSend  = XMLHttpRequest.prototype.send;
   const _origAbort = XMLHttpRequest.prototype.abort;
@@ -634,11 +628,7 @@
   );
   const _nativeR = _rDesc && _rDesc.get;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // MODEL OVERRIDE — the DIRECT SIGNAL approach
-  // Content script sets the model via CustomEvent, interceptor swaps
-  // the model in the XHR URL. No clicks, no Angular hacks.
-  // ═══════════════════════════════════════════════════════════════════
+  // A content-script event supplies the fallback model for outgoing generation requests.
   let overrideModelId = null;
   let overrideBaseModel = null;
   const activeGenerationXhrs = new Set();
@@ -700,9 +690,7 @@
     }
     const explicitStop = event.target?.closest?.('button.stop, [data-test-id="stop-button"], ms-run-button button[aria-label*="Stop" i]');
     const runButton = event.target?.closest?.('ms-run-button button');
-    // The native Run/Stop button currently has no Stop class or aria-label.
-    // Its rendered label changes to Stop, while optional shortcut hints can
-    // occupy separate lines. Scope this text check to the native control.
+    // Native Run/Stop lacks a Stop class or aria-label; its label can include separate shortcut lines.
     const nativeStop = runButton && /(?:^|\n)\s*Stop\s*(?:\n|$)/i.test(runButton.innerText || '');
     if (explicitStop || nativeStop) {
       activeGenerationXhrs.forEach(xhr => { xhr.__slUserCancelled = true; });
@@ -745,24 +733,18 @@
     }
   });
 
-  // Clear override when user manually changes model via native UI
   window.addEventListener('__sl_clearModelOverride', clearModelOverride);
 
-  // Dynamic tool toggling via DynamicStudioAPI signal
   window.addEventListener('__sl_setTool', (e) => {
     if (e.detail && e.detail.name) {
       DynamicStudioAPI.setTool(e.detail.name, e.detail.enabled);
     }
   });
 
-  // Open native Save Prompt (Edit title) dialog
   window.addEventListener('__sl_openEditPromptTitle', () => {
     DynamicStudioAPI.openEditPromptTitleDialog();
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-  // TELEMETRY & ROUTING PATTERNS
-  // ═══════════════════════════════════════════════════════════════════
   const TELEMETRY_PATTERNS = [
     'play.google.com/log',
     'google-analytics.com/g/collect',
@@ -891,14 +873,12 @@
     }));
   }
 
-  // ── Patch open (with model override & telemetry logging) ───────────
   XMLHttpRequest.prototype.open = function (method, url) {
     // A reopened XHR must not attribute its new response to an older save.
     if (this.__slPromptSaveFinish) this.__slPromptSaveFinish(false);
     const rawUrl = typeof url === 'string' ? url : (url != null ? String(url) : '');
     let processedUrl = rawUrl;
 
-    // Apply model override to GenerateContent requests
     const modelOverride = currentModelOverride();
     if (modelOverride && isGenerateContentUrl(processedUrl)) {
       processedUrl = rewriteModelUrl(processedUrl, modelOverride);
@@ -908,7 +888,6 @@
       );
     }
 
-    // Telemetry detection
     const isTelemetry = isTelemetryUrl(processedUrl);
     window.dispatchEvent(new CustomEvent('__sl_networkRequest', {
       detail: { url: processedUrl, method, ts: Date.now(), isTelemetry }
@@ -926,7 +905,6 @@
       this.__slPatchedGeneration = false;
     }
 
-    // Save / Sync detection (prompt auto-saving or Drive sync)
     if (this.__slPromptOperation || /prompt.*(?:update|create|save|set)|drive.*(?:files|upload)/i.test(processedUrl)) {
       window.dispatchEvent(new CustomEvent('__sl_savingState', { detail: { saving: true, url: processedUrl } }));
       this.addEventListener('loadend', function () {
@@ -975,7 +953,6 @@
       });
     }
 
-    // Call original open with potentially modified URL
     const args = Array.from(arguments);
     if (processedUrl !== rawUrl || typeof url !== 'string') {
       args[1] = processedUrl;
@@ -983,7 +960,6 @@
     return _origOpen.apply(this, args);
   };
 
-  // ── Patch send ─────────────────────────────────────────────────────
   XMLHttpRequest.prototype.send = function (body) {
     if (this.__slPromptOperation) {
       const xhr = this;
@@ -1033,7 +1009,6 @@
     let snapTime = 0;
     let didLogSanitize = false;
 
-    // ── 1. ABORT BLOCK (Response Recovery) ─────────────────────────
     xhr.abort = function () {
       if (!responseRecoveryEnabled || xhr.__slUserCancelled || window.location.pathname !== request.route) {
         return _origAbort.apply(this, arguments);
@@ -1042,7 +1017,6 @@
       return; 
     };
 
-    // ── 2. RESPONSE SANITIZATION ─────────────────────────────────────
     let lastRaw, lastSanitized;
     const sanitize = raw => {
       if (raw !== lastRaw) { lastRaw = raw; lastSanitized = _sanitize(raw); }
@@ -1082,7 +1056,6 @@
       });
     }
 
-    // ── 3. Snap for fallback ─────────────────────────────────────────
     xhr.addEventListener('readystatechange', function () {
       if (this.readyState === 3) {
         const raw = _nativeRT ? _nativeRT.call(this) : '';
@@ -1114,7 +1087,6 @@
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════
   function _sanitize(raw) {
     if (typeof raw !== 'string' || !raw) return raw;
     const replacements = [];
@@ -1173,9 +1145,8 @@
         return;
       }
       if (nativeFrame(node)) return;
-      // ServerStreaming returns [frames], REST streaming returns [responses].
-      // Limit traversal to those envelope levels; parts can themselves contain
-      // arrays, objects, tool arguments, and literal status-looking strings.
+      // ServerStreaming returns [frames]; REST streaming returns [responses].
+      // Traverse only these envelopes so nested parts and tool arguments remain intact.
       if (node.kind === 'array') node.items.forEach(frame => {
         if (frame.kind === 'object') response(frame);
         else if (!nativeFrame(frame) && frame.kind === 'array') frame.items.forEach(nativeFrame);
@@ -1240,7 +1211,6 @@
   }
 
 
-  // ── Media / File Download handler ─────────────────────────────────
   window.addEventListener('__sl_download_media', (e) => {
     const detail = e.detail || {};
     const filename = detail.filename || 'download';
@@ -1248,7 +1218,6 @@
     if (!target) return;
     target.removeAttribute('data-sl-dl-target');
 
-    // 1. Try native download button in chunk
     const nativeBtn = target.querySelector('button[aria-label*="ownload"]') ||
                       target.querySelector('.bottom-right-image-controls button');
     if (nativeBtn) {
@@ -1256,7 +1225,6 @@
       return;
     }
 
-    // 2. Fallback for image chunks
     const img = target.querySelector('img');
     if (img && img.src) {
       const a = document.createElement('a');
@@ -1269,17 +1237,10 @@
       return;
     }
 
-    // 3. Fallback: click target
     target.click();
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-  // TELEMETRY BLOCKER — MAIN world fetch() intercept for logging
-  // The actual blocking is done by declarativeNetRequest rules, but
-  // this intercept lets us COUNT and LOG blocked requests for the UI.
-  // ═══════════════════════════════════════════════════════════════════
-
-  // Intercept fetch() for telemetry logging & model override
+  // declarativeNetRequest handles blocking; this wrapper records telemetry for the UI.
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
     let url = typeof input === 'string' ? input
@@ -1370,9 +1331,6 @@
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════
-  // BUILD INFO DATA BRIDGE — sends runtime data to content script
-  // ═══════════════════════════════════════════════════════════════════
   function emitBuildInfo() {
     try {
       const toggles = window._F_toggles_default_MakerSuite || null;
@@ -1389,14 +1347,12 @@
     } catch (_) {}
   }
 
-  // Emit build info once DOM is ready
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(emitBuildInfo, 2000);
   } else {
     window.addEventListener('DOMContentLoaded', () => setTimeout(emitBuildInfo, 2000));
   }
 
-  // Also re-emit on request from content script
   window.addEventListener('__sl_requestBuildInfo', emitBuildInfo);
 
   console.log(

@@ -1,7 +1,4 @@
-/**
- * Draft Crash Protection. Each draft belongs to one AI Studio route and lives
- * in extension-private storage, never in the host page's localStorage.
- */
+// Drafts belong to one AI Studio route and use extension-private storage, never host localStorage.
 (function () {
   'use strict';
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;

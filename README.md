@@ -1,66 +1,59 @@
 # Studio.lab
 
-An unofficial performance optimizer and workspace extension for Google AI Studio.
+An unofficial browser extension for Google AI Studio, with controls for long chats, response recovery and a customizable workspace.
 
-Studio.lab adds response recovery, chat memory management, and workspace controls for long-context workflows. Response Recovery keeps available streamed content visible when client-side processing interrupts a response; it cannot recover content the server never returned.
+## Install
 
-## Features & Version History
+Use Chrome 116 or newer, or a compatible Chromium browser.
 
-All features, including Response Recovery, DOM virtualization, UI improvements, and telemetry blocking, are tracked and documented in the changelog.
+1. Download the extension ZIP from [Releases](https://github.com/dorimommy/Studio.lab/releases).
+2. Extract the ZIP to a folder you will keep on your computer.
+3. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
+4. Choose **Load unpacked**, then select the extracted folder containing `manifest.json`.
+5. Open or reload [Google AI Studio](https://aistudio.google.com/). Its **Settings** button opens the combined Google AI Studio and Studio.lab settings.
 
-👉 **[See CHANGELOG.md](CHANGELOG.md) for a complete list of features and version history.**
+To update, replace the files in the existing extension folder with the new release, click **Reload** on its extension card, and reload open AI Studio tabs. The extension also checks GitHub for release announcements; it does not install updates automatically.
 
-## System Architecture
+## Chat and workspace features
 
-The extension operates without build tools or external dependencies. It relies on a decoupled architecture where a core shell orchestrates isolated feature modules.
+- **Fast chat opening:** Opens saved chats with the latest 20 message views. Scrolling up to the history boundary or using history controls requests older messages in small batches. The full conversation stays available to AI Studio for model context, editing and saving. Native find, navigation to older messages and **Restore Everything** can render the complete history. Unsupported frontend versions use native rendering.
+- **Buffered history controls:** Hides older rendered messages in place while retaining their native nodes and controls. **Show earlier** reveals more history; **Restore Everything** reveals the full conversation. Physical cleanup is a separate, explicit option.
+- **Response Recovery:** Keeps available streamed text visible when client-side processing interrupts a reply. It cannot recover content the server never returned.
+- **Modern Web Chat:** Adds an alternate chat layout, model and thinking controls, media actions and a turn navigator, with desktop and mobile layouts.
+- **Prompt tools:** Markdown formatting, keyboard shortcuts, draft autosave and restoration, word and character counts, and scroll-to-bottom controls.
+- **New-chat defaults:** Saved profiles for model settings, tools and system instructions.
+- **Chat Export:** Downloads conversations as JSON or Markdown.
+- **Interface visibility:** Keeps the personalized welcome greeting while hiding welcome promotions and examples. Sidebar promotions have their own switch; actual request and quota errors remain visible.
+- **Telemetry blocking:** Blocks supported tracking requests through browser rules and request interception.
 
-*   **`interceptor.js`**: Operates in the `MAIN` world context. Injected at `document_start` to patch `XMLHttpRequest` and `fetch` before the host application initializes. It handles telemetry blocking, schema-aware response recovery, model selection, and stream lifecycle handling.
-*   **`content.js`**: Operates in the `ISOLATED` world. Functions as the primary controller. It handles state persistence, injects the native-styled control panel into the host sidebar, and triggers the module lifecycle inside safe error boundaries.
-*   **`sl-panel.css`**: Contains CSS variable mappings and structural classes designed to perfectly match the host application's native design system.
-*   **`modules/`**: Contains self-contained, domain-specific logic. Each file evaluates independently and registers a configuration object with the central `registry.js`.
+**Fast chat opening** is enabled by default under **Settings → Performance → Chat opening**. Older views load on demand rather than mounting the entire history in the background. You can turn features on or off independently in Settings.
 
-![Studio.lab system architecture](images/Architecture-banner.png)
+## Settings
 
-## Installation
+Settings opens fullscreen with shared search, desktop navigation and a mobile menu drawer. It includes Studio.lab controls alongside AI Studio's original theme, prompt submission key, autocomplete, applet notification and microphone controls. AI Studio saves its own preferences.
 
-1. Clone or download the source code of this repository.
-2. Open your Chromium-based browser and navigate to `chrome://extensions` (or `edge://extensions`).
-3. Toggle **Developer mode** in the top right corner.
-4. Click **Load unpacked** and select the extracted project directory.
-5. Navigate to or refresh `aistudio.google.com`. The Studio.lab configuration panel will be accessible in the right sidebar below the System Instructions module.
+Use **Ctrl+K** to search settings and actions. **Info** contains update checks and diagnostics. The [changelog](CHANGELOG.md) records the technical changes and release history.
 
-## Privacy and Security
+## Optional accounts and Market
 
-Studio.lab is built with strict adherence to local-only execution:
-*   Zero external dependencies, trackers, or analytics.
-*   No analytics or tracking. The extension checks the public GitHub Releases API at most once every 24 hours to notify you about updates; it does not send chats, prompts, account details, or API credentials.
-*   State is maintained exclusively via local browser storage.
-*   The source code is provided completely unobfuscated for comprehensive security auditing.
+Studio.lab works locally without an account. **Settings → Account** offers Google sign-in and synchronization of selected extension preferences. It includes first-sync choices, conflict handling, pause/resume, export, sign-out, cloud-backup deletion and account deletion. Sync excludes chats, drafts, system instructions, default profiles, API credentials and AI Studio's own preferences.
+
+**Settings → Market** contains Discover, Saved and Your creations. Browse themes and system prompts, install local copies, or create a private draft or public item. Signed-in users can like items, save bookmarks across devices and follow creators. Account provides an automatically assigned public nickname and unique @tag that you can edit; your Google name and email are not copied into that profile.
+
+Themes apply to **Modern Web Chat**. They use bounded color and opacity controls; theme creation and editing are available on computers. The independent preview uses a fixed public sample conversation. Settings, Account and Market retain their own appearance. JSON import/export and theme reset are available, and installed copies continue to work after sign-out.
+
+Public profiles can display verification, staff or moderator badges. Account includes moderator applications. Paid verification is currently unavailable.
+
+## Privacy and security
+
+Feature code runs locally, with no remotely loaded extension code or extension analytics. Local preferences and drafts use browser storage.
+
+The extension contacts GitHub for release checks. Optional Google sign-in and cloud features use the bundled Supabase backend. Preference sync sends only the allowlisted extension settings. Saving a cloud draft, publishing an item and using social features send the content or action you choose. The theme preview does not read or upload your chats.
+
+Account tokens stay in private extension-origin storage, outside the AI Studio page. The server derives ownership from the authenticated account and validates cloud requests. See [SECURITY.md](SECURITY.md) for security boundaries and vulnerability reporting.
 
 ## Support
 
-Please note that this extension is an **unofficial modification** and is not affiliated with, endorsed by, or connected to Google LLC. As a community-driven project, we do not have a dedicated official support team.
+Report bugs and suggest features through [GitHub Issues](https://github.com/dorimommy/Studio.lab/issues). News and discussion are also posted in [r/GoogleAIStudio](https://www.reddit.com/r/GoogleAIStudio/). You can support development through [Ko-fi](https://ko-fi.com/astierdoriana).
 
-### Getting Help with Studio.lab
-
-If you encounter bugs, have feature requests, or need help specifically regarding this extension:
-
-1. **Follow the Updates on Reddit:** We regularly post news, updates, and release notes on the [r/GoogleAIStudio](https://www.reddit.com/r/GoogleAIStudio/) subreddit. 
-2. **Ask in the Comments:** The best way to reach out for support or suggest an idea is to leave a comment under our latest update posts on the subreddit. The community and the developer will be happy to help!
-3. **GitHub Issues:** You can also open an issue directly in this repository if you prefer to report technical bugs or contribute to the codebase.
-
-### Getting Help with Google AI Studio
-
-If you are experiencing general issues with the Google AI Studio platform itself (e.g., API keys, model behaviors, billing) that are **not** related to this extension:
-
-* **Official Support:** Please refer to the official [Google AI Studio Documentation](https://ai.google.dev/aistudio) or contact Google's official support channels.
-* **Community Help:** You can also ask for advice and troubleshooting tips from the community on [r/GoogleAIStudio](https://www.reddit.com/r/GoogleAIStudio/).
-
-### Support the Development
-
-[![Support Studio.lab](images/Support_Banner.png)](https://ko-fi.com/astierdoriana)
-
-If this extension ensures your workflow continuity and mitigates data loss, consider supporting the development through Ko-Fi. 
-
----
-*Disclaimer: Studio.lab is an unofficial modification. It is not affiliated with, endorsed by, or connected to Google LLC or Google AI Studio.*
+Studio.lab is not affiliated with or endorsed by Google. For AI Studio platform issues, consult [Google's documentation](https://ai.google.dev/aistudio).

@@ -1,8 +1,4 @@
-/**
- * Studio.lab module: default-profile
- * Saves the current Model, System Instructions, and Run Settings as a default profile,
- * and automatically applies them whenever a new chat is started.
- */
+// Apply the saved model, system instructions, and run settings whenever a new chat starts.
 (function () {
   'use strict';
 
@@ -10,131 +6,182 @@
 
   const STORAGE_KEY = 'sl_defaultProfile';
   const LIBRARY_KEY = 'sl_sysInstLibrary';
+  const INSTALLED_KEY = 'slInstalledAssets';
+  const lifetime = window.StudioLab.createScope();
+  let nativeInstructions = [];
+  let installedInstructions = [];
+
+  function isActive() {
+    return !lifetime.disposed && window.StudioLab.isExtensionActive();
+  }
+
+  function contextError() {
+    return new Error('Extension context invalidated');
+  }
+
+  function handleError(error) {
+    if (!window.StudioLab.handleExtensionError(error)) return false;
+    lifetime.dispose();
+    return true;
+  }
+
+  function storageOperation(method, value) {
+    if (!isActive()) return Promise.reject(contextError());
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const cancel = lifetime.add(() => {
+        if (settled) return;
+        settled = true;
+        reject(contextError());
+      });
+      function finish(error, result) {
+        if (settled) return;
+        settled = true;
+        cancel();
+        if (error) { handleError(error); reject(error); }
+        else resolve(result);
+      }
+      try {
+        chrome.storage.local[method](value, result => {
+          if (!isActive()) { finish(contextError()); return; }
+          try {
+            const error = chrome.runtime?.lastError;
+            finish(error ? new Error(error.message) : null, result);
+          } catch (error) { finish(error); }
+        });
+      } catch (error) { finish(error); }
+    });
+  }
+
+  function readStorage(keys) { return storageOperation('get', keys).then(data => data || {}); }
+
+  function readInstalledPrompts(items) {
+    const result = [];
+    if (!Array.isArray(items) || !window.StudioLabCatalogSchema) return result;
+    for (const item of items.slice(0, 100)) {
+      try {
+        const clean = window.StudioLabCatalogSchema.validateAsset(item);
+        if (clean.kind === 'prompt') result.push({ id: 'studio-lab:' + clean.id,
+          text: clean.title + ' · Studio.lab', instructionText: clean.payload.text });
+      } catch (_) { /* A corrupt imported file must not become an instruction. */ }
+    }
+    return result;
+  }
 
   function executeInMainWorld(eventName, payload = {}) {
+    if (!isActive()) return Promise.resolve({ error: 'Extension context invalidated' });
     return new Promise((resolve) => {
       const eventId = Math.random().toString(36).slice(2, 11);
-      const listener = (e) => {
+      let settled = false;
+      let cancelTimeout = () => {};
+      let cancel = () => {};
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        cancelTimeout();
+        cancel();
         window.removeEventListener('__sl_result_' + eventId, listener);
-        resolve(e.detail);
+        resolve(result);
+      }
+      const listener = (e) => {
+        if (e.detail?.error) handleError(new Error(e.detail.error));
+        if (!isActive()) { finish({ error: 'Extension context invalidated' }); return; }
+        finish(e.detail);
       };
+      cancel = lifetime.add(() => finish({ error: 'Extension context invalidated' }));
+      cancelTimeout = lifetime.timeout(() => {
+        finish({ error: 'Timeout waiting for MAIN world' });
+      }, 5000);
       window.addEventListener('__sl_result_' + eventId, listener);
       payload.eventId = eventId;
       window.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
-      setTimeout(() => {
-        window.removeEventListener('__sl_result_' + eventId, listener);
-        resolve({ error: 'Timeout waiting for MAIN world' });
-      }, 5000);
     });
   }
 
-  let _ddSelectedValue = '';
-  let _ddSelectedText = '(No Instruction Selected)';
-  let _ddItems = [];
-  let _ddRebuildFn = null;
-  let _docClickListener = null;
-  let _profileUpdatedListener = null;
+  let selectedInstructionId = '';
+  let instructionOptions = [];
+  let rebuildInstructionSelect = null;
 
+  function writeStorage(method, value) {
+    return storageOperation(method, value);
+  }
   async function syncLibrary() {
-    const btn = document.getElementById('sl-profile-sync-icon');
-    if (btn) btn.style.animation = 'sl-spin-anim 0.8s linear infinite';
-    
     const items = await executeInMainWorld('__sl_syncLibrary');
-    
-    if (btn) btn.style.animation = '';
-
-    if (!items || items.error) {
-      window.StudioLab.log('Could not sync library. ' + (items && items.error ? items.error : 'Make sure you are in a chat.'));
-      return;
+    if (!isActive()) return 'Reload AI Studio to reconnect Studio.lab.';
+    if (!Array.isArray(items) || items.error) {
+      window.StudioLab.log('Could not sync library. ' + (items?.error || 'Make sure you are in a chat.'));
+      return 'Could not sync instructions. ' + (items?.error || 'Open a chat and try again.');
     }
-
-    chrome.storage.local.set({ [LIBRARY_KEY]: items }, () => {
-      renderLibraryOptions(items);
-      window.StudioLab.log('Synced ' + items.length + ' instructions from your library!');
-    });
+    await writeStorage('set', { [LIBRARY_KEY]: items });
+    if (!isActive()) return 'Reload AI Studio to reconnect Studio.lab.';
+    renderLibraryOptions(items);
+    window.StudioLab.log('Synced ' + items.length + ' instructions from your library!');
+    return 'Synced ' + items.length + ' saved instructions from AI Studio.';
   }
-
   function renderLibraryOptions(items) {
-    _ddItems = [{ value: '', text: '(No Instruction Selected)' }];
-    (items || []).forEach(item => {
-      _ddItems.push({ value: item.id, text: item.text });
-    });
-
-    chrome.storage.local.get([STORAGE_KEY], (res) => {
-      const profile = res[STORAGE_KEY];
-      if (profile && profile.systemInstructionId) {
-        const found = _ddItems.find(i => i.value === profile.systemInstructionId);
-        if (found) {
-          _ddSelectedValue = found.value;
-          _ddSelectedText = found.text;
-        }
-      }
-      if (_ddRebuildFn) _ddRebuildFn();
-    });
+    nativeInstructions = Array.isArray(items) ? items : [];
+    instructionOptions = [{ value: '', text: 'No saved instruction' }];
+    [...nativeInstructions, ...installedInstructions].forEach(item => instructionOptions.push({ value: item.id, text: item.text }));
+    if (rebuildInstructionSelect) rebuildInstructionSelect();
   }
-
   async function saveCurrentAsDefault() {
-    const selectedInstId = _ddSelectedValue;
-    let profile = await executeInMainWorld('__sl_captureProfile');
-    
+    const selectedId = selectedInstructionId;
+    const profile = await executeInMainWorld('__sl_captureProfile');
+    if (!isActive()) return 'Reload AI Studio to reconnect Studio.lab.';
     if (!profile || profile.error) {
       window.StudioLab.log('Could not capture settings. Ensure you have loaded a chat and selected a model.');
-      return;
+      return 'Could not read current settings. Open a chat and select a model first.';
     }
-    
-    if (selectedInstId !== null && selectedInstId !== '') {
-       profile.systemInstructionId = selectedInstId;
-       await new Promise((resolve) => {
-         chrome.storage.local.get([LIBRARY_KEY], (res) => {
-           if (res[LIBRARY_KEY]) {
-             const found = res[LIBRARY_KEY].find(item => item.id === selectedInstId);
-             if (found) profile.systemInstructions = found.instructionText || found.text;
-           }
-           resolve();
-         });
-       });
+    if (selectedId !== null && selectedId !== '') {
+      profile.systemInstructionId = selectedId;
+      const data = await readStorage([LIBRARY_KEY, INSTALLED_KEY]);
+      const options = [...(Array.isArray(data[LIBRARY_KEY]) ? data[LIBRARY_KEY] : []), ...readInstalledPrompts(data[INSTALLED_KEY])];
+      const found = options.find(item => item.id === selectedId);
+      if (found) profile.systemInstructions = found.instructionText || found.text;
     } else {
-       profile.systemInstructionId = null;
-       profile.systemInstructions = null;
+      profile.systemInstructionId = null;
+      profile.systemInstructions = null;
     }
-
-    chrome.storage.local.set({ [STORAGE_KEY]: profile }, () => {
-      window.dispatchEvent(new Event('__sl_profile_updated'));
-      window.StudioLab.log('Default Profile Saved!');
-    });
+    await writeStorage('set', { [STORAGE_KEY]: profile });
+    if (!isActive()) return 'Reload AI Studio to reconnect Studio.lab.';
+    window.dispatchEvent(new Event('__sl_profile_updated'));
+    window.StudioLab.log('Default Profile Saved!');
+    return 'Current model and run settings saved as the default profile.';
   }
-
-  function clearDefaultProfile() {
-    chrome.storage.local.remove(STORAGE_KEY, () => {
-      _ddSelectedValue = '';
-      _ddSelectedText = '(No Instruction Selected)';
-      if (_ddRebuildFn) _ddRebuildFn();
-      window.dispatchEvent(new Event('__sl_profile_updated'));
-      window.StudioLab.log('Default Profile Cleared.');
-    });
+  async function clearDefaultProfile() {
+    await writeStorage('remove', STORAGE_KEY);
+    if (!isActive()) return 'Reload AI Studio to reconnect Studio.lab.';
+    selectedInstructionId = '';
+    if (rebuildInstructionSelect) rebuildInstructionSelect();
+    window.dispatchEvent(new Event('__sl_profile_updated'));
+    window.StudioLab.log('Default Profile Cleared.');
+    return 'Default profile removed. Your current chat settings are retained.';
   }
 
   let isAutoApplying = false;
   let autoApplyTimeout = null;
 
   function triggerAutoApply() {
+    if (!isActive()) return;
     if (!location.pathname.startsWith('/prompts/new_chat')) return;
     if (isAutoApplying) return;
 
-    if (autoApplyTimeout) clearTimeout(autoApplyTimeout);
-    autoApplyTimeout = setTimeout(() => {
+    if (autoApplyTimeout) autoApplyTimeout();
+    autoApplyTimeout = lifetime.timeout(() => {
       autoApplyTimeout = null;
+      if (!isActive()) return;
       if (!location.pathname.startsWith('/prompts/new_chat')) return;
       if (isAutoApplying) return;
 
-      chrome.storage.local.get([STORAGE_KEY], (res) => {
+      readStorage([STORAGE_KEY]).then(res => {
+        if (!isActive()) return;
         if (!res[STORAGE_KEY]) return;
         if (!location.pathname.startsWith('/prompts/new_chat')) return;
 
         isAutoApplying = true;
         let attempts = 0;
         async function attemptApply() {
-          if (!location.pathname.startsWith('/prompts/new_chat')) {
+          if (!isActive() || !location.pathname.startsWith('/prompts/new_chat')) {
             isAutoApplying = false;
             return;
           }
@@ -142,33 +189,41 @@
           attempts++;
           try {
             const result = await executeInMainWorld('__sl_applyProfile', { profile: res[STORAGE_KEY] });
+            if (!isActive()) { isAutoApplying = false; return; }
             if (result === true) {
               window.StudioLab.log('Default Profile: Applied successfully.');
               isAutoApplying = false;
               return;
             }
-          } catch (e) { }
+          } catch (error) {
+            if (handleError(error)) { isAutoApplying = false; return; }
+            window.StudioLab.log('Default Profile could not apply. ' + error.message, 'warn');
+          }
 
-          if (attempts <= 30 && location.pathname.startsWith('/prompts/new_chat')) {
-            setTimeout(attemptApply, 500);
+          if (isActive() && attempts <= 30 && location.pathname.startsWith('/prompts/new_chat')) {
+            lifetime.timeout(attemptApply, 500);
           } else {
             isAutoApplying = false;
           }
         }
         attemptApply();
+      }).catch(error => {
+        if (!handleError(error)) window.StudioLab.log('Could not read the default profile. ' + error.message, 'warn');
       });
     }, 150);
   }
 
-  window.addEventListener('__sl_routeChanged', (e) => {
+  lifetime.add(window.StudioLab.onExtensionInvalidated(() => lifetime.dispose()));
+  lifetime.add(() => { isAutoApplying = false; autoApplyTimeout = null; });
+  lifetime.listen(window, '__sl_routeChanged', (e) => {
     const url = (e.detail && e.detail.url) || location.href;
     if (url && url.includes('/prompts/new_chat')) triggerAutoApply();
   });
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(triggerAutoApply, 1000);
+    lifetime.timeout(triggerAutoApply, 1000);
   } else {
-    window.addEventListener('DOMContentLoaded', () => setTimeout(triggerAutoApply, 1000));
+    lifetime.listen(window, 'DOMContentLoaded', () => lifetime.timeout(triggerAutoApply, 1000), { once: true });
   }
 
   window.StudioLab.registerModule({
@@ -178,6 +233,7 @@
     title: 'Default Profile',
     subtitle: 'Auto-apply your preferred model and instructions',
     alwaysSelected: true,
+    dispose() { lifetime.dispose(); },
     onRouteChange(ctx) {
       const url = (ctx && ctx.currentUrl) || location.href;
       if (url.includes('/prompts/new_chat') || location.pathname.startsWith('/prompts/new_chat')) {
@@ -185,288 +241,204 @@
       }
     },
     renderControls: () => `
-      <style>
-        @keyframes sl-spin-anim { 100% { transform: rotate(360deg); } }
-        
-        .sl-dropdown-wrapper {
-           position: relative; width: 100%;
-        }
-
-        .sl-dropdown-trigger {
-           display: flex; align-items: center; justify-content: space-between;
-           width: 100%; box-sizing: border-box;
-           padding: 8px 16px;
-           height: 36px;
-           border: none !important; /* NO OUTLINE FUCK */
-           border-radius: 12px;
-           background: var(--color-v3-surface-container-high, #333);
-           cursor: pointer;
-           font: 500 14px/21px Inter, sans-serif;
-           color: var(--color-v3-text, #d4d4d4);
-           transition: background-color .15s;
-           outline: none !important;
-        }
-        .sl-dropdown-trigger:hover {
-           background: var(--color-v3-hover, #3a3a3a);
-        }
-        .sl-dropdown-trigger.open,
-        .sl-dropdown-trigger:focus-visible {
-           box-shadow: inset 0 0 0 2px var(--color-v3-primary, #a8c7fa);
-        }
-        
-        .sl-dropdown-panel {
-           display: none;
-           position: absolute; left: 0; right: 0;
-           top: calc(100% + 4px);
-           z-index: 1000;
-           background: var(--color-v3-surface-container, #1e1e1e);
-           border: 1px solid var(--color-v3-outline-var, #262626);
-           border-radius: 12px;
-           box-shadow: rgba(0,0,0,0.3) 0px 8px 24px;
-           padding: 8px;
-           max-height: 250px; overflow-y: auto;
-        }
-        .sl-dropdown-trigger.open + .sl-dropdown-panel {
-           display: block;
-        }
-
-        .sl-dropdown-option {
-           display: flex; align-items: center; justify-content: space-between;
-           padding: 8px 12px; width: 100%; box-sizing: border-box;
-           background: transparent; border: none; text-align: left;
-           color: var(--color-v3-text, #d4d4d4);
-           font: 500 14px/21px Inter, sans-serif;
-           border-radius: 8px;
-           cursor: pointer;
-           margin-bottom: 2px;
-           outline: none !important;
-        }
-        .sl-dropdown-option:hover,
-        .sl-dropdown-option:focus-visible {
-           background: var(--color-v3-hover, #323232);
-        }
-        
-        .sl-native-icon-btn {
-           width: 36px; height: 36px;
-           display: inline-flex; align-items: center; justify-content: center;
-           border-radius: 12px;
-           border: none !important;
-           background: var(--color-v3-surface-container-high, #333);
-           cursor: pointer;
-           color: var(--color-v3-text-var, #8c8c8c);
-           transition: background 0.15s, color 0.15s;
-           flex-shrink: 0;
-           outline: none !important;
-        }
-        .sl-native-icon-btn:hover,
-        .sl-native-icon-btn:focus-visible {
-           background: var(--color-v3-hover, #323232);
-           color: var(--color-v3-text, #ffffff);
-        }
-
-        .sl-profile-card {
-          width: 100%; padding: 12px; box-sizing: border-box;
-          border-radius: 12px;
-          border: none;
-          background: var(--color-v3-surface-container-high, #333);
-          display: flex; flex-direction: column; gap: 4px;
-        }
-        .sl-profile-card .title {
-          color: var(--color-v3-text, #d4d4d4);
-          font: 500 14px/21px Inter, sans-serif; margin: 0;
-        }
-        .sl-profile-card .subtitle {
-          color: var(--color-v3-text-var, #8c8c8c);
-          font: 400 12px/18px Inter, sans-serif; margin: 0;
-        }
-        
-        /* Note: .sl-apply-btn global styles from sl-panel.css are used instead of overriding them here to prevent bloated buttons! */
-      </style>
-      <div class="sl-controls-row" style="padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; width: 100%; box-sizing: border-box;">
-
-        <div id="sl-current-profile-stats" style="display: none;"></div>
-
-        <div style="display: flex; gap: 8px; align-items: center;">
-          
-          <div class="sl-dropdown-wrapper" id="sl-inst-dropdown">
-            <button type="button" class="sl-dropdown-trigger" id="sl-inst-trigger">
-               <span id="sl-inst-value" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">(No Instruction Selected)</span>
-               <span class="material-symbols-outlined notranslate" id="sl-inst-chevron" style="font-size: 20px; color: var(--color-v3-text-var, #8c8c8c);">expand_more</span>
-            </button>
-            <div class="sl-dropdown-panel" id="sl-inst-menu"></div>
-          </div>
-
-          <button type="button" class="sl-native-icon-btn" id="sl-profile-sync" title="Sync from AI Studio">
-            <span class="material-symbols-outlined notranslate" id="sl-profile-sync-icon" style="font-size: 20px;" aria-hidden="true">sync</span>
-          </button>
+      <div class="sl-setting-tool-fields" data-sl-controls-for="default-profile" data-sl-search="New chat defaults default profile model saved instruction sync library save current settings remove default">
+        <div class="sl-profile-setup">
+            <div class="sl-setting-row sl-profile-instruction-row">
+              <div class="sl-setting-copy">
+                <label class="sl-setting-label" for="sl-profile-instruction">System instruction</label>
+                <p class="sl-setting-help" id="sl-profile-instruction-help">Choose a saved instruction for new chats.</p>
+              </div>
+              <div class="sl-setting-control">
+                <select class="sl-setting-input" id="sl-profile-instruction" aria-describedby="sl-profile-instruction-help">
+                  <option value="">No saved instruction</option>
+                </select>
+                <button type="button" class="sl-settings-button" id="sl-profile-sync" aria-describedby="sl-profile-instruction-help">Refresh library</button>
+              </div>
+            </div>
+            <div class="sl-setting-row sl-profile-saved-row">
+              <div class="sl-setting-copy"><span class="sl-setting-label">Model and run settings</span><p class="sl-setting-help" id="sl-current-profile-stats">No default profile saved.</p></div>
+              <div class="sl-setting-actions">
+              <button type="button" class="sl-settings-button" id="sl-profile-save">Use current chat</button>
+              <button type="button" class="sl-settings-button destructive" id="sl-profile-clear" hidden>Remove default</button>
+              </div>
+            </div>
         </div>
-
-        <div style="display: flex; gap: 8px; align-items: stretch;">
-           <button type="button" class="sl-apply-btn" id="sl-profile-save" style="flex: 1;">Save as Default Profile</button>
-           
-           <button type="button" class="sl-native-icon-btn destructive" id="sl-profile-clear" style="display: none;" title="Delete">
-             <span class="material-symbols-outlined notranslate" style="font-size: 20px;" aria-hidden="true">delete</span>
-           </button>
-        </div>
+        <p class="sl-setting-help" id="sl-profile-status" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
     `,
-    bindControls: (modalEl) => {
-      const btnSave = modalEl.querySelector('#sl-profile-save');
-      const btnClear = modalEl.querySelector('#sl-profile-clear');
-      const btnSync = modalEl.querySelector('#sl-profile-sync');
-      const dropdown = modalEl.querySelector('#sl-inst-dropdown');
-      const trigger = modalEl.querySelector('#sl-inst-trigger');
-      const chevron = modalEl.querySelector('#sl-inst-chevron');
-      const menuEl = modalEl.querySelector('#sl-inst-menu');
-      const triggerText = modalEl.querySelector('#sl-inst-value');
-
-      if (_docClickListener) {
-        document.removeEventListener('click', _docClickListener);
-        _docClickListener = null;
-      }
-      if (_profileUpdatedListener) {
-        window.removeEventListener('__sl_profile_updated', _profileUpdatedListener);
-        _profileUpdatedListener = null;
-      }
-
-      function closeDropdown() { 
-         trigger.classList.remove('open'); 
-         chevron.textContent = 'expand_more';
-      }
-      function openDropdown() { 
-         trigger.classList.add('open'); 
-         chevron.textContent = 'expand_less';
-      }
-
-      function rebuildMenu() {
-        menuEl.innerHTML = '';
-        triggerText.textContent = _ddSelectedText;
-
-        const items = _ddItems.length ? _ddItems : [{ value: '', text: '(No Instruction Selected)' }];
-        items.forEach((item) => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'sl-dropdown-option';
-          
-          const textSpan = document.createElement('span');
-          textSpan.style.overflow = 'hidden';
-          textSpan.style.textOverflow = 'ellipsis';
-          textSpan.style.whiteSpace = 'nowrap';
-          textSpan.textContent = item.text || '';
-          btn.appendChild(textSpan);
-
-          const checkSpan = document.createElement('span');
-          if (item.value === _ddSelectedValue) {
-            checkSpan.className = 'material-symbols-outlined notranslate';
-            checkSpan.style.fontSize = '18px';
-            checkSpan.style.color = 'var(--color-v3-text, #fff)';
-            checkSpan.textContent = 'check';
-          } else {
-            checkSpan.style.width = '18px';
-          }
-          btn.appendChild(checkSpan);
-          
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            _ddSelectedValue = item.value;
-            _ddSelectedText = item.text;
-            triggerText.textContent = item.text;
-            closeDropdown();
-            rebuildMenu();
-          });
-          menuEl.appendChild(btn);
-        });
-      }
-      _ddRebuildFn = rebuildMenu;
-
-      if (trigger) {
-        trigger.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (trigger.classList.contains('open')) closeDropdown();
-          else openDropdown();
-        });
-      }
-
-      _docClickListener = (e) => {
-        if (!modalEl || !document.contains(modalEl)) {
-          document.removeEventListener('click', _docClickListener);
-          _docClickListener = null;
-          return;
-        }
-        if (dropdown && !dropdown.contains(e.target)) closeDropdown();
-      };
-      document.addEventListener('click', _docClickListener);
-
-      if (btnSave) btnSave.addEventListener('click', (e) => { e.stopPropagation(); saveCurrentAsDefault(); });
-      if (btnClear) btnClear.addEventListener('click', (e) => { e.stopPropagation(); clearDefaultProfile(); });
-      if (btnSync) btnSync.addEventListener('click', (e) => { e.stopPropagation(); syncLibrary(); });
-
-      function updateStatsDisplay() {
-         chrome.storage.local.get([STORAGE_KEY, LIBRARY_KEY], (res) => {
-            const statsEl = modalEl.querySelector('#sl-current-profile-stats');
-            const clearBtn = modalEl.querySelector('#sl-profile-clear');
-            if (!statsEl) return;
-            const profile = res[STORAGE_KEY];
-            if (profile && profile.model) {
-               // Show stats
-               const model = profile.model || 'Unknown';
-               
-               let instDisplay = 'None';
-               if (profile.systemInstructionId && res[LIBRARY_KEY]) {
-                 const found = res[LIBRARY_KEY].find(i => i.id === profile.systemInstructionId);
-                 if (found) instDisplay = found.text;
-               } else if (profile.systemInstructions) {
-                 instDisplay = profile.systemInstructions.substring(0, 30);
-               }
-
-               const enabledTools = (profile.tools || []).filter(t => t.checked).length;
-               
-               statsEl.innerHTML = '';
-               const card = document.createElement('div');
-               card.className = 'sl-profile-card';
-
-               const title = document.createElement('h3');
-               title.className = 'title';
-               title.textContent = model;
-               card.appendChild(title);
-
-               const subtitle = document.createElement('p');
-               subtitle.className = 'subtitle';
-               subtitle.textContent = 'Instruction: ' + instDisplay + (enabledTools > 0 ? ' • ' + enabledTools + ' Tools' : '');
-               card.appendChild(subtitle);
-
-               statsEl.appendChild(card);
-               statsEl.style.display = 'block';
-
-               // Show delete button
-               if (clearBtn) clearBtn.style.display = 'flex';
-            } else {
-               statsEl.innerHTML = '';
-               statsEl.style.display = 'none';
-               // Hide delete button
-               if (clearBtn) clearBtn.style.display = 'none';
-            }
-         });
-      }
-      
-      updateStatsDisplay();
-      _profileUpdatedListener = () => {
-        if (!modalEl || !document.contains(modalEl)) {
-          window.removeEventListener('__sl_profile_updated', _profileUpdatedListener);
-          _profileUpdatedListener = null;
-          return;
-        }
-        updateStatsDisplay();
-      };
-      window.addEventListener('__sl_profile_updated', _profileUpdatedListener);
-
-      chrome.storage.local.get([LIBRARY_KEY], (res) => {
-        if (res[LIBRARY_KEY]) {
-          renderLibraryOptions(res[LIBRARY_KEY]);
-        } else {
-          rebuildMenu();
-        }
+    bindControls: (modalEl, ctx) => {
+      if (!isActive()) return () => {};
+      const select = modalEl.querySelector('#sl-profile-instruction');
+      const save = modalEl.querySelector('#sl-profile-save');
+      const clear = modalEl.querySelector('#sl-profile-clear');
+      const syncButton = modalEl.querySelector('#sl-profile-sync');
+      const status = modalEl.querySelector('#sl-profile-status');
+      const fields = modalEl.querySelector('[data-sl-controls-for="default-profile"]');
+      const styledSelect = window.StudioLabSelect?.enhance(select);
+      const removers = [];
+      let disposed = false;
+      let busy = false;
+      let pendingClearHide = false;
+      let selectionRevision = 0;
+      let libraryRevision = 0;
+      let statsRevision = 0;
+      selectedInstructionId = '';
+      const disposeBinding = lifetime.add(() => {
+        disposed = true;
+        styledSelect?.dispose();
+        removers.forEach(remove => remove());
+        if (rebuildInstructionSelect === rebuildSelect) rebuildInstructionSelect = null;
       });
+      function listen(target, type, callback) {
+        if (!target) return;
+        target.addEventListener(type, callback);
+        removers.push(() => target.removeEventListener(type, callback));
+      }
+      function report(message) {
+        if (disposed) return;
+        if (status) status.textContent = message;
+        else ctx?.announceSettings?.(message);
+      }
+      function setBusy(value, invoker) {
+        busy = value;
+        fields?.setAttribute('aria-busy', String(value));
+        for (const control of [select, save, clear, syncButton]) {
+          if (!control) continue;
+          // Keep the button focusable while busy; the shared guard prevents repeated activation.
+          control.disabled = value && control !== invoker;
+          if (value && control === invoker) control.setAttribute('aria-disabled', 'true');
+          else control.removeAttribute('aria-disabled');
+        }
+        styledSelect?.refresh();
+      }
+      function hideClear() {
+        if (!clear) return;
+        const returnFocus = document.activeElement === clear;
+        clear.hidden = true;
+        pendingClearHide = false;
+        if (returnFocus) save?.focus();
+      }
+      function rebuildSelect() {
+        if (!select || disposed) return;
+        while (select.firstChild) select.removeChild(select.firstChild);
+        const items = instructionOptions.length ? instructionOptions : [{ value: '', text: 'No saved instruction' }];
+        if (!items.some(item => item.value === selectedInstructionId)) selectedInstructionId = '';
+        for (const item of items) {
+          const option = document.createElement('option');
+          option.value = item.value;
+          option.textContent = item.text || '';
+          select.appendChild(option);
+        }
+        select.value = selectedInstructionId;
+        styledSelect?.refresh();
+      }
+      rebuildInstructionSelect = rebuildSelect;
+      function applySavedSelection(profile) {
+        selectedInstructionId = typeof profile?.systemInstructionId === 'string' ? profile.systemInstructionId : '';
+        rebuildSelect();
+      }
+      function reloadSavedSelection() {
+        const revision = ++selectionRevision;
+        readStorage([STORAGE_KEY]).then(data => {
+          if (!disposed && selectionRevision === revision) applySavedSelection(data[STORAGE_KEY]);
+        }).catch(error => {
+          if (!handleError(error)) report('Could not read the default profile. ' + error.message);
+        });
+      }
+      function updateStatsDisplay() {
+        const revision = ++statsRevision;
+        readStorage([STORAGE_KEY, LIBRARY_KEY, INSTALLED_KEY]).then(data => {
+          if (disposed || statsRevision !== revision) return;
+          const stats = modalEl.querySelector('#sl-current-profile-stats');
+          const profile = data[STORAGE_KEY];
+          if (!stats) return;
+          if (clear) {
+            if (profile) { clear.hidden = false; pendingClearHide = false; }
+            else if (busy && document.activeElement === clear) pendingClearHide = true;
+            else hideClear();
+          }
+          if (!profile?.model) {
+            stats.textContent = 'No default profile saved.';
+            return;
+          }
+          let instruction = 'No saved instruction';
+          if (profile.systemInstructionId) {
+            const options = [...(Array.isArray(data[LIBRARY_KEY]) ? data[LIBRARY_KEY] : []), ...readInstalledPrompts(data[INSTALLED_KEY])];
+            const found = options.find(item => item.id === profile.systemInstructionId);
+            if (found) instruction = found.text;
+            else if (profile.systemInstructions) instruction = 'Saved instruction';
+          } else if (profile.systemInstructions) instruction = 'Saved instruction';
+          const tools = (profile.tools || []).filter(tool => tool.checked).length;
+          stats.textContent = profile.model + ' · ' + instruction + (tools ? ' · ' + tools + ' enabled tools' : '');
+        }).catch(error => {
+          if (!handleError(error)) report('Could not read the default profile. ' + error.message);
+        });
+      }
+      async function run(action, pending, invoker) {
+        if (busy || disposed) return;
+        setBusy(true, invoker);
+        report(pending);
+        try {
+          report(await action());
+          if (!disposed) updateStatsDisplay();
+        } catch (error) {
+          if (!handleError(error)) report('The profile action could not finish. ' + (error.message || 'Try again.'));
+        } finally {
+          if (!disposed) {
+            setBusy(false);
+            if (pendingClearHide) hideClear();
+          }
+        }
+      }
+      listen(select, 'change', () => { selectedInstructionId = select.value; selectionRevision++; });
+      listen(save, 'click', () => run(saveCurrentAsDefault, 'Reading current settings…', save));
+      listen(clear, 'click', () => run(clearDefaultProfile, 'Removing default profile…', clear));
+      listen(syncButton, 'click', () => run(syncLibrary, 'Syncing saved instructions…', syncButton));
+      listen(window, '__sl_profile_updated', () => { updateStatsDisplay(); reloadSavedSelection(); });
+      let storageChanges;
+      try {
+        if (isActive()) storageChanges = chrome.storage.onChanged;
+      } catch (error) {
+        if (!handleError(error)) throw error;
+      }
+      if (storageChanges?.addListener) {
+        const changed = (changes, area) => {
+          if (disposed || area !== 'local') return;
+          if (changes[INSTALLED_KEY]) installedInstructions = readInstalledPrompts(changes[INSTALLED_KEY].newValue);
+          if (changes[LIBRARY_KEY] || changes[INSTALLED_KEY]) {
+            libraryRevision++;
+            renderLibraryOptions(changes[LIBRARY_KEY] ? changes[LIBRARY_KEY].newValue : nativeInstructions);
+          }
+          if (changes[STORAGE_KEY]) {
+            selectionRevision++;
+            applySavedSelection(changes[STORAGE_KEY].newValue);
+            updateStatsDisplay();
+          }
+        };
+        try {
+          storageChanges.addListener(changed);
+          removers.push(() => {
+            try { storageChanges.removeListener(changed); }
+            catch (error) { if (!handleError(error)) throw error; }
+          });
+        } catch (error) {
+          if (!handleError(error)) throw error;
+        }
+      }
+      updateStatsDisplay();
+      const initialSelectionRevision = selectionRevision;
+      const initialLibraryRevision = libraryRevision;
+      readStorage([STORAGE_KEY, LIBRARY_KEY, INSTALLED_KEY]).then(data => {
+        if (disposed) return;
+        if (libraryRevision === initialLibraryRevision) {
+          installedInstructions = readInstalledPrompts(data[INSTALLED_KEY]);
+          renderLibraryOptions(data[LIBRARY_KEY] || []);
+        }
+        if (selectionRevision === initialSelectionRevision) applySavedSelection(data[STORAGE_KEY]);
+      }).catch(error => {
+        if (!handleError(error)) report('Could not read saved instructions. ' + error.message);
+      });
+      return disposeBinding;
     }
   });
 

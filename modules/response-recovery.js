@@ -1,10 +1,4 @@
-/**
- * Studio.lab module: response-recovery
- *
- * UI descriptor for the Response Recovery (interceptor.js).
- * This file runs ONLY in the ISOLATED world — it registers the module card
- * and relays toggle state to interceptor.js via CustomEvent.
- */
+// Runs in the ISOLATED world and relays toggle state to interceptor.js through CustomEvent.
 (function () {
   'use strict';
 

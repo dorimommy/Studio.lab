@@ -1,13 +1,42 @@
-/**
- * Studio.lab module registry.
- *
- * Each isolated-world feature file registers a descriptor here. content.js only
- * reads descriptors and delegates lifecycle/actions back to the module.
- */
+// Isolated-world features register descriptors here; content.js delegates lifecycle and actions to them.
 (function () {
   'use strict';
 
   const modules = [];
+  const invalidationListeners = new Set();
+  let extensionInvalidated = false;
+
+  function invalidateExtension() {
+    if (extensionInvalidated) return;
+    extensionInvalidated = true;
+    for (const listener of [...invalidationListeners]) {
+      try { listener(); } catch (_) { log('Extension cleanup failed.', 'warn'); }
+    }
+    invalidationListeners.clear();
+  }
+
+  function isExtensionActive() {
+    if (extensionInvalidated) return false;
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id) return true;
+    } catch (_) {}
+    invalidateExtension();
+    return false;
+  }
+
+  function handleExtensionError(error) {
+    if (/extension context invalidated/i.test(error?.message || String(error))) {
+      invalidateExtension();
+      return true;
+    }
+    return !isExtensionActive();
+  }
+
+  function onExtensionInvalidated(listener) {
+    if (extensionInvalidated) listener();
+    else invalidationListeners.add(listener);
+    return () => invalidationListeners.delete(listener);
+  }
 
   function registerModule(module) {
     if (!module || !module.id) return;
@@ -113,6 +142,9 @@
     registerModule,
     getModules,
     createScope,
+    isExtensionActive,
+    handleExtensionError,
+    onExtensionInvalidated,
     SELECTORS,
     log
   });

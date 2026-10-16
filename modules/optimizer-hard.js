@@ -1,9 +1,4 @@
-/**
- * StudioLab module: optimizer-hard
- *
- * Physical cleanup mode removes old rendered turns from the current browser
- * session. This is intentionally manual via an explicit button.
- */
+// Removing old rendered turns affects the current session and requires an explicit button press.
 (function () {
   'use strict';
 
@@ -38,23 +33,46 @@
       sync(ctx);
     },
     renderControls(ctx) {
-      const turnCount = ctx.getTurnCount();
-      const max = Math.max(turnCount + 10, 50);
       const keepValue = ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast;
-      const disabled = ctx.state.autoKeep ? 'disabled' : '';
-      const active = isSelected(ctx.state) ? 'active' : '';
+      const disabled = ctx.state.autoKeep || !ctx.state.optimizerEnabled ? 'disabled' : '';
       return `
-        <div class="sl-slider-panel ${active}" data-sl-controls-for="optimizer-hard">
-          <div class="sl-auto-row">
-            <button type="button" class="sl-auto-toggle ${ctx.state.autoKeep ? 'active' : ''}" data-sl-auto-keep aria-label="Auto limit"></button>
-            <span>Auto-Limit (Recommended for large prompts)</span>
+        <div class="sl-setting-tool-fields" data-sl-controls-for="optimizer-hard" data-sl-search-item data-sl-search="Turn limits automatic manual keep latest rendered turns cleanup">
+          <details class="sl-setting-advanced">
+            <summary data-sl-keep-summary><span class="sl-setting-label" data-sl-keep-summary-text>${turnLimitSummary(ctx.state)}</span><svg class="sl-setting-disclosure-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+          <div class="sl-setting-disclosure-content">
+          <div class="sl-setting-row">
+            <div class="sl-setting-copy">
+              <label class="sl-setting-label" for="sl-hard-auto-keep">Automatic turn limit</label>
+              <p class="sl-setting-help" id="sl-hard-auto-help">Keep the latest ${AUTO_KEEP} rendered turns.</p>
+            </div>
+            <div class="sl-setting-control">
+              <span class="sl-setting-checkbox-hit">
+                <input type="checkbox" role="switch" class="sl-setting-checkbox" id="sl-hard-auto-keep" data-sl-auto-keep aria-describedby="sl-hard-auto-help" ${ctx.state.autoKeep ? 'checked' : ''} ${ctx.state.optimizerEnabled ? '' : 'disabled'}>
+              </span>
+            </div>
           </div>
-          <div class="sl-slider-row">
-            <span class="sl-slider-label">Keep last</span>
-            <input type="range" class="sl-range" data-sl-keep-slider min="2" max="${max}" value="${keepValue}" ${disabled}>
-            <span class="sl-slider-value" data-sl-keep-value>${keepValue}</span>
+          <div class="sl-setting-row">
+            <div class="sl-setting-copy">
+              <label class="sl-setting-label" for="sl-hard-keep-number">Turns to keep</label>
+              <p class="sl-setting-help" id="sl-hard-keep-help">Turn off the automatic limit to choose between 2 and 500 turns.</p>
+            </div>
+            <div class="sl-setting-control">
+              <input type="number" class="sl-setting-input" id="sl-hard-keep-number" data-sl-keep-number min="2" max="500" step="1" value="${keepValue}" aria-describedby="sl-hard-keep-help sl-hard-keep-error" ${disabled}>
+              <input type="range" class="sl-setting-range" id="sl-hard-keep-range" data-sl-keep-slider min="2" max="500" step="1" value="${keepValue}" aria-label="Turns to keep" aria-describedby="sl-hard-keep-help" ${disabled}>
+              <p class="sl-setting-help" id="sl-hard-keep-error" data-sl-keep-error hidden></p>
+            </div>
           </div>
-          <button type="button" class="sl-apply-btn destructive" data-sl-apply-hard>Enforce Physical Cleanup</button>
+          </div>
+          </details>
+          <div class="sl-setting-row" data-sl-hard-cleanup-row ${ctx.state.optimizerMode !== 'hard' ? 'hidden' : ''}>
+            <div class="sl-setting-copy">
+              <p class="sl-setting-label">Clean up this chat</p>
+              <p class="sl-setting-help" id="sl-hard-cleanup-help">Remove older rendered turns from this browser session. This cannot be undone here.</p>
+            </div>
+            <div class="sl-setting-actions">
+              <button type="button" class="sl-settings-button destructive" data-sl-apply-hard aria-describedby="sl-hard-cleanup-help" ${ctx.state.optimizerEnabled ? '' : 'disabled'}>Apply cleanup</button>
+            </div>
+          </div>
         </div>
       `;
     },
@@ -64,61 +82,114 @@
 
       const autoToggle = panel.querySelector('[data-sl-auto-keep]');
       const slider = panel.querySelector('[data-sl-keep-slider]');
-      const value = panel.querySelector('[data-sl-keep-value]');
+      const number = panel.querySelector('[data-sl-keep-number]');
+      const error = panel.querySelector('[data-sl-keep-error]');
       const applyButton = panel.querySelector('[data-sl-apply-hard]');
-
-      if (slider) updateSliderFill(slider);
+      const removers = [];
+      function listen(element, type, callback) {
+        if (!element) return;
+        element.addEventListener(type, callback);
+        removers.push(() => element.removeEventListener(type, callback));
+      }
 
       if (autoToggle) {
-        autoToggle.addEventListener('click', () => {
+        listen(autoToggle, 'change', () => {
           if (!ctx.state.optimizerEnabled) return;
-          const nextAuto = !ctx.state.autoKeep;
+          const nextAuto = autoToggle.checked;
           const patch = { autoKeep: nextAuto };
           if (nextAuto) patch.keepLast = AUTO_KEEP;
           ctx.setState(patch, { render: false });
         });
       }
 
-      if (slider) {
-        slider.addEventListener('input', () => {
-          const keepLast = parseInt(slider.value, 10);
-          ctx.setState({ keepLast }, { render: false });
-          if (value) value.textContent = String(keepLast);
-          updateSliderFill(slider);
-        });
+      function setError(invalid) {
+        if (number) {
+          if (invalid) number.setAttribute('aria-invalid', 'true');
+          else number.removeAttribute('aria-invalid');
+        }
+        if (error) {
+          error.textContent = invalid ? 'Enter a whole number from 2 to 500. The last valid limit remains saved.' : '';
+          error.hidden = !invalid;
+        }
       }
+      function setKeep(control) {
+          if (!ctx.state.optimizerEnabled || ctx.state.autoKeep) return;
+          const keepLast = Number(control.value);
+          const invalid = control.value.trim() === '' || !Number.isInteger(keepLast) || keepLast < 2 || keepLast > 500;
+          setError(invalid);
+          if (invalid) return;
+          ctx.setState({ keepLast }, { render: false });
+          if (number && number !== control) number.value = String(keepLast);
+          if (slider && slider !== control) slider.value = String(keepLast);
+      }
+      listen(slider, 'input', () => setKeep(slider));
+      listen(number, 'input', () => setKeep(number));
+      listen(number, 'blur', () => {
+        if (number?.getAttribute('aria-invalid') === 'true') {
+          ctx.announceSettings?.('Enter a whole number from 2 to 500. The last valid limit remains saved.', true);
+        }
+      });
 
       if (applyButton) {
-        applyButton.addEventListener('click', () => {
+        listen(applyButton, 'click', () => {
           if (!ctx.state.optimizerEnabled || ctx.state.optimizerMode !== 'hard') return;
+          const previousCount = ctx.getTurnCount();
           applyHardCleanup(ctx);
           ctx.refreshLiveStats();
+          const removed = Math.max(0, previousCount - ctx.getTurnCount());
+          ctx.announceSettings?.(removed ? 'Removed ' + removed + ' older rendered turns.' : 'No older turns needed cleanup.');
         });
       }
+      return () => removers.forEach(remove => remove());
     },
     updateControls(root, ctx) {
       const panel = root.querySelector('[data-sl-controls-for="optimizer-hard"]');
       if (!panel) return;
 
-      panel.classList.toggle('active', isSelected(ctx.state));
+      panel.hidden = false;
+      const cleanupRow = panel.querySelector('[data-sl-hard-cleanup-row]');
+      if (cleanupRow) cleanupRow.hidden = ctx.state.optimizerMode !== 'hard';
+      const summary = panel.querySelector('[data-sl-keep-summary-text]');
+      const summaryText = turnLimitSummary(ctx.state);
+      if (summary && summary.textContent !== summaryText) summary.textContent = summaryText;
 
       const autoToggle = panel.querySelector('[data-sl-auto-keep]');
       const slider = panel.querySelector('[data-sl-keep-slider]');
-      const value = panel.querySelector('[data-sl-keep-value]');
+      const number = panel.querySelector('[data-sl-keep-number]');
+      const applyButton = panel.querySelector('[data-sl-apply-hard]');
+      const keepValue = String(ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast);
+      const disabled = !!ctx.state.autoKeep || !ctx.state.optimizerEnabled;
 
-      if (autoToggle) autoToggle.classList.toggle('active', !!ctx.state.autoKeep);
-      if (slider) {
-        slider.disabled = !!ctx.state.autoKeep;
-        slider.value = ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast;
-        slider.max = Math.max(ctx.getTurnCount() + 10, 50);
-        updateSliderFill(slider);
+      if (autoToggle) {
+        autoToggle.checked = !!ctx.state.autoKeep;
+        autoToggle.disabled = !ctx.state.optimizerEnabled;
       }
-      if (value) value.textContent = String(ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast);
+      if (slider) {
+        slider.disabled = disabled;
+        if (slider !== document.activeElement && slider.value !== keepValue) slider.value = keepValue;
+      }
+      if (number) {
+        number.disabled = disabled;
+        if (disabled) {
+          number.removeAttribute('aria-invalid');
+          const error = panel.querySelector('[data-sl-keep-error]');
+          if (error) { error.textContent = ''; error.hidden = true; }
+        }
+        // Live turn statistics refresh every two seconds. Preserve an unfinished
+        // edit (and its visible error) instead of replacing it with saved state.
+        if (number !== document.activeElement && (disabled || number.getAttribute('aria-invalid') !== 'true') &&
+            number.value !== keepValue) number.value = keepValue;
+      }
+      if (applyButton) applyButton.disabled = !ctx.state.optimizerEnabled;
     }
   });
 
   function isSelected(state) {
     return state.optimizerEnabled && state.optimizerMode === 'hard';
+  }
+
+  function turnLimitSummary(state) {
+    return 'Turn limit · ' + (state.autoKeep ? 'Automatic, ' + AUTO_KEEP : 'Manual, ' + state.keepLast);
   }
 
   function sync(ctx) {
@@ -127,7 +198,6 @@
   }
 
   function start() {
-    // Inject fast-render CSS to prevent lag on initial load
     let style = document.getElementById('sl-fast-render-style');
     if (!style) {
       style = document.createElement('style');
@@ -165,11 +235,4 @@
     }
   }
 
-  function updateSliderFill(slider) {
-    const min = parseFloat(slider.min) || 0;
-    const max = parseFloat(slider.max) || 100;
-    const value = parseFloat(slider.value) || 0;
-    const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
-    slider.style.setProperty('--sl-fill', `${pct}%`);
-  }
 })();

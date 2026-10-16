@@ -1,5 +1,94 @@
 # Studio.lab Changelog
 
+## v2.2
+
+**Fast Chat Opening, Unified Settings, Accounts & Market**
+
+`Chat Opening & Compatibility` (`content.js`, `modules/`, `account/account.css`).
+
+* **Added:** `Fast Chat Opening`.
+  * *One Saved Preference:* Controls document-start history rendering, offscreen layout deferral and native height-read optimization. Unsupported frontend shapes retain native rendering.
+  * *On-Demand History:* The native template starts with the latest 20 message views. Upward user intent near the history boundary or an explicit history control requests older views through native signals; idle time alone does not mount the remaining history.
+  * *Preserved Native Context:* The template receives a render-only view. Canonical message IDs, text, model context, editing, generation and save data remain native and complete.
+* **Changed:** `Partial History Rendering`.
+  * *Bounded Requests:* Each request adds up to 20 older views, split according to measured rendering cost, idle budget and pending input. Work stops when the requested budget is consumed.
+  * *Scoped Native Work:* Author lookups reuse indexed IDs only for render slices. Native scroll checks coalesce after a changed partial-history pass; native resize handling and full-view behavior remain in place.
+  * *Committed Views:* A post-template event lets Buffered and pending turn navigation act on newly rendered hosts. Route changes, detached hosts and disposal cancel pending work.
+* **Fixed:** `Buffered and Native Navigation`.
+  * *Retained Angular Anchors:* Buffered hides older native hosts with an owned CSS marker instead of detaching them or their subtrees. Rendered controls and Angular insertion anchors remain in place.
+  * *Earlier History Controls:* Show earlier reveals retained hidden rows first, then requests the rest of its batch from the native history view. Restore Everything reveals retained rows and requests the complete native view.
+  * *Explicit Full Rendering:* Native find/search and navigation to an absent target can materialize all views before a jump. Tab focus alone does not expand history, and a deferred navigator resolves its current target once after rendering.
+* **Changed:** `Incremental Chat Enhancements`.
+  * *Word Counts:* Recent turns take priority. Mutation records queue only new or changed turns, owned badges do not trigger recounts, and text traversal avoids forced layout.
+  * *Modern Web Chat:* History commits no longer trigger unrelated header and menu scans. Navigator state follows the current scroller and route.
+* **Fixed:** `Expired Extension Contexts`.
+  * *Lifetime Cleanup:* Settings, native-control adapters, module scopes, delayed default-profile work and pending prompt bridges release their timers and listeners. Late callbacks cannot reactivate disposed features.
+* **Fixed:** `Interface Visibility`.
+  * *Current Welcome:* Cleanup supports model promotions and example cards while retaining the personal greeting. Sidebar promotions have an independent switch; actual request and quota errors stay visible.
+  * *Connected Corners:* Trailing hidden feedback controls no longer prevent the Market moderator row's lower corners from rounding.
+
+`Market, Public Profiles & Modern Web Chat Preview` (`account/`, `content.js`, `modules/custom-theme.js`, `supabase/`).
+
+* **Added:** Blue verification, gold staff and moderator shield badges beside public nicknames. Account includes moderator applications and owner role controls. Moderators remove rule-breaking publications with an audited reason; the owner can restore them from a queue containing only captured public metadata. Paid verification is unavailable while payment integration is deferred.
+* **Security:** Badge and moderation access uses private RLS tables, authenticated client RPCs, a service-only verification RPC and definer functions with empty search paths. Private helpers have no API access; approved applications have a concurrent-decision guard.
+* **Changed:** Market now separates Discover, Saved and Your creations. Account combines sign-in, settings sync and public profile editing. Item details, other creators' profiles, creation and confirmations use inline pages with Back; no nested iframe-sized modal backdrop remains. Saved cloud bookmarks and installed device copies have separate actions. Section actions align to the right edge. Create offers a dedicated theme or system prompt editor; Appearance uses filled Light/Dark choices and text-field focus adds no label underline.
+* **Changed:** Themes work only with Modern Web Chat and use all 14 actual native/MWC tokens: 13 editable colors, one transparent border and six opacity controls. Settings, native settings menus, Account and Market keep their neutral native light/dark appearance. Preview is an independent packaged document with sanitized native GAIS component markup, fixed public sample bubbles/code/composer, and the production Modern Web Chat stylesheet and header/dropdown renderers. It never loads saved chats or navigates or recolors the live workspace. Back/Escape restores the connected editor without writing preview changes to storage. Theme creation/editing is computer-only regardless of desktop window width; prompts remain available on mobile.
+* **Changed:** Save draft and Publish are choices in the same editor. Description and tags stay visible; sign-in retains a new draft. Token cards put color and opacity in one compact row with 4px gaps.
+* **Fixed:** Light/Dark switches untouched token values to the matching defaults while preserving edited colors and opacity. Native selected navigation and actions retain filled backgrounds; the composer uses the same raised token as message bubbles. Desktop Thinking Level uses its existing header dropdown with a native fallback when that control is unavailable. Preview has a compact 44px toolbar and displays its public sample immediately without opening a user chat. UI captions cannot be drag-selected; fields and copyable content remain selectable.
+* **Added:** Safe nicknames and unique @tags assigned automatically on verified sign-in, optional edits in Account, public profiles, following, independent likes and private cloud bookmarks. Public IDs differ from Auth IDs; Google identity is never copied into a public profile. Existing profile edits survive initialization. Social writes are idempotent, bounded and account-guarded.
+* **Security:** Three owner-RLS social tables and nine authenticated RPCs, three anonymously readable, with revoked direct table/helper access, Google-provider authorization, serialized quotas, profile revisions and account-deletion cascades.
+
+`Settings Design & Interaction` (`content.js`, `sl-panel.css`, `modules/native-settings.js`, `modules/settings-select.*`, `modules/default-profile.js`, `account/`).
+
+* **Changed:** Restored Google Account-style colored navigation icons, a compact header with the centered section title, and a single search at the bottom of navigation. Market uses that same search. Home pairs the visible GAIS avatar with Studio.lab and offers four category shortcuts. Info uses the same content width and full-width disclosure rows.
+* **Changed:** Preference groups use separate connected tiles, one shared 4px gap, larger outer corners and smaller inner corners. Switches share one right edge. Buttons, fields and menus use filled surfaces without border rings; keyboard focus uses filled controls and underlined labels. Routine preference saves are announced without a floating toast.
+* **Fixed:** Settings paints before delayed native controls arrive. Original Angular controls and handlers are preserved, including Material select portals. Borrowed Material dividers no longer add extra spacing between tiles, and the full microphone control opens its original menu. Native dropdown wrappers no longer paint duplicate outlines. A delayed CDK focus attempt preserves current edits and private frame focus. Update results stay usable in Info rather than opening an inert competing popup.
+* **Changed:** Market uses Discover, Saved and Your creations, with Create in Your creations. Creation opens an inline editor with a larger color preview. New-chat defaults expose the instruction and saved-profile actions directly.
+* **Fixed:** Validated custom palettes use an owned constructed stylesheet without weakening CSP. The subsequent Market update scopes these palettes to GAIS and keeps Account/Market neutral. Reset removes only the owned sheet and preserves existing page styles.
+* **Fixed:** Turn limit, Listing details and browser/cloud comparison now use filled full-row disclosures with right chevrons. Search tracks keyboard modality explicitly: mouse focus keeps its neutral field, while Tab/Ctrl+K gives the small search icon a visible backing in native and custom palettes. Long Home/Account names wrap at phone widths; library updates retain unsaved instruction selection and saved Market prompt titles. Modern Web Chat cleanup no longer assumes the document body exists at startup.
+* **Fixed:** When atomic node movement is absent or rejected, the existing iframe-bearing Settings shell stays in place with its own focus trap. The original native host is parked reversibly, retaining live select portals without reloading an early private editor.
+
+`Themes, System Prompts & Market` (`account/catalog*`, `modules/custom-theme.js`, `content.js`, `interceptor.js`, `supabase/`).
+
+* **Added:** Private Google-account library with safe theme editing, live previews, system prompt editing, revision conflicts, explicit publishing and unpublishing. A public searchable Market offers previews, local installation, use, JSON export and import.
+* **Added:** Themes and prompts share Market before Account, with public discovery, saved items and private creation. Installed items remain available after sign-out; installed prompts appear in new-chat defaults. Theme reset restores native colors.
+* **Security:** Separate owner-only library RPCs, revoked direct table grants, Google-provider checks, request and document limits, revision checks and account-deletion cascades. Market responses expose public aliases, never account email or owner IDs. Themes contain only bounded color tokens; system prompts remain text.
+* **Changed:** Applying a selected prompt confirms the native instruction input update and aborts if the chat changes. Creation and publication are separate from the existing 17-preference backup.
+* **Fixed:** Account changes clear previous private library views and pause unsaved drafts for their original account. Captured-owner checks stop a draft from being uploaded to another signed-in account. Confirmed saves remain committed if a subsequent list refresh fails; installed updates retain the current palette until Use is selected.
+
+`Settings Internal Layout & Accessibility` (`content.js`, `sl-panel.css`, `modules/native-settings.js`, `modules/default-profile.js`, `modules/optimizer-hard.js`, `modules/chat-export.js`, `account/`).
+
+* **Changed:** Rebuilt the inner layout with connected preference lists, native switches and radio choices, linked help and short actions. Home shows the visible GAIS profile and category shortcuts. Formatting and chat layout appear in Workspace; analytics blocking has a separate Privacy group in Tools. Preference keys and storage remain unchanged.
+* **Added:** A native mobile menu drawer reuses the same navigation nodes and listeners. It keeps keyboard focus inside the open drawer, restores the previous inert states on close, and returns focus to the menu button. Desktop retains the sidebar; resizing moves focus out of navigation that becomes hidden.
+* **Added:** Named navigation, search-result and save announcements, visible error feedback, real disabled dependent fieldsets, reduced-motion and forced-colors styling. Native GAIS controls keep their Angular handlers and original CDK focus trap; reversible label/help associations and pressed-button state expose their actual DOM state.
+* **Changed:** New chat defaults show visible instruction/library and saved-profile actions with linked status. Busy actions preserve the invoking button's focus; removing a focused default returns focus to Use current chat without interrupting navigation.
+* **Fixed:** Both optimizer strategies expose shared limits in a native disclosure whose summary shows Automatic, 15 or the saved manual limit. Only Physical shows Apply cleanup outside the disclosure. Live statistics refresh preserves unfinished numeric edits. Invalid limits show linked errors and are not saved; range and number fields remain genuinely disabled until manual limits are available.
+* **Added:** Search lists specific setting and action destinations. Choosing a result opens its section and any containing disclosure, then focuses the actual control; typing does not dump entire settings cards into results.
+* **Changed:** Chat Export reports downloads and readable errors inside Settings without blocking browser alerts. Account actions and confirmations expose named controls, live feedback and keyboard focus while identity stays in the private extension frame.
+* **Added:** Documented the Settings keyboard and semantic contract, including focus restoration, native controls and private-frame boundaries.
+
+`Unified Google AI Studio & Studio.lab Settings` (`content.js`, `sl-panel.css`, `modules/native-settings.js`).
+
+* **Changed:** The native GAIS Settings button opens a fullscreen Google-style Home with shared search, desktop navigation and a mobile menu drawer. All Studio.lab sections are included, with Account immediately before Info.
+* **Added:** The actual GAIS theme, submit prompt key, autocomplete, applet notifications and microphone controls inside the original Angular/CDK dialog. Native controls, focus management, closure and GAIS persistence are preserved; GAIS preferences are excluded from Studio.lab storage and sync.
+* **Added:** Home uses the profile name/avatar already visible in GAIS. Private Studio.lab identity stays inside the Account frame.
+
+`Optional Accounts & Preference Sync` (`account/`, `content.js`, `background.js`, `supabase/`).
+
+* **Added:** Google authorization-code login with PKCE and per-attempt callback state inside **Settings → Account**, persistent private sessions, refresh, and local/global sign-out. An extension-origin frame isolates account identity and controls from the host page.
+* **Changed:** Account appears immediately before Info and shares Settings' Search field and scrollbar. Frame autoheight and visible confirmation placement use a bounded numeric layout bridge; account data and worker commands stay inside the extension origin.
+* **Changed:** The backend connection is bundled and fixed at runtime, with one exact required project host and matching CSP. Sign-in needs no project setup form or additional host-permission popup.
+* **Added:** Allowlisted cloud preferences with first-sync choice, account-specific local copies, offline retry, pause/resume, manual sync, preference export, automatic merges for independent changes, and visible conflicts.
+* **Added:** Owner-derived Supabase RPC access with RLS, revoked direct API grants, bounded server validation, compare-and-swap revisions, deletion tombstones, and persistent per-user request quotas.
+* **Added:** Cloud-backup deletion and caller-only account deletion with explicit confirmation, verified authentication, recent OAuth login, active-session checks, and server-only administrative credentials.
+* **Changed:** Privacy/security documentation now describes optional identity and cloud storage. Chats, drafts, system instructions, default profiles and API credentials are excluded from synchronization. Local use remains available without sign-in.
+* **Added:** Backend migrations and an authenticated account-deletion Edge Function. Backend deployment remains separate from loading the extension.
+
+`Release Packaging` (`manifest.json`, `.gitignore`, `account/fonts/`).
+
+* **Changed:** Publication uses an explicit runtime/resource allowlist. Local tests, tooling, backend sources, captures and generated release files remain outside the repository publication set; the extension archive contains runtime files and required license notices.
+* **Changed:** Replaced the pre-OFL Google Sans binary with the current OFL Latin variable font and included the matching Google Sans, Inter and Material Symbols license notices.
+
 ## v2.1
 
 **Full Studio.lab 2.1 Release: Response Recovery, Reliable Native Controls & Chat Export**
@@ -130,8 +219,8 @@
   * *Trailer-Matched Visual:* The centered announcement uses the actual starfield, Moon, and Earth frame with the supplied logo, blue-highlighted headline, and two pill actions arranged like the provided mockup. Text uses 100% line height and zero letter spacing, with a regular-weight Studio.lab wordmark.
   * *Readable Actions:* Explicit foreground colors prevent Google AI Studio link styles from washing out button text; the action row sits 10px lower to match the reference. The dialog also supports keyboard dismissal and focus restoration.
 
-`Repository & Verification`.
-* **Updated:** `Privacy Documentation and Release Validation`.
+`Repository & Documentation`.
+* **Updated:** `Privacy Disclosure`.
   * *Accurate Disclosure:* README and Settings state that update checks contact only GitHub rather than claiming zero outbound requests.
 
 ## v2.0-preview-4-hotfix-5
@@ -176,7 +265,7 @@
 
 `Network & Interceptors Layer` (`interceptor.js`).
 * **Fixed:** `Draft Crash Protection Production Event Contract`.
-  * *Structured Event Metadata:* Structured `__sl_requestPayload` to emit `{ version: 1, requestId, route, ts, body }`, fully satisfying `draft-saver.js:129`.
+  * *Structured Event Metadata:* Structured `__sl_requestPayload` to emit `{ version: 1, requestId, route, ts, body }`, matching the draft-saver request contract.
   * *Guaranteed Completion Signals:* Dispatched matching `__sl_requestFinished` events on `loadend` for XHR and within `window.fetch` (passing `ok: res.ok` or `ok: false` on error), ensuring unsent drafts are properly cleared upon prompt generation and never erroneously restored.
 * **Fixed:** `Strict-Mode Fetch Model Override URL Forwarding`.
   * *Argument Detachment Fix:* Replaced `_origFetch.apply(this, arguments)` with direct array forwarding (`[input, init]`), resolving JavaScript strict-mode parameter detachment so rewritten URLs and Request objects are actually dispatched.
@@ -240,7 +329,7 @@
 * **Fixed:** `Sidebar Z-Index Hierarchy (Modern Web Chat Disabled)`.
   * *Stacking Context Fix:* In `sl-panel.css`, eliminated forced high `z-index` (10, 11) on `footer` and `ms-prompt-box`. Assigned `z-index: 1000 !important` to mobile sliding drawers (`.v3-left-nav`, `ms-navbar-v2`, `ms-right-side-panel`, `mat-sidenav`), ensuring sidebars never render underneath the prompt box on mobile when Modern Web Chat is toggled off.
 * **Added:** `__sl_setTool Direct Signal Listener`.
-  * *Instant Tool Synchronization:* In `interceptor.js`, added listener for `__sl_setTool` delegating directly to `DynamicStudioAPI.setTool(name, enabled)` for zero-latency tool manipulation in the main world.
+  * *Native Tool Synchronization:* In `interceptor.js`, added a listener for `__sl_setTool` delegating to `DynamicStudioAPI.setTool(name, enabled)` in the main world.
 
 `Text Formatter` module.
 * **Added:** `Mobile Combined Heading Dropdown (H ▾)`.
@@ -253,7 +342,7 @@
 * **Fixed:** `Immediate Optimizer Application upon Chat Entry`.
   * *Fast-Track Initial Entry:* Introduced an `isInitialEntry` lifecycle state triggered on extension initialization and SPA route changes (`onRouteChange`). As soon as turns load and reach the bottom, older turns are buffered immediately without waiting for a 5-second stationary delay.
   * *Human Scroll vs. Programmatic Scroll Isolation:* Separated true user scroll interactions (`wheel`, `touchmove`, navigation keys) from passive layout `scroll` events. Angular's turn rendering, autoscrolling, and image loading no longer falsely refresh `lastUserScrollTime` or prevent buffering.
-  * *Adaptive Bottom Detection:* Broadened settling tolerance (`distFromBottom <= 350px` or viewport visibility of the final turn), ensuring chats consistently optimize from 100+ turns down to the user's configured limit within ~500ms of entering.
+  * *Adaptive Bottom Detection:* Broadened settling tolerance (`distFromBottom <= 350px` or viewport visibility of the final turn), allowing initial-entry buffering when the final turn is visible or the viewport is near the bottom.
 
 `Modern Web Chat` module.
 * **Fixed:** `Selective Turn Navigator Restoration & Viewport-Aware Navigation`.
@@ -267,7 +356,7 @@
 * **Added:** `Angular 19 Signals Direct State Mutation & LView Interceptor`.
   * *LView Map Interception:* Intercepts Angular 19's internal LView registry at `document_start` in the `MAIN` execution world via multi-candidate `Map.prototype.set` monitoring with active DOM context resolution (`ms-run-settings`, `app-root`), accessing over 600–1,200 runtime component LViews.
   * *DynamicStudioAPI & Zero-Flicker Mutation:* Direct programmatic inspection and mutation of Angular 19 Writable Signals (`model.set()`, `temperature.set()`, `thinkingBudget.set()`, `maxOutputTokens.set()`, `enableSearchAsATool.set()`, `enableCodeExecution.set()`).
-  * *Purge of Invisible DOM Hacks:* Completely removed `injectInvisibleCSS()`, `toggleInvisibleDOM()`, and `opacity: 0.0001` DOM-hiding hacks along with modal dialog click-polling. Settings and models apply instantaneously with zero UI flicker or dialog popups.
+  * *Removed Invisible DOM Helpers:* Removed `injectInvisibleCSS()`, `toggleInvisibleDOM()`, `opacity: 0.0001` hiding and modal click-polling from the direct-signal path.
   * *Clean System Instructions Injection:* Injects instructions via native prototype descriptor (`HTMLTextAreaElement.prototype.value`) and synthetic `input` events, binding directly to Angular's `FormControl` before silently dismissing the slide panel.
 * **Fixed:** `Response Recovery Toggle & Abort Delegation`.
   * *Native Abort Delegation:* In `interceptor.js`, `xhr.abort` now checks `responseRecoveryEnabled`. If Response Recovery is disabled in settings, abort calls delegate cleanly to the host environment's native abort routine, restoring user cancellation for streaming generations.
@@ -325,7 +414,7 @@
 
 `Smart Optimizer` module.
 * **Enhanced:** `Streaming Guard & Scroll Jitter Elimination`.
-  * *Active Stream & Scroll Detection:* Suspends turn buffering while model responses are actively streaming or while the user is actively scrolling, completely eliminating scroll jumps and jitter during reading.
+  * *Active Stream & Scroll Detection:* Suspends turn buffering while model responses are actively streaming or while the user is actively scrolling.
   * *Stationary Settle Threshold:* Buffers older turns only after 2.5 seconds of stationary idle at the bottom, keeping message restoration manual via banner buttons or search shortcuts.
 
 `Scroll to Bottom` module.
@@ -344,7 +433,7 @@
   * *Omnibar Result Interception & Direct Jump:* Listens to search result clicks and Enter selections in `#omnibar-results`, decodes `MakerSuiteVeMetadataKey` from `jslog` to extract the target turn UUID, and guarantees the target element is rendered in the DOM before AI Studio initiates navigation.
   * *Target Turn Highlight:* Applies an animated blue pulse highlight (`.sl-turn-highlight`) to the found message upon jumping, making it immediately identifiable in long chat threads.
   * *Removal of `content-visibility` Glitches:* Purged intrusive `content-visibility: auto` CSS overrides that caused off-screen geometry miscalculations, premature scroll termination, and layout shifts during large jumps.
-  * *Flawless Upward Scrolling:* Removed redundant manual `scrollTop` offsetting that conflicted with Chromium's native scroll anchoring (`overflow-anchor: auto`). Upward scrolling now smoothly and instantaneously restores earlier turns without bouncing or throwing the user downwards.
+  * *Upward Scroll Anchoring:* Removed redundant manual `scrollTop` offsetting that conflicted with Chromium's native scroll anchoring (`overflow-anchor: auto`) while restoring earlier turns.
   * *Extended Read & Search Grace Period:* Requires the user to stay continuously at the bottom for at least 5 seconds before re-buffering older turns, and pauses buffering for 30 seconds after any search navigation to allow uninterrupted reading.
 
 ## v2.0-preview-2
@@ -394,7 +483,7 @@
 * **Added:** Fail-safe Module Architecture. All module lifecycle hooks (`init`, `onStateChange`, `onRouteChange`) are now wrapped in strict error boundaries. A crash in one specific module no longer cascades; the core extension remains fully functional.
 * **Added:** Health Check Mechanism. The extension monitors DOM readiness on load. If critical UI elements fail to appear within 10 seconds (e.g., due to an undocumented UI update by Google), a fallback toast notification alerts the user.
 * **Enhanced:** Advanced Telemetry & API Interceptor. The telemetry blocker was heavily expanded. Beyond Manifest V3 declarative rules, `fetch` and `XMLHttpRequest` are dynamically intercepted in the `MAIN` world to deeply inspect payloads, log blocked requests to the console, and dynamically spoof `BenefitTier` and `UserRestrictions` directly within the network layer.
-* **Changed:** Scrolling Optimization. Completely refactored `scroll-bottom.js`. Replaced expensive `setInterval` and `MutationObserver` polling loops with a highly efficient `ResizeObserver` tied strictly to the content container. This drastically reduces CPU footprint and battery drain during lengthy text generations.
+* **Changed:** Scrolling Optimization. Completely refactored `scroll-bottom.js`. Replaced expensive `setInterval` and `MutationObserver` polling loops with a highly efficient `ResizeObserver` tied strictly to the content container. The observer follows the content container during text generation.
 * **Removed:** Codebase Cleansing. Completely purged the legacy DOM response-recovery mechanism and its associated state logic from the registry.
 
 ## v1.2-release

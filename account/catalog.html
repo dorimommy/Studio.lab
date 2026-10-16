@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Market · Studio.lab</title>
+  <link rel="icon" href="../images/SL_PFP_64.png">
+  <link rel="stylesheet" href="catalog.css">
+  <script defer src="catalog-schema.js"></script>
+  <script defer src="catalog.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to themes and prompts</a>
+  <div class="page">
+    <header class="standalone-header"><a href="account.html">Studio.lab</a></header>
+    <div id="catalog-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+    <main id="main" tabindex="-1" aria-labelledby="page-title">
+      <h1 id="page-title">Market</h1>
+      <p class="catalog-description">Themes and system prompts for your workspace.</p>
+      <div class="market-shell"><div class="catalog-toolbar"><div class="catalog-tabs" role="tablist" aria-label="Market sections"><button id="browse-tab" type="button" role="tab" aria-controls="market-view" aria-selected="true">Discover</button><button id="library-tab" type="button" role="tab" aria-controls="library-view" aria-selected="false" tabindex="-1">Saved</button><button id="profile-tab" type="button" role="tab" aria-controls="profile-view" aria-selected="false" tabindex="-1">Your creations</button></div><button id="toolbar-create" class="button primary" type="button" disabled>Create</button></div>
+      <form id="market-search" class="market-search" role="search" aria-label="Search the Studio.lab Market">
+        <div class="search-field"><label id="catalog-query-label" class="visually-hidden" for="market-query">Search community themes and system prompts</label><input id="market-query" type="search" maxlength="100" placeholder="Search community items" autocomplete="off" spellcheck="false"><button class="button" type="submit">Search</button></div>
+        <fieldset class="filter-options"><legend class="visually-hidden">Item type</legend><label><input type="radio" name="market-kind" value="all" aria-label="All" checked><span>All</span></label><label><input type="radio" name="market-kind" value="theme" aria-label="Themes"><span>Themes</span></label><label><input type="radio" name="market-kind" value="prompt" aria-label="System prompts"><span>System prompts</span></label></fieldset>
+      </form>
+      <div id="catalog-notice" class="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+      <div id="catalog-error" class="notice error" role="alert" aria-atomic="true" hidden></div>
+      <button id="catalog-retry" class="button" type="button" hidden>Try again</button>
+      <div id="paused-draft" class="signin-note" hidden><p id="paused-draft-description">An unsaved draft from your previous account is paused in this tab. Sign back into that account to resume, or discard the draft.</p><div class="card-actions"><button id="resume-draft" class="button primary" type="button" hidden>Resume draft</button><button id="discard-paused-draft" class="button" type="button">Discard draft</button></div></div>
+      <div id="signin-note" class="signin-note" hidden><p>Sign in to like, save, follow creators, and share your own work.</p><button id="open-account" class="button" type="button">Open Account</button></div>
+      <div id="library-view" role="tabpanel" aria-labelledby="library-tab" hidden>
+        <section class="catalog-section" aria-labelledby="saved-heading"><div class="section-heading"><div><h2 id="saved-heading" tabindex="-1">Your saved items</h2><p>Keep discoveries here. Use them whenever you want.</p></div></div><div id="saved-list" class="asset-list discovery-grid"></div><p id="saved-empty" class="empty-state" hidden>You haven't saved anything yet. Find something you like in Discover.</p><div class="pagination"><button id="previous-saved" class="button" type="button" hidden>Previous</button><button id="more-saved" class="button" type="button" hidden>Next</button></div></section>
+        <section class="catalog-section" aria-labelledby="local-heading">
+          <div class="section-heading"><div><h2 id="local-heading" tabindex="-1">On this device</h2><p id="active-theme">The Google AI Studio theme is active.</p></div><div class="card-actions"><button id="import-asset" class="button" type="button">Import JSON</button><button id="reset-theme" class="button" type="button" hidden>Reset theme</button></div></div>
+          <label class="visually-hidden" for="import-json">Choose an exported Studio.lab theme or system prompt JSON file</label><input id="import-json" type="file" accept=".json,application/json" hidden>
+          <div id="local-list" class="asset-list"></div>
+          <p id="local-empty" class="empty-state" hidden>No device copies yet. Open a discovery to use it, or import a JSON file.</p>
+          <div id="local-pagination" class="pagination" hidden><button id="previous-local" class="button" type="button">Previous</button><p id="local-page" class="help" role="status" aria-live="polite"></p><button id="next-local" class="button" type="button">Next</button></div>
+        </section>
+      </div>
+      <div id="profile-view" role="tabpanel" aria-labelledby="profile-tab" hidden>
+        <div id="creations-profile" class="creations-profile" hidden><span id="creations-profile-avatar" class="creator-avatar" aria-hidden="true"></span><div class="creations-profile-copy"><div class="identity-name"><button id="creations-profile-name" class="profile-name-control" type="button" aria-label="View your public profile"></button><span id="creations-profile-badges" class="identity-badges"></span></div><p id="creations-profile-note">Your public nickname and @tag are assigned automatically on sign-in.</p></div><button id="manage-account-profile" class="button" type="button">Account &amp; profile</button></div>
+        <section id="own-section" class="catalog-section" aria-labelledby="own-heading" hidden>
+          <div class="section-heading"><div><h2 id="own-heading" tabindex="-1">Your creations</h2><p>Make themes and reusable instructions. Save drafts or share directly.</p></div><div class="card-actions"><button id="refresh-own" class="button text-button" type="button">Refresh</button><button id="create-asset" class="button primary" type="button" disabled>Create</button></div></div>
+          <div id="own-list" class="asset-list"></div>
+          <p id="own-empty" class="empty-state" hidden>No creations yet. Choose Create to make a theme or system prompt.</p>
+          <div class="pagination"><button id="previous-own" class="button" type="button" hidden>Previous</button><p id="own-page" class="help" role="status" aria-live="polite"></p><button id="more-own" class="button" type="button" hidden>Next</button></div>
+        </section>
+      </div>
+      <div id="market-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
+        <div id="creator-result" class="creator-result" hidden></div>
+        <p id="market-count" class="results-count" aria-live="polite" aria-atomic="true">Loading the Market…</p>
+        <div id="market-list" class="asset-list discovery-grid"></div>
+        <p id="market-empty" class="empty-state" hidden>The community is getting started. New themes and prompts will appear here.</p>
+        <div class="pagination"><button id="previous-market" class="button" type="button" hidden>Previous</button><button id="more-market" class="button" type="button" hidden>Next</button></div>
+        <p class="market-footer">Preview a theme, read a prompt, or discover creator profiles. Search @tags to find people.</p>
+      </div></div>
+    </main>
+  </div>
+
+  <dialog id="create-dialog" aria-labelledby="create-title"><button id="create-back" class="button text-button view-back" type="button">Back to your creations</button><h2 id="create-title" tabindex="-1">What would you like to create?</h2><p class="view-description">Save a draft or publish directly when it is ready.</p><div class="create-options"><button id="create-theme" class="create-option" type="button"><span class="create-option-icon" aria-hidden="true">◐</span><strong>Theme</strong><span>Choose colors and preview Modern Web Chat.</span><span id="theme-desktop-note" class="help" hidden>Theme creation is available on a computer.</span></button><button id="create-prompt" class="create-option" type="button"><span class="create-option-icon" aria-hidden="true">✦</span><strong>System prompt</strong><span>Write reusable instructions for your chats.</span></button></div></dialog>
+  <dialog id="public-profile-dialog" aria-labelledby="public-profile-name"><button id="public-profile-back" class="button text-button view-back" type="button">Back</button><div class="profile-header"><div id="public-profile-avatar" class="profile-avatar" aria-hidden="true"></div><div class="profile-copy"><div class="identity-name"><h2 id="public-profile-name" tabindex="-1"></h2><span id="public-profile-badges" class="identity-badges"></span></div><p id="public-profile-handle"></p><p id="public-profile-stats" class="profile-stats"></p></div><div class="profile-actions"><button id="profile-follow" class="button primary" type="button">Follow</button><button id="profile-account" class="button" type="button" hidden>Account &amp; profile</button></div></div><section id="public-profile-roles" class="profile-management" aria-labelledby="profile-roles-heading" hidden><div class="section-heading"><div><h3 id="profile-roles-heading">Studio.lab affiliation</h3><p>Gold badges are reserved for the Studio.lab team and affiliated people.</p></div></div><form id="profile-role-form"><label class="visually-hidden" for="profile-role-reason">Reason for this staff badge change</label><input id="profile-role-reason" type="text" minlength="10" maxlength="500" placeholder="Reason for this change" required><button id="profile-role-action" class="button" type="submit">Grant gold badge</button></form><p class="help">Moderator applications are reviewed in Account.</p></section><div class="section-heading"><div><h3 class="section-label">Published creations</h3><p>Open an item to preview it, like it, or keep it in Saved.</p></div></div><div id="profile-list" class="asset-list discovery-grid"></div><p id="profile-empty" class="empty-state" hidden>No published creations yet.</p><div class="pagination"><button id="previous-profile" class="button" type="button" hidden>Previous</button><button id="more-profile" class="button" type="button" hidden>Next</button></div></dialog>
+
+  <dialog id="editor-dialog" class="editor-dialog" aria-labelledby="editor-title" aria-describedby="editor-help">
+    <div class="visually-hidden" data-dialog-live role="status" aria-live="polite" aria-atomic="true"></div>
+    <form id="editor-form">
+      <button id="editor-back" class="button text-button editor-back" type="button">← Back to your creations</button>
+      <div class="dialog-heading"><div><h2 id="editor-title">Create an item</h2><p id="editor-help">Choose whether to save a draft or publish in Market.</p></div><button id="editor-close" class="icon-button" type="button" aria-label="Close editor"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <div id="editor-error" class="notice error" role="alert" aria-atomic="true" tabindex="-1" hidden></div>
+      <div class="form-grid editor-basics">
+        <select id="asset-kind" aria-label="Item type" hidden><option value="theme">Theme</option><option value="prompt">System prompt</option></select>
+        <div class="field"><label for="asset-title">Name <span class="required-note">(required)</span></label><input id="asset-title" type="text" maxlength="80" required autocomplete="off"></div>
+      </div>
+      <section id="theme-fields" class="editor-section" aria-labelledby="theme-fields-title">
+        <h3 id="theme-fields-title">Colors and transparency</h3>
+        <fieldset class="theme-mode"><legend>Appearance</legend><div class="appearance-choices"><label><input type="radio" name="theme-mode" value="dark" checked><span>Dark</span></label><label><input type="radio" name="theme-mode" value="light"><span>Light</span></label></div><button id="theme-preset" class="button" type="button">Reset colors</button></fieldset>
+        <div class="theme-editor-grid"><div class="theme-editor-controls"><div id="color-fields" class="color-fields"></div>
+        <p id="contrast-help" class="help">Text and accents are checked against their actual backgrounds, including opacity. Themes use Modern Web Chat; using a theme can enable it.</p>
+        <p id="contrast-status" class="help" role="status" aria-live="polite" aria-atomic="true"></p></div>
+        <div id="theme-preview" class="gais-preview" role="group" aria-label="Google AI Studio theme preview"><div class="preview-palette" aria-hidden="true"></div><div><h3>Modern Web Chat preview</h3><p>Preview Modern Web Chat with these colors.</p></div><button id="preview-draft" class="button primary" type="button">Preview</button></div>
+        </div>
+      </section>
+      <section id="prompt-fields" class="editor-section" aria-labelledby="prompt-fields-title" hidden><div class="field"><label id="prompt-fields-title" for="prompt-text">System prompt <span class="required-note">(required)</span></label><textarea id="prompt-text" rows="10" maxlength="16000" spellcheck="false" aria-describedby="prompt-help prompt-count"></textarea><p id="prompt-help" class="help">Instructions for the model. Private until you explicitly publish; never include credentials or personal chat data.</p><p id="prompt-count" class="help">0 / 16,000 characters</p></div></section>
+      <section id="listing-details" class="editor-section editor-listing" aria-labelledby="listing-title"><h3 id="listing-title">Description and tags</h3><div class="form-grid">
+        <div class="field full-width"><label for="asset-description">Description <span class="optional-note">(optional)</span></label><textarea id="asset-description" rows="2" maxlength="500" aria-describedby="description-help"></textarea><p id="description-help" class="help">A short description for your creation.</p></div>
+        <input id="asset-author" type="hidden">
+        <div class="field full-width"><label for="asset-tags">Tags <span class="optional-note">(optional)</span></label><input id="asset-tags" type="text" maxlength="124" autocomplete="off" aria-describedby="tags-help"><p id="tags-help" class="help">Up to 5 comma-separated tags, 24 characters each.</p></div>
+      </div></section>
+      <section class="editor-section editor-publishing" aria-labelledby="publishing-title"><h3 id="publishing-title">Where to save</h3><fieldset class="publish-choices"><legend class="visually-hidden">Visibility</legend><label><input type="radio" name="asset-visibility" value="private" checked><span><strong>Save draft</strong><span>Only you can see it.</span></span></label><label><input type="radio" name="asset-visibility" value="public"><span><strong>Publish</strong><span>Share with everyone in Market.</span></span></label></fieldset><p id="publishing-summary" class="help"></p>
+
+      </section>
+      <div class="dialog-actions"><button id="editor-cancel" class="button" type="button">Cancel</button><button id="editor-save" class="button primary" type="submit">Save draft</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog" aria-labelledby="detail-title">
+    <div class="visually-hidden" data-dialog-live role="status" aria-live="polite" aria-atomic="true"></div>
+    <div class="dialog-heading"><div><p id="detail-kind" class="eyebrow"></p><h2 id="detail-title" tabindex="-1"></h2></div><button id="detail-close" class="icon-button" type="button" aria-label="Close preview"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+    <div id="detail-notice" class="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div><div id="detail-error" class="notice error" role="alert" aria-atomic="true" hidden></div>
+    <button id="detail-back" class="button text-button view-back" type="button">Back to discoveries</button><p id="detail-description"></p><div id="detail-creator" class="creator-row" hidden></div><p id="detail-author" class="help detail-author"></p><div id="detail-social" class="social-actions"></div>
+    <div id="detail-tags" class="tags"></div>
+    <div id="detail-theme-preview" class="gais-preview" role="group" aria-label="Google AI Studio theme preview" hidden><div class="preview-palette" aria-hidden="true"></div><div><h3>Modern Web Chat preview</h3><p>Preview Modern Web Chat with these colors.</p></div><button id="preview-detail" class="button primary" type="button">Preview</button></div>
+    <div id="detail-prompt" hidden><h3 id="detail-prompt-heading">System prompt</h3><pre id="detail-text" role="region" tabindex="0" aria-labelledby="detail-prompt-heading"></pre><p class="use-warning">Using this prompt replaces the current chat’s system instructions.</p></div>
+    <p id="detail-installed" class="help"></p>
+    <div id="detail-actions" class="dialog-actions"></div>
+    <div id="owner-actions" class="owner-actions" hidden></div>
+    <section id="moderation-panel" class="profile-management" aria-labelledby="moderation-heading" hidden><div class="section-heading"><div><h3 id="moderation-heading">Market moderation</h3><p id="moderation-description">Remove this publication only when it breaks Market rules.</p></div><button id="moderation-toggle" class="button danger-button" type="button">Remove from Market</button></div><form id="moderation-form" hidden><div class="field"><label for="moderation-reason">Rule and reason</label><textarea id="moderation-reason" rows="2" minlength="10" maxlength="500" required placeholder="Name the rule and explain how this publication breaks it."></textarea></div><div class="dialog-actions"><button id="moderation-cancel" class="button" type="button">Cancel</button><button id="moderation-submit" class="button danger-button" type="submit">Confirm removal</button></div></form><p id="moderation-result" class="help" role="status" hidden></p></section>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description">
+    <div class="visually-hidden" data-dialog-live role="status" aria-live="polite" aria-atomic="true"></div>
+    <h2 id="confirm-title"></h2><p id="confirm-description"></p>
+    <div id="confirm-error" class="notice error" role="alert" aria-atomic="true" hidden></div>
+    <div class="dialog-actions"><button id="confirm-cancel" class="button" type="button">Cancel</button><button id="confirm-action" class="button primary" type="button">Confirm</button></div>
+  </dialog>
+  <dialog id="discard-dialog" class="confirm-dialog" aria-labelledby="discard-title" aria-describedby="discard-description">
+    <div class="visually-hidden" data-dialog-live role="status" aria-live="polite" aria-atomic="true"></div>
+    <h2 id="discard-title">Discard your changes?</h2><p id="discard-description">Your unsaved changes will be lost. Keep editing to save them.</p>
+    <div class="dialog-actions"><button id="discard-keep" class="button primary" type="button">Keep editing</button><button id="discard-changes" class="button danger-button" type="button">Discard changes</button></div>
+  </dialog>
+</body>
+</html>

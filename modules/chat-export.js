@@ -1,10 +1,4 @@
-/**
- * chat-export.js — Studio.lab Module
- *
- * Exports the full chat history to Markdown or JSON.
- * Data is captured from the network layer (interceptor.js), avoiding
- * Angular's DOM virtualization entirely.
- */
+// Capture network payloads because Angular virtualizes the chat DOM.
 (function () {
   'use strict';
 
@@ -64,7 +58,6 @@
     discardCapture();
   });
 
-  // ── Capture from GenerateContent request body ──────────────────
   window.addEventListener('__sl_requestPayload', (e) => {
     const detail = e.detail;
     const route = routeKey(detail?.route) || currentRoute();
@@ -261,32 +254,28 @@
     return payload;
   }
 
-  // ── Export: JSON ───────────────────────────────────────────────
   function exportAsJson() {
     const payload = exportPayload();
     if (!payload) {
-      alert('No chat history captured yet.\nPlease send at least one message first.');
-      return;
+      return { ok: false, message: 'No chat history captured yet. Send a message in this chat, then try again.' };
     }
     downloadFile(
       JSON.stringify(payload, null, 2),
       'chat-export.json',
       'application/json'
     );
+    return { ok: true, message: 'JSON download started.' };
   }
 
-  // ── Export: Markdown ───────────────────────────────────────────
   function exportAsMarkdown() {
     const payload = exportPayload();
     if (!payload || !Array.isArray(payload) || payload.length < 2) {
-      alert('No chat history captured yet.\nPlease send at least one message first.');
-      return;
+      return { ok: false, message: 'No chat history captured yet. Send a message in this chat, then try again.' };
     }
 
     const turns = payload[1];
     if (!Array.isArray(turns)) {
-      alert('Unrecognized chat structure.');
-      return;
+      return { ok: false, message: 'This captured chat structure cannot be exported as Markdown. Try JSON instead.' };
     }
 
     const lines = ['# Chat Export\n'];
@@ -304,9 +293,9 @@
     });
 
     downloadFile(lines.join('\n'), 'chat-export.md', 'text/markdown');
+    return { ok: true, message: 'Markdown download started.' };
   }
 
-  /** Recursively walk the nested‑array payload and collect text strings. */
   function extractText(obj, out) {
     if (!Array.isArray(obj)) return;
     if (obj.length >= 2 && obj[0] === null && typeof obj[1] === 'string') {
@@ -326,7 +315,6 @@
     }
   }
 
-  // ── Download helper ───────────────────────────────────────────
   function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -339,7 +327,6 @@
     URL.revokeObjectURL(url);
   }
 
-  // ── Module registration ───────────────────────────────────────
   window.StudioLab.registerModule({
     id: 'chat-export',
     group: 'modules',
@@ -349,16 +336,39 @@
     alwaysSelected: true,
     onRouteChange() { currentCapture(); },
     renderControls: () => `
-      <div class="sl-controls-row" style="padding: 0 12px 12px; gap: 8px; display: flex; width: 100%; box-sizing: border-box;">
-        <button type="button" class="sl-apply-btn" id="sl-export-md" style="flex: 1;">Export Markdown</button>
-        <button type="button" class="sl-apply-btn" id="sl-export-json" style="flex: 1;">Export JSON</button>
+      <div class="sl-setting-tool-fields">
+        <div class="sl-setting-actions">
+          <button type="button" class="sl-settings-button" id="sl-export-md" aria-describedby="sl-help-chat-export">Download Markdown</button>
+          <button type="button" class="sl-settings-button" id="sl-export-json" aria-describedby="sl-help-chat-export">Download JSON</button>
+        </div>
+        <p class="sl-setting-help" id="sl-export-status" hidden></p>
       </div>
     `,
-    bindControls: (modalEl) => {
+    bindControls: (modalEl, ctx) => {
       const btnMd = modalEl.querySelector('#sl-export-md');
       const btnJson = modalEl.querySelector('#sl-export-json');
-      if (btnMd) btnMd.addEventListener('click', (e) => { e.stopPropagation(); exportAsMarkdown(); });
-      if (btnJson) btnJson.addEventListener('click', (e) => { e.stopPropagation(); exportAsJson(); });
+      const status = modalEl.querySelector('#sl-export-status');
+      function runExport(action) {
+        let result;
+        try { result = action(); }
+        catch (_) { result = { ok: false, message: 'The download could not start. Try again.' }; }
+        if (status) { status.textContent = result.message; status.hidden = false; }
+        ctx?.announceSettings?.(result.message, !result.ok);
+      }
+      const onMarkdown = event => {
+        event.stopPropagation();
+        runExport(exportAsMarkdown);
+      };
+      const onJson = event => {
+        event.stopPropagation();
+        runExport(exportAsJson);
+      };
+      btnMd?.addEventListener('click', onMarkdown);
+      btnJson?.addEventListener('click', onJson);
+      return () => {
+        btnMd?.removeEventListener('click', onMarkdown);
+        btnJson?.removeEventListener('click', onJson);
+      };
     }
   });
 })();

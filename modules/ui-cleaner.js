@@ -1,7 +1,3 @@
-/**
- * Studio.lab module: ui-cleaner
- * Registers multiple sub-modules for the UI Cleaner group.
- */
 (function () {
   'use strict';
 
@@ -17,21 +13,30 @@
       subtitle: 'clean-interface-tips',
       icon: 'edit',
       css: `
+        ms-zero-state ms-model-empty-state .empty-state__examples,
+        ms-zero-state ms-model-empty-state .empty-state__description,
+        ms-zero-state ms-model-empty-state .unlock,
         ms-zero-state .grid-views-content,
         ms-zero-state ms-model-grid,
         ms-zero-state ms-model-grid .category-grid > .category-card:first-child,
         ms-zero-state ms-model-grid .category-card:first-child,
         ms-zero-state ms-model-category-grid > div:first-child { display: none !important; }
         ms-zero-state ms-button-toggle { display: none !important; }
+        ms-zero-state ms-model-empty-state .empty-state {
+          grid-template-columns: minmax(0, 1fr) !important;
+          text-align: center !important;
+        }
         ms-zero-state .carousel-title,
         ms-zero-state h1.carousel-title,
-        ms-zero-state h2.carousel-title {
+        ms-zero-state h2.carousel-title,
+        ms-zero-state ms-model-empty-state #empty-state-heading {
           visibility: hidden !important;
           position: relative !important;
         }
         ms-zero-state .carousel-title::after,
         ms-zero-state h1.carousel-title::after,
-        ms-zero-state h2.carousel-title::after {
+        ms-zero-state h2.carousel-title::after,
+        ms-zero-state ms-model-empty-state #empty-state-heading::after {
           content: var(--sl-welcome-text, "Hello!") !important;
           visibility: visible !important;
           position: absolute !important;
@@ -39,27 +44,33 @@
           top: 0 !important;
           white-space: nowrap !important;
         }
+        ms-zero-state ms-model-empty-state #empty-state-heading::after {
+          width: 100% !important;
+          white-space: normal !important;
+        }
       `,
-      details: [{ icon: 'edit', text: 'Removes "Featured" tile, toggle buttons, and personalizes the welcome message.' }]
+      details: [{ icon: 'edit', text: 'Keeps your personal greeting while hiding welcome promotions, examples, and toggles.' }]
     },
     {
       id: 'cleaner-banners',
-      title: 'Paid Banner',
+      title: 'Upgrade Banners',
       subtitle: 'clean-interface-banners',
       icon: 'visibility_off',
       css: `
         ms-chat-session ms-opaque-container-485387979-1,
-        ms-navbar-v2 ms-opaque-container-485387979,
-        ms-chat-session [class*="opaque-container"],
-        ms-navbar-v2 [class*="opaque-container"],
-        [class*="quota-exceeded"],
-        [class*="upgrade-card"],
-        .quota-exceeded-container,
-        .upgrade-card-wrapper {
+        ms-navbar-v2 ms-opaque-container-485387979 {
           display: none !important;
         }
       `,
-      details: [{ icon: 'visibility_off', text: 'Hides "Upgrade to unlock more", "Quota exceeded", and payment-related banners.' }]
+      details: [{ icon: 'visibility_off', text: 'Hides promotional upgrade and payment banners without hiding chat errors.' }]
+    },
+    {
+      id: 'cleaner-sidebar-banners',
+      title: 'Sidebar Promotions',
+      subtitle: 'clean-interface-sidebar-banners',
+      icon: 'visibility_off',
+      css: `ms-navbar-v2 ms-navbar-promo-card { display: none !important; }`,
+      details: [{ icon: 'visibility_off', text: 'Hides promotional cards above the sidebar footer controls.' }]
     },
     {
       id: 'cleaner-hallucinations',
@@ -88,7 +99,6 @@
   ];
 
   function extractUserName() {
-    // First, try to get it from the avatar image alt text (most reliable)
     const avatarImg = document.querySelector('img.avatar[alt]');
     if (avatarImg) {
       const alt = avatarImg.getAttribute('alt').trim();
@@ -97,7 +107,6 @@
       }
     }
 
-    // Fallback: aria-label on the account button
     const accBtn = document.querySelector('a[aria-label*="@"], button[aria-label*="@"]');
     if (accBtn) {
       const label = accBtn.getAttribute('aria-label');
@@ -114,6 +123,9 @@
 
   let lastTypedName = null;
   let typingInProgress = false;
+  let typingInterval = null;
+  let namePoll = null;
+  let nameRefresh = null;
 
   function typeText(targetText) {
     if (typingInProgress || lastTypedName === targetText) return;
@@ -123,12 +135,13 @@
     const target = "Hello, " + targetText + "! What are your plans?";
     let i = 6; 
     
-    const typingInterval = setInterval(() => {
+    typingInterval = setInterval(() => {
       if (i <= target.length) {
-        document.documentElement.style.setProperty('--sl-welcome-text', '"' + target.substring(0, i) + '"');
+        document.documentElement.style.setProperty('--sl-welcome-text', JSON.stringify(target.substring(0, i)));
         i++;
       } else {
         clearInterval(typingInterval);
+        typingInterval = null;
         typingInProgress = false;
       }
     }, 40);
@@ -142,6 +155,38 @@
       return true;
     }
     return false;
+  }
+
+  function stopWelcome() {
+    clearInterval(namePoll);
+    clearInterval(nameRefresh);
+    clearInterval(typingInterval);
+    namePoll = null;
+    nameRefresh = null;
+    typingInterval = null;
+    typingInProgress = false;
+    lastTypedName = null;
+    document.documentElement.style.removeProperty('--sl-welcome-text');
+  }
+
+  function syncWelcome(enabled) {
+    if (!enabled) {
+      stopWelcome();
+      return;
+    }
+    if (nameRefresh !== null) return;
+
+    if (!updateUserName()) {
+      let attempts = 0;
+      namePoll = setInterval(() => {
+        attempts++;
+        if (updateUserName() || attempts >= 100) {
+          clearInterval(namePoll);
+          namePoll = null;
+        }
+      }, 100);
+    }
+    nameRefresh = setInterval(updateUserName, 10000);
   }
 
   function toggleStyle(id, css, enabled) {
@@ -182,17 +227,6 @@
       init(ctx) {
         ctxRef = ctx;
         this.updateVisibility();
-
-        if (mod.id === 'cleaner-tips') {
-          if (!updateUserName()) {
-            let attempts = 0;
-            const poll = setInterval(() => {
-              attempts++;
-              if (updateUserName() || attempts > 100) clearInterval(poll);
-            }, 100);
-          }
-          setInterval(updateUserName, 10000);
-        }
       },
       onStateChange(ctx) {
         if (ctx) ctxRef = ctx;
@@ -202,13 +236,17 @@
         if (ctx) ctxRef = ctx;
         this.updateVisibility();
       },
+      dispose() {
+        toggleStyle(mod.id, mod.css, false);
+        if (mod.id === 'cleaner-tips') stopWelcome();
+      },
       updateVisibility() {
-        // Group toggle must be enabled AND the specific module toggle must be enabled
         const groupEnabled = !!(ctxRef && ctxRef.state.cleanerEnabled);
         const moduleEnabled = !!(ctxRef && ctxRef.state[stateKey]);
         const shouldEnable = groupEnabled && moduleEnabled;
 
         toggleStyle(mod.id, mod.css, shouldEnable);
+        if (mod.id === 'cleaner-tips') syncWelcome(shouldEnable);
       }
     });
   });

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Account · Studio.lab</title>
+  <link rel="icon" href="../images/SL_PFP_64.png">
+  <link rel="stylesheet" href="account.css">
+  <script defer src="account.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to account settings</a>
+  <div class="page">
+    <header class="page-header"><a class="brand" href="account.html" aria-label="Studio.lab account home"><img src="../images/SL_PFP_64.png" alt="" width="32" height="32"><span>Studio.lab</span></a></header>
+    <div id="account-live" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="message" class="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+    <div id="error" class="notice error" role="alert" aria-atomic="true" hidden></div>
+    <button id="retry" class="button" type="button" aria-describedby="error" hidden>Try again</button>
+    <main id="main" tabindex="-1" aria-label="Account settings">
+      <h1 class="page-title">Account settings</h1>
+      <section class="profile" aria-labelledby="account-heading">
+        <div class="identity-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/></svg></div>
+        <div class="profile-copy"><div class="profile-title"><h2 id="account-heading">Google account</h2><span id="account-badge" class="badge">Loading</span></div><p id="identity-description">Checking your account…</p><p id="account-email" class="account-email" hidden></p></div>
+        <button id="login" type="button" class="button primary" aria-describedby="identity-description login-note" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.36ZM12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.51c-.9.6-2.04.96-3.38.96-2.6 0-4.8-1.76-5.59-4.12H3.07v2.59A10 10 0 0 0 12 22Zm-5.59-8.09A6 6 0 0 1 6.1 12c0-.66.11-1.3.31-1.91V7.5H3.07A10 10 0 0 0 2 12c0 1.61.38 3.14 1.07 4.5l3.34-2.59ZM12 5.97c1.47 0 2.79.51 3.83 1.51l2.88-2.88A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.93 5.5l3.34 2.59C7.2 7.73 9.4 5.97 12 5.97Z"/></svg><span id="login-label">Continue with Google</span></button>
+        <p id="login-note" class="profile-note">Google handles sign-in. No access to your AI Studio, Gmail, Drive, or API keys.</p>
+      </section>
+      <section id="public-profile-card" class="settings-section public-profile-card" aria-labelledby="public-profile-heading" hidden>
+        <header class="section-heading profile-identity"><span id="public-profile-avatar" class="public-avatar" aria-hidden="true">S</span><div class="section-heading-copy"><div class="identity-name"><h2 id="public-profile-heading">Your profile</h2><span id="public-profile-badges" class="identity-badges"></span></div><p id="public-profile-summary">Your public nickname and @tag are assigned automatically on sign-in.</p><p id="public-profile-stats" class="help"></p></div><div class="actions"><button id="public-profile-market" class="button" type="button">Your creations</button><button id="public-profile-edit" class="button" type="button">Edit profile</button></div></header>
+        <div id="public-profile-error" class="notice error" role="alert" hidden></div><button id="public-profile-retry" class="button" type="button" hidden>Try again</button>
+        <form id="public-profile-form" hidden><div class="public-profile-fields"><div class="field"><label for="public-profile-nickname">Nickname</label><input id="public-profile-nickname" type="text" maxlength="60" required autocomplete="nickname"></div><div class="field"><label for="public-profile-handle">Your @tag</label><div class="handle-field"><span aria-hidden="true">@</span><input id="public-profile-handle" type="text" minlength="3" maxlength="24" required pattern="[a-z][a-z0-9_]{2,23}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="public-handle-help"></div><p id="public-handle-help" class="help">3–24 letters, numbers, or underscores. Start with a letter.</p></div></div><div class="actions profile-form-actions"><button id="public-profile-cancel" class="button" type="button">Cancel</button><button id="public-profile-save" class="button primary" type="submit">Save profile</button></div></form>
+        <p id="public-profile-note" class="help">Your nickname and @tag appear with your published creations. People can follow you in Market.</p>
+      </section>
+      <div id="membership-group" class="account-group-card" role="group" aria-label="Profile badges and membership" hidden>
+        <section class="settings-section" aria-labelledby="verification-heading"><div class="setting-row"><span class="identity-mark verified" role="img" aria-label="Blue verified badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path class="badge-check" d="m7 12 3 3 6-6"/></svg></span><div class="setting-copy"><h3 id="verification-heading">Blue verification · $1/month</h3><p id="verification-description">Blue verification is planned at $1/month. Payments are not available yet.</p><p id="verification-status" class="help"></p></div><button id="verification-subscribe" class="button" type="button" disabled>Unavailable</button></div></section>
+        <section class="settings-section" aria-labelledby="moderator-heading"><div class="setting-row"><span class="identity-mark moderator" role="img" aria-label="Moderator shield"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3.5 5.5V11c0 5.5 3.8 9.2 8.5 11 4.7-1.8 8.5-5.5 8.5-11V5.5Z"/><path class="badge-check" d="m7 11 3 3 6-6"/></svg></span><div class="setting-copy"><h3 id="moderator-heading">Market moderator</h3><p id="moderator-description">Help keep Market within its rules. Moderator access is granted after your application is approved.</p><p id="moderator-status" class="help"></p></div><button id="moderator-apply-open" class="button" type="button">Apply</button></div><form id="moderator-application-form" hidden><div class="field"><label for="moderator-application-message">Why would you like to moderate Market?</label><textarea id="moderator-application-message" rows="3" minlength="20" maxlength="2000" required placeholder="Tell us about your experience and how you would apply the Market rules."></textarea></div><div class="actions profile-form-actions"><button id="moderator-application-cancel" class="button" type="button">Cancel</button><button id="moderator-application-submit" class="button primary" type="submit">Send application</button></div></form></section>
+        <p id="membership-error" class="notice error" role="alert" hidden></p><button id="membership-retry" class="button" type="button" hidden>Try again</button>
+      </div>
+      <section id="owner-tools" class="settings-section owner-tools" aria-labelledby="owner-heading" hidden><header class="section-heading"><div class="section-heading-copy"><h2 id="owner-heading">Studio.lab management</h2><p>Assign affiliation badges and review moderator applications.</p></div></header><section class="management-block" aria-labelledby="staff-heading"><h3 id="staff-heading">Gold badge and moderator access</h3><form id="owner-lookup-form" class="management-lookup"><label class="visually-hidden" for="owner-profile-handle">Profile @tag</label><div class="handle-field"><span aria-hidden="true">@</span><input id="owner-profile-handle" type="text" maxlength="24" placeholder="profile_tag" required autocomplete="off" autocapitalize="none" spellcheck="false"></div><button id="owner-profile-find" class="button" type="submit">Find profile</button></form><div id="owner-profile-result" class="owner-profile-result" hidden><div class="owner-profile-identity"><span id="owner-profile-name"></span><span id="owner-profile-badges" class="identity-badges"></span><p id="owner-profile-tag" class="help"></p></div><form id="owner-role-form"><div class="field"><label for="owner-role-reason">Reason for this change</label><input id="owner-role-reason" type="text" minlength="10" maxlength="500" required></div><div class="actions"><button id="owner-staff-toggle" class="button" type="submit">Grant gold badge</button><button id="owner-moderator-toggle" class="button danger-button" type="button" hidden>Revoke moderator access</button></div></form><p class="help">The gold check is reserved for Studio.lab staff and affiliated people. Moderator access requires an approved application. Review new applications below.</p></div></section><section class="management-block" aria-labelledby="applications-heading"><header class="section-heading"><div><h3 id="applications-heading">Moderator applications</h3><p>Review the application and leave a response before making a decision.</p></div><button id="owner-applications-refresh" class="button" type="button">Refresh</button></header><div id="owner-applications" class="application-list"></div><p id="owner-applications-empty" class="help" hidden>No pending applications.</p><div class="actions application-pagination"><button id="owner-applications-previous" class="button" type="button" hidden>Previous</button><button id="owner-applications-next" class="button" type="button" hidden>Next</button></div></section><section class="management-block" aria-labelledby="removed-catalog-heading"><header class="section-heading"><div><h3 id="removed-catalog-heading">Removed from Market</h3><p>Review the removal reason and restore a publication when it can return to Market.</p></div><button id="owner-removed-refresh" class="button" type="button">Refresh</button></header><div id="owner-removed-list" class="application-list removed-catalog-list"></div><p id="owner-removed-empty" class="help" hidden>No removed publications.</p><p id="owner-removed-error" class="notice error" role="alert" hidden></p><div class="actions application-pagination"><button id="owner-removed-previous" class="button" type="button" hidden>Previous</button><button id="owner-removed-next" class="button" type="button" hidden>Next</button></div></section><p id="owner-tools-error" class="notice error" role="alert" hidden></p><p id="owner-tools-notice" class="help" role="status" hidden></p></section>
+      <div class="account-group-card" role="group" aria-label="Settings backup and privacy">
+      <section id="sync-card" class="settings-section" aria-labelledby="sync-heading" hidden>
+        <header class="section-heading"><h2 id="sync-heading" tabindex="-1">Settings sync</h2><span id="sync-badge" class="badge">Ready</span></header>
+        <div class="settings-rows">
+          <div class="setting-row"><div class="setting-copy"><h3>Automatic backup</h3><p id="sync-description"></p></div><div class="actions"><button id="sync" type="button" class="button primary" aria-describedby="sync-description">Sync now</button><button id="pause" type="button" class="button" aria-describedby="sync-description">Pause sync</button><button id="resume" type="button" class="button" aria-describedby="sync-description" hidden>Resume sync</button></div></div>
+          <dl class="sync-meta"><div><dt>Last synced</dt><dd id="last-synced">Never</dd></div><div><dt>Cloud version</dt><dd id="revision">—</dd></div></dl>
+        </div>
+        <div id="choice" class="choice" role="group" aria-labelledby="choice-heading" aria-describedby="choice-description choice-note" hidden>
+          <h3 id="choice-heading">Choose your starting point</h3><p id="choice-description">Choose which preferences to keep. Automatic sync starts after your choice.</p>
+          <details class="comparison-details"><summary><span class="disclosure-copy"><span class="disclosure-title">Compare browser and cloud preferences</span><span class="disclosure-help">Review both copies before choosing which to keep.</span></span><svg class="disclosure-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></summary><div class="comparison"><section aria-labelledby="local-heading"><h4 id="local-heading">This browser</h4><dl id="local-settings" class="preference-list" tabindex="0" aria-label="Settings in this browser"></dl></section><section aria-labelledby="cloud-heading"><h4 id="cloud-heading">Cloud backup</h4><dl id="cloud-settings" class="preference-list" tabindex="0" aria-label="Settings in cloud backup"></dl></section></div></details>
+          <div class="actions"><button id="choose-local" class="button primary" type="button" aria-describedby="choice-note">Use this browser</button><button id="choose-cloud" class="button" type="button" aria-describedby="choice-note">Use cloud backup</button></div>
+          <p id="choice-note" class="help">“Use this browser” replaces your cloud backup. “Use cloud backup” replaces the synced preferences in this browser.</p>
+        </div>
+      </section>
+      <section class="settings-section" aria-labelledby="privacy-heading">
+        <header class="section-heading"><h2 id="privacy-heading">Privacy &amp; backup</h2></header>
+        <div class="settings-rows">
+          <div class="setting-row"><div class="setting-copy"><h3>Included in backup</h3><p>Interface preferences, enabled modules, optimization mode, and turn limits.</p></div></div>
+          <div class="setting-row"><div class="setting-copy"><h3>Private by default</h3><p>Chats, drafts, local profiles, and credentials stay out of the backup. Themes and prompts enter the Market only when you publish them.</p></div></div>
+          <div class="setting-row"><div class="setting-copy"><h3>Export preferences</h3><p id="export-help">Download a JSON copy of your syncable preferences.</p></div><button id="export" class="button" type="button" aria-describedby="export-help" disabled>Export preferences</button></div>
+        </div>
+      </section>
+      </div>
+      <div class="account-group-card" role="group" aria-label="Sessions and account data">
+      <section id="sessions-section" class="settings-section" aria-labelledby="sessions-heading" hidden>
+        <header class="section-heading"><h2 id="sessions-heading">Sessions</h2></header>
+        <div class="settings-rows">
+          <div class="setting-row"><div class="setting-copy"><h3>This browser</h3><p id="logout-help">Sign out here. Your local preferences and cloud backup stay saved.</p></div><button id="logout" type="button" class="button" aria-describedby="logout-help" hidden>Sign out</button></div>
+          <div class="setting-row"><div class="setting-copy"><h3>All browsers</h3><p id="logout-all-help">End Studio.lab sessions on your other devices.</p></div><button id="logout-all" type="button" class="button" aria-describedby="logout-all-help" hidden>Sign out everywhere</button></div>
+        </div>
+      </section>
+      <section id="danger-card" class="settings-section" aria-labelledby="data-heading" hidden>
+        <header class="section-heading"><h2 id="data-heading">Account data</h2></header>
+        <div class="settings-rows">
+          <div class="setting-row"><div class="setting-copy"><h3>Cloud backup</h3><p id="delete-cloud-help">Delete the backup and pause sync. Local settings stay saved.</p></div><button id="delete-cloud" type="button" class="button danger-button" aria-describedby="delete-cloud-help">Delete cloud backup</button></div>
+          <div class="setting-row"><div class="setting-copy"><h3>Studio.lab account</h3><p id="delete-account-help">Delete your account, backup, cloud library and Market publications. Fresh Google sign-in is required.</p></div><button id="delete-account" type="button" class="button danger-button" aria-describedby="delete-account-help">Delete account</button></div>
+        </div>
+      </section>
+      </div>
+    </main>
+    <footer>Studio.lab · Account settings</footer>
+  </div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description">
+    <form id="confirm-form"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div id="delete-field" class="field" hidden><label for="delete-text">Type DELETE to confirm</label><input id="delete-text" type="text" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="delete-hint"><p id="delete-hint" class="help">Enter DELETE exactly to enable account deletion.</p></div><div class="actions"><button id="confirm-cancel" class="button" type="button">Cancel</button><button id="confirm-action" class="button danger-button" type="submit"></button></div></form>
+  </dialog>
+</body>
+</html>

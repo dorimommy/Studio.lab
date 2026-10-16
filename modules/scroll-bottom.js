@@ -1,6 +1,3 @@
-/**
- * StudioLab module: scroll-bottom
- */
 (function () {
   'use strict';
 
@@ -44,7 +41,7 @@
       stopResizeObserver();
       clearTimeout(startRetryTimeout);
       clearTimeout(routeTimeout);
-      routeTimeout = setTimeout(start, 500); // re-init on route change
+      routeTimeout = setTimeout(start, 500);
     },
     dispose() {
       clearTimeout(routeTimeout);
@@ -69,14 +66,12 @@
       return;
     }
 
-    // Initial check
     tick();
 
-    // Use ResizeObserver instead of setInterval/MutationObserver
     resizeObserver = new ResizeObserver((entries) => {
       if (!isActive()) return;
       
-      // If content height changes rapidly, we assume generation
+      // Content resizing is a heuristic for generation activity.
       setGenerating(true);
       clearTimeout(generatingTimeout);
       generatingTimeout = setTimeout(() => setGenerating(false), 2000);
@@ -86,7 +81,6 @@
 
     activeScroller = scroller;
     activeScroller.addEventListener('scroll', handleScroll, { passive: true });
-    // Observe the content inside scroller
     const content = scroller.firstElementChild || scroller;
     resizeObserver.observe(content);
   }
@@ -170,7 +164,7 @@
       activeScroller.scrollTop -
       activeScroller.clientHeight;
 
-    // Only visible when scrolled away from bottom — generation only affects the icon
+    // Generation changes the icon but does not control visibility.
     scrollButton.classList.toggle('visible', distanceFromBottom > 40);
   }
 

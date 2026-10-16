@@ -1,17 +1,3 @@
-/**
- * StudioLab module: text-formatter
- *
- * Native Google AI Studio styled Markdown formatting toolbar, custom link modal,
- * hotkeys, and smart list auto-continuation (Google Docs style).
- *
- * CSS values extracted from live https://aistudio.google.com via DevTools:
- *   prompt-box-container: bg #252525, border 1px solid #262626, radius 12px
- *   Run button:           bg #1f1f1f, border 1px solid #333, radius 12px, h ~32px
- *   Plus button:          bg transparent, border 1px solid #333, radius 12px, h ~32px
- *   Menu container:       bg #1f1f1f, radius 8px, shadow Material
- *   Text color:           #d4d4d4
- *   Font:                 Inter, sans-serif, 14px, weight 500
- */
 (function () {
   'use strict';
 
@@ -25,9 +11,6 @@
   let toggleBtnEl = null;
   let styleEl = null;
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  SVG Icons
-  // ═══════════════════════════════════════════════════════════════════
   const SVG_ICONS = {
     bold: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z"/></svg>',
     italic: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>',
@@ -41,7 +24,6 @@
     format: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 17v2h14v-2H5zm4.5-4.2h5l.9 2.2h2.1L12.75 4h-1.5L6.5 15h2.1l.9-2.2zM12 5.98L13.87 11h-3.74L12 5.98z"/></svg>'
   };
 
-  // Full set of buttons for the inline (slide-out) toolbar
   const BUTTONS_FULL = [
     { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
     { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
@@ -60,7 +42,6 @@
     { id: 'code', icon: SVG_ICONS.code, title: 'Code Block / Inline Code', action: 'code' }
   ];
 
-  // Reduced set for the floating (selection) toolbar
   const BUTTONS_FLOATING = [
     { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
     { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
@@ -73,9 +54,7 @@
     { id: 'code', icon: SVG_ICONS.code, title: 'Code', action: 'code' }
   ];
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  CSS — all values from live Google AI Studio DevTools extraction
-  // ═══════════════════════════════════════════════════════════════════
+  // CSS values were sampled from AI Studio's native controls.
   const CSS = `
     /* ── Shared toolbar base ────────────────────────────────────────── */
     .sl-fmt-toolbar {
@@ -324,9 +303,6 @@
     }
   `;
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Module Registration
-  // ═══════════════════════════════════════════════════════════════════
   window.StudioLab.registerModule({
     id: 'text-formatter',
     group: 'modules',
@@ -356,9 +332,6 @@
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Lifecycle helpers
-  // ═══════════════════════════════════════════════════════════════════
   function isActive() {
     const state = ctxRef && ctxRef.state;
     return !!(state && state.textFormatterEnabled !== false);
@@ -417,9 +390,6 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Find & Attach to Prompt Textarea
-  // ═══════════════════════════════════════════════════════════════════
   function findPromptTextarea() {
     const selectors = [
       'ms-prompt-box textarea',
@@ -456,9 +426,6 @@
     ensureToolbars(textarea);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Build Toolbar DOM
-  // ═══════════════════════════════════════════════════════════════════
   function createToolbarNode(className, buttons) {
     const tb = document.createElement('div');
     tb.className = `sl-fmt-toolbar ${className}`;
@@ -475,7 +442,6 @@
         return;
       }
 
-      // Add compact mobile heading dropdown right before h1
       if (btn.action === 'h1' && !headingDropdownAdded) {
         headingDropdownAdded = true;
         const hDrop = document.createElement('div');
@@ -546,20 +512,15 @@
     return tb;
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Ensure Toolbars Injected
-  // ═══════════════════════════════════════════════════════════════════
   function ensureToolbars(textarea) {
     const promptBox = textarea.closest('ms-prompt-box') || textarea.closest('.chunk-editor-main');
     if (!promptBox) return;
 
-    // 1. Floating toolbar — appended to body (fixed positioning)
     if (!floatingToolbarEl || !document.body.contains(floatingToolbarEl)) {
       floatingToolbarEl = createToolbarNode('sl-fmt-floating', BUTTONS_FLOATING);
       document.body.appendChild(floatingToolbarEl);
     }
 
-    // 2. Inline toolbar — inserted inside ms-prompt-box before .prompt-box-container
     if (!inlineToolbarEl || (promptBox && !promptBox.contains(inlineToolbarEl))) {
       inlineToolbarEl = createToolbarNode('sl-fmt-inline', BUTTONS_FULL);
       if (promptBox) {
@@ -567,7 +528,6 @@
       }
     }
 
-    // 3. Toggle button in footer button row
     if (!toggleBtnEl || !document.body.contains(toggleBtnEl)) {
       const buttonsRow = promptBox.querySelector('.buttons-row');
       const buttonWrapper = promptBox.querySelector('.button-wrapper');
@@ -605,7 +565,6 @@
           }
         });
 
-        // Safe insertion after ms-add-media-button or at start of footerRow
         const addMediaBtn = footerRow.querySelector('ms-add-media-button');
         if (addMediaBtn) {
           addMediaBtn.after(toggleBtnEl);
@@ -616,15 +575,11 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Floating Toolbar — Show / Hide / Position
-  // ═══════════════════════════════════════════════════════════════════
   let lastPos = null;
 
   function showFloatingToolbar(e) {
     if (!activeTextarea || !floatingToolbarEl) return;
 
-    // If inline toolbar is open, don't show floating
     if (inlineToolbarEl && inlineToolbarEl.classList.contains('sl-fmt-visible')) {
       floatingToolbarEl.classList.remove('sl-fmt-visible');
       return;
@@ -639,7 +594,6 @@
       return;
     }
 
-    // Position: above mouse click, or keep last position on resize/blur, or fallback to center
     const tbWidth = floatingToolbarEl.offsetWidth || 280;
     const tbHeight = floatingToolbarEl.offsetHeight || 40;
 
@@ -658,11 +612,9 @@
       lastPos = { left, top };
     }
 
-    // Clamp to viewport
     if (left < 8) left = 8;
     if (left + tbWidth > window.innerWidth - 8) left = window.innerWidth - tbWidth - 8;
     if (top < 8) {
-      // If not enough space above, show below
       if (e && e.clientY) {
         top = e.clientY + 12;
       } else {
@@ -680,9 +632,6 @@
     if (floatingToolbarEl) floatingToolbarEl.classList.remove('sl-fmt-visible');
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Event Handlers
-  // ═══════════════════════════════════════════════════════════════════
   function handleMouseUp(e) {
     setTimeout(() => showFloatingToolbar(e), 10);
   }
@@ -700,9 +649,6 @@
     }, 200);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Custom Link Dialog (Pixel-Perfect Google AI Studio style)
-  // ═══════════════════════════════════════════════════════════════════
   function openCustomLinkModal(textarea) {
     if (!textarea) return;
     const existing = document.querySelector('.sl-link-modal-overlay');
@@ -800,9 +746,6 @@
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Formatting Core Logic
-  // ═══════════════════════════════════════════════════════════════════
   function applyFormatting(textarea, type) {
     if (!textarea) return;
 
@@ -820,10 +763,8 @@
 
     switch (type) {
       case 'bold': {
-        // Check if the text around selection already has **
         const hasSurrounding = before.endsWith('**') && after.startsWith('**');
         if (hasSurrounding) {
-          // Remove bold — strip ** from both sides
           textarea.value = before.slice(0, -2) + selectedText + after.substring(2);
           newStart = start - 2;
           newEnd = end - 2;
@@ -841,7 +782,7 @@
       }
 
       case 'italic': {
-        // Need to be careful not to eat bold markers when toggling italic
+        // Toggling italic must preserve adjacent bold markers.
         const hasSurrounding = before.endsWith('*') && after.startsWith('*') && !(before.endsWith('**') && after.startsWith('**'));
         if (hasSurrounding) {
           textarea.value = before.slice(0, -1) + selectedText + after.substring(1);
@@ -922,7 +863,7 @@
     textarea.selectionEnd = newEnd;
     textarea.focus();
     dispatchInputEvent(textarea);
-    // Don't hide toolbar — let user stack multiple formats
+    // Keep the toolbar open so the user can apply multiple formats.
   }
 
   function applyLinePrefix(textarea, type) {
@@ -976,14 +917,10 @@
     dispatchInputEvent(textarea);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Smart List Auto-continuation & Indentation
-  // ═══════════════════════════════════════════════════════════════════
   function handleKeyDown(e) {
     const textarea = e.target;
     if (!textarea) return;
 
-    // Smart Enter
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
       const val = textarea.value;
       const pos = textarea.selectionStart;
@@ -1046,7 +983,6 @@
       }
     }
 
-    // Tab / Shift+Tab for Indent / Outdent
     if (e.key === 'Tab') {
       const val = textarea.value;
       const pos = textarea.selectionStart;
@@ -1076,7 +1012,6 @@
       }
     }
 
-    // Hotkeys: Ctrl+B, Ctrl+I, Ctrl+Shift+X, Ctrl+K
     if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase();
       if (key === 'b') {
@@ -1095,9 +1030,6 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Text Manipulation Helpers
-  // ═══════════════════════════════════════════════════════════════════
   function removeEmptyLinePrefix(textarea, lineStart, pos) {
     const val = textarea.value;
     const beforeLine = val.substring(0, lineStart);

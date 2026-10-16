@@ -1,8 +1,4 @@
-/**
- * Studio.lab module: telemetry-blocker
- * Provides UI control and logging for the telemetry blocker.
- * The actual network blocking is handled by declarativeNetRequest in manifest.json.
- */
+// declarativeNetRequest in manifest.json handles network blocking; this module provides controls and logs.
 (function () {
   'use strict';
 

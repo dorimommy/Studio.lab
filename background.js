@@ -1,4 +1,16 @@
 'use strict';
+// Account state and tokens stay in this extension-origin worker. Keeping this
+// guarded also permits the existing local feature test harness to run alone.
+let accountService = null;
+if (typeof importScripts === 'function') {
+  importScripts('account/config.js', 'account/schema.js', 'account/catalog-schema.js', 'account/social-schema.js', 'account/vault.js', 'account/service.js');
+  accountService = StudioLabAccount.createService({
+    chrome, fetch: (...args) => fetch(...args), crypto, config: StudioLabAccountConfig,
+    vault: StudioLabAccountVault.createVault(indexedDB)
+  });
+  chrome.alarms.onAlarm.addListener(alarm => { void accountService.onAlarm(alarm); });
+  void accountService.start();
+}
 chrome.action.onClicked.addListener(tab => {
   if (!Number.isInteger(tab?.id) || tab.id < 0) return;
   // Chrome omits tab.url without tabs/activeTab permission. Only our
@@ -32,6 +44,7 @@ syncTelemetryRules();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.slState) syncTelemetryRules();
+  accountService?.onLocalChange(changes, area);
 });
 
 const RELEASES_URL = 'https://api.github.com/repos/dorimommy/Studio.lab/releases?per_page=20';
@@ -116,6 +129,13 @@ async function checkForUpdates(force = false) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.action === 'slAccount') {
+    if (!accountService) { reply({ ok: false, code: 'unavailable', error: 'Reload the extension to enable accounts.' }); return; }
+    accountService.handle(message, sender).then(reply).catch(() => {
+      reply({ ok: false, code: 'unavailable', error: 'The account service is unavailable. Reload the extension and retry.' });
+    });
+    return true;
+  }
   if (message?.action === 'checkForUpdates') {
     checkForUpdates(message.force === true).then(reply).catch(() => reply({ ok: false }));
     return true;

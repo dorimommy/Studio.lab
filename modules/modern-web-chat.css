@@ -1,8 +1,6 @@
-    /* ── PART 1: MEDIA GALLERY & VIEWER ────────────────────────────────── */
+    /* Media gallery and viewer. */
 
-    /* 1. Media Gallery & Viewer (Layout managed by Gemini-stream flex in Part 6) */
 
-    /* 3. Image Chunk — 1:1 square tiles */
     ms-image-chunk {
       aspect-ratio: 1 / 1 !important;
       width: 100% !important; height: 100% !important;
@@ -15,7 +13,7 @@
         border-radius: 12px !important; overflow: hidden !important;
       }
     }
-    /* Model response images (in mixed text+image turns) — NOT square, natural aspect */
+    /* Images accompanying model text keep their natural aspect ratio. */
     ms-chat-turn:has(ms-text-chunk) ms-image-chunk {
       aspect-ratio: auto !important;
       height: auto !important;
@@ -26,12 +24,11 @@
       object-fit: contain !important;
     }
 
-    /* Native image hover controls: completely hidden in favor of top-right tile menu */
+    /* The tile menu replaces native image hover controls. */
     .bottom-right-image-controls {
       display: none !important;
     }
 
-    /* 4. File Chunk Styling */
     ms-file-chunk {
       display: flex !important; width: 100% !important; min-width: 0 !important;
       background: var(--color-v3-surface-container-high) !important;
@@ -63,7 +60,6 @@
       margin-left: 8px !important; flex-shrink: 0 !important;
     }
 
-    /* 5. Enhanced Full-Screen Viewer */
     .cdk-overlay-backdrop.sl-backdrop-tint {
       background-color: rgba(0, 0, 0, 0.6) !important;
     }
@@ -123,7 +119,7 @@
       object-fit: contain !important; background: #000 !important;
     }
 
-    /* ── PART 2: HIDE LEFT ROW & REARRANGE RIGHT ROW ────────────────── */
+    /* Composer controls. */
     
     /* Allow submenus to break out of the native panel boundaries */
     .cdk-overlay-container .mat-mdc-menu-panel,
@@ -137,14 +133,14 @@
         width: 100% !important;
     }
 
-    /* 1. Flatten both left and right button wrappers so all buttons become direct flex items */
+    /* Flatten native wrappers so their buttons share one flex order. */
     ms-prompt-box .button-row-left,
     ms-prompt-box .button-wrapper,
     ms-prompt-box-tools {
         display: contents !important;
     }
 
-    /* 2. Hide native Tools and Paid API buttons from bottom row (accessible via + menu) */
+    /* Tools and Paid API remain available through the + menu. */
     ms-paid-api-key-button,
     ms-prompt-box-tools > button {
         opacity: 0 !important;
@@ -158,13 +154,10 @@
         border: none !important;
     }
 
-    /* 3. Make sure any other unclassified elements in the bottom row are pushed to the right initially */
     ms-prompt-box .buttons-row > * {
         order: 10 !important;
     }
 
-    /* 4. Assign specific order to force layout */
-    /* Move + to the far left */
     ms-add-media-button {
         order: -2 !important;
         margin-right: 8px !important;
@@ -193,13 +186,11 @@
         background: #1f1f1f !important;
     }
 
-    /* Formatting toggle button (from Text Formatter module) sits right after + */
     .sl-fmt-toggle {
         order: -1 !important;
         margin-right: 8px !important;
     }
 
-    /* Enabled tools bar sits right after + and formatter */
     ms-horizontal-scroll.enabled-tool-container {
         order: 0 !important;
         margin-right: 8px !important;
@@ -213,8 +204,7 @@
         height: auto !important;
     }
 
-    /* Mic and Run stay on the right. 
-       margin-left: auto pushes them to the far right, keeping + and tools flush left! */
+    /* Auto margin separates Mic and Run from the left-hand tools. */
     ms-stt-button { 
         order: 2 !important; 
         margin-left: auto !important; 
@@ -224,7 +214,6 @@
         order: 3 !important; 
     }
 
-    /* Submenu hover wrapper */
     .sl-hover-wrapper {
         position: relative;
         width: 100%;
@@ -232,7 +221,6 @@
     .sl-hover-wrapper > button {
         width: 100%;
     }
-    /* The submenu panel - Native V3 dropdown style */
     .sl-custom-submenu {
         display: none;
         position: absolute;
@@ -260,7 +248,6 @@
         width: 16px;
         height: 100%;
     }
-    /* Pure CSS hover & click toggle support */
     .sl-hover-wrapper:hover > .sl-custom-submenu,
     .sl-hover-wrapper.sl-submenu-open > .sl-custom-submenu {
         display: flex !important;
@@ -316,9 +303,8 @@
         font-family: "Google Symbols", sans-serif !important;
     }
 
-    /* ── PART 3: ENABLED TOOLS BAR ──────────────────────────────────── */
+    /* Enabled tools. */
 
-    /* Container — layout left, take up available space */
     ms-horizontal-scroll.enabled-tool-container {
         display: flex !important;
         align-items: center !important;
@@ -341,7 +327,6 @@
         width: 100% !important;
     }
 
-    /* Hide scroll chevrons and gradients */
     ms-horizontal-scroll.enabled-tool-container .chevron-btn,
     ms-horizontal-scroll.enabled-tool-container .scroll-container::before,
     ms-horizontal-scroll.enabled-tool-container .scroll-container::after,
@@ -350,7 +335,6 @@
         display: none !important;
     }
 
-    /* Content row */
     ms-horizontal-scroll.enabled-tool-container .content-container {
         display: flex !important;
         justify-content: flex-start !important;
@@ -359,7 +343,6 @@
         padding: 0 !important;
     }
 
-    /* Tool chip — subtle outline pill, matches + button style */
     .enabled-tool-container .enabled-tool {
         display: inline-flex !important;
         align-items: center !important;
@@ -376,7 +359,6 @@
         background: rgba(255, 255, 255, 0.05) !important;
     }
 
-    /* Reset button inside */
     .enabled-tool-container .tool-chip-button {
         background: none !important;
         border: none !important;
@@ -388,7 +370,6 @@
         height: 100% !important;
     }
 
-    /* Text */
     .enabled-tool-container .tool-name {
         color: rgba(255, 255, 255, 0.6) !important; /* subtle text, not bright white */
         font-size: 13px !important;
@@ -397,13 +378,11 @@
         line-height: 1 !important;
     }
 
-    /* Icon */
     .enabled-tool-container .tool-icon {
         color: rgba(255, 255, 255, 0.6) !important;
         font-size: 16px !important;
     }
 
-    /* Close button */
     .enabled-tool-container .enabled-tool > button:last-child {
         background: none !important;
         border: none !important;
@@ -426,13 +405,13 @@
         font-size: 16px !important;
     }
 
-    /* Hide native tooltips when hovering over the tools bar to prevent confusing popups */
+    /* Chips replace the native tools' tooltip targets. */
     body:has(.enabled-tool-container:hover) .cdk-overlay-container .mat-mdc-tooltip {
         display: none !important;
         opacity: 0 !important;
     }
 
-    /* Fix scroll-to-bottom button elevation above footer overlay */
+    /* Keep scroll-to-bottom clickable above the footer overlay. */
     ms-scroll-to-bottom,
     ms-scroll-to-bottom-button,
     ms-chat-scroll-to-bottom,
@@ -450,8 +429,7 @@
         display: none !important;
     }
 
-    /* ── PART 4: CHATGPT-STYLE FLOATING HEADER & CONTROLS ── */
-    /* REMOVE TOP GRADIENT / DARKENING OVERLAY COMPLETELY */
+    /* Floating header and controls. */
     ms-header::after,
     ms-header::before,
     ms-playground-toolbar ms-header::after,
@@ -464,7 +442,6 @@
         opacity: 0 !important;
     }
 
-    /* Transparent floating header container without tint, blur, borders, or shadows */
     section.chunk-editor-main {
         position: relative !important;
     }
@@ -482,7 +459,7 @@
         background: transparent !important;
     }
 
-    /* Ensure sliding / fixed drawers on small screens overlay cleanly above header toolbar */
+    /* Mobile drawers must cover the floating header. */
     .v3-left-nav,
     ms-right-side-panel,
     ms-side-nav,
@@ -492,6 +469,7 @@
 
     ms-playground-toolbar ms-header,
     ms-header {
+        position: relative !important;
         pointer-events: none !important;
         background: transparent !important;
         backdrop-filter: none !important;
@@ -510,7 +488,6 @@
         justify-content: space-between !important;
     }
 
-    /* Toolbar Left: Nav toggle, + (New chat), and ⋮ (Overflow menu) in a clean horizontal row */
     .toolbar-left {
         pointer-events: auto !important;
         display: flex !important;
@@ -543,7 +520,7 @@
         padding: 0 !important;
     }
 
-    /* Hide native unstyled Share item in overflow menu (we provide styled 'Share prompt' item) */
+    /* The injected Share prompt action replaces the native menu item. */
     .toolbar-overflow-menu .mat-mdc-menu-item:has(> .material-symbols-outlined:is(.share)):not(.sl-injected-header-item),
     .toolbar-overflow-menu button.mat-mdc-menu-item[data-test-share]:not(.sl-injected-header-item),
     .toolbar-overflow-menu button.mat-mdc-menu-item:is([aria-label*="Share" i]):not(.sl-injected-header-item) {
@@ -562,8 +539,8 @@
         padding: 0 !important;
     }
 
-    /* Right toolbar: Model, Thinking level, and Run Settings */
     .toolbar-right {
+        position: static !important;
         margin-left: auto !important;
         pointer-events: auto !important;
         display: flex !important;
@@ -573,7 +550,17 @@
         padding-right: 0 !important;
     }
 
-    /* Hide unused right buttons (Share, Compare, App, New chat if in right, native runsettings) */
+    /* Keep Angular's native overflow host in place while retaining the left control. */
+    ms-header .toolbar-right .overflow-menu-wrapper {
+        position: absolute !important;
+        inset-inline-start: 16px !important;
+        top: 16px !important;
+    }
+
+    ms-header:has(.toolbar-left > button[aria-label*="nav" i], .toolbar-left > button[aria-label*="menu" i]) .toolbar-right .overflow-menu-wrapper {
+        inset-inline-start: 56px !important;
+    }
+
     .toolbar-right > button[aria-label="Make this an app"],
     .toolbar-right > ms-share-prompt,
     .toolbar-right > button.compare-button,
@@ -583,7 +570,6 @@
         display: none !important;
     }
 
-    /* UNIFORM SQUIRCLE FROSTED-GLASS BUTTONS FOR FLOATING HEADER (matches prompt box 12px squircle) */
     .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]),
     .toolbar-left .overflow-menu-wrapper > button,
     .toolbar-right .overflow-menu-wrapper > button,
@@ -591,7 +577,7 @@
         background: rgba(40, 40, 42, 0.35) !important;
         backdrop-filter: blur(28px) saturate(190%) !important;
         -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border: 0 !important;
         border-radius: 12px !important;
         height: 32px !important;
         min-height: 32px !important;
@@ -615,6 +601,7 @@
 
     .toolbar-left > button:is([aria-label*="nav" i], [aria-label*="menu" i], [aria-label*="Navigation" i]),
     .toolbar-left .overflow-menu-wrapper > button,
+    .toolbar-right .overflow-menu-wrapper > button,
     .sl-header-settings-btn {
         width: 32px !important;
         min-width: 32px !important;
@@ -679,7 +666,7 @@
         outline-offset: 2px !important;
     }
 
-    /* Hide native toolbar saving indicators so they don't crowd the right button row */
+    /* The centered saving indicator replaces the native toolbar indicators. */
     .toolbar-saving-indicator,
     ms-drive-save-indicator,
     .toolbar-right ms-drive-save-indicator,
@@ -687,7 +674,6 @@
         display: none !important;
     }
 
-    /* Centered Top Saving Pill (slides down smoothly from top, frosted glass blur matching header buttons) */
     .sl-saving-pill {
         position: fixed !important;
         top: 14px !important;
@@ -703,7 +689,7 @@
         backdrop-filter: blur(16px) !important;
         -webkit-backdrop-filter: blur(16px) !important;
         border-radius: 16px !important;
-        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 8px 24px !important;
+        box-shadow: rgba(0, 0, 0, 0.4) 0px 8px 24px !important;
         color: #e3e3e3 !important;
         font: 500 13px/18px "Google Sans", Roboto, Inter, sans-serif !important;
         pointer-events: none !important;
@@ -733,7 +719,7 @@
         to { transform: rotate(360deg); }
     }
 
-    /* Masking during background model, thinking, or tool switches (100% seamless without dialog flash) */
+    /* Hide native pickers opened by background model, thinking and tool changes. */
     body.sl-switching-model mat-dialog-container,
     body.sl-switching-model .cdk-overlay-pane:has(mat-dialog-container),
     body.sl-switching-model .cdk-overlay-pane:has(.ms-sliding-right-panel-dialog),
@@ -767,7 +753,6 @@
         pointer-events: none !important;
     }
 
-    /* Right side panel styling matching left nav (#191919 background & #262626 border) with smooth slide animation */
     ms-right-side-panel,
     .drawer-container:has(ms-run-settings) {
         display: flex !important;
@@ -817,7 +802,7 @@
         background: #191919 !important;
     }
 
-    /* NO PHANTOM BACKDROPS: prevent lingering dark overlays when drawer or dialog is closed */
+    /* Closed drawers and dialogs must not leave a blocking backdrop. */
     .sl-drawer-backdrop {
         display: none !important;
     }
@@ -828,13 +813,7 @@
         opacity: 0 !important;
     }
 
-    body:not(.sl-settings-open) .cdk-overlay-backdrop:not(:has(~ .cdk-overlay-pane mat-dialog-container)):not(:has(~ .cdk-overlay-pane .mat-mdc-dialog-container)):not(:has(~ .cdk-overlay-pane .mat-mdc-menu-panel)) {
-        display: none !important;
-        pointer-events: none !important;
-        opacity: 0 !important;
-    }
-
-    /* Hide duplicated header items inside Run Settings drawer cleanly without breaking DOM clicks */
+    /* Keep native controls mounted for Angular while hiding duplicate headings. */
     ms-run-settings .settings-model-selector,
     ms-run-settings ms-model-selector {
         position: absolute !important;
@@ -846,7 +825,16 @@
         padding: 0 !important;
     }
 
-    /* Native Angular Material-matched Dropdown Menus for Header Controls (Matches left nav History popover) */
+    /* Keep the native Angular thinking control mounted; show it in the drawer
+       whenever the desktop header control is unavailable. */
+    @media screen and (min-width: 769px) {
+        body:has(.sl-header-thinking-btn:not([hidden]):not(:disabled)) ms-run-settings ms-thinking-level-setting,
+        body:has(.sl-header-thinking-btn:not([hidden]):not(:disabled)) ms-run-settings .field-group:has(ms-thinking-level-setting),
+        body:has(.sl-header-thinking-btn:not([hidden]):not(:disabled)) ms-run-settings .thinking-level:has(mat-select) {
+            display: none !important;
+        }
+    }
+
     .sl-custom-dropdown {
         position: fixed !important;
         background: rgba(30, 30, 30, 0.92) !important;
@@ -854,7 +842,7 @@
         -webkit-backdrop-filter: blur(12px) !important;
         border: 0px none !important;
         border-radius: 16px !important;
-        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.5) 0px 8px 28px !important;
+        box-shadow: rgba(0, 0, 0, 0.5) 0px 8px 28px !important;
         z-index: 1050 !important;
         padding: 6px !important;
         min-width: 200px !important;
@@ -927,7 +915,6 @@
         to { transform: translateX(0); }
     }
 
-    /* Chat viewport container fill */
     .chat-container,
     .chat-view-container,
     ms-chat-view {
@@ -937,14 +924,12 @@
         padding: 0 !important;
     }
 
-    /* Autoscroll container takes full height behind floating header & footer */
     ms-autoscroll-container {
         height: 100% !important;
         max-height: 100% !important;
         padding: 0 !important;
     }
 
-    /* Floating ChatGPT/Gemini style prompt box at bottom with bottom-anchored gradient darkening */
     footer {
         position: absolute !important;
         bottom: 0 !important;
@@ -973,7 +958,6 @@
         z-index: -1 !important;
     }
 
-    /* Constrain prompt box to 900px width, centered, with pointer-events enabled, flat without shadow */
     footer ms-prompt-box,
     ms-prompt-box {
         pointer-events: auto !important;
@@ -993,7 +977,7 @@
         margin-bottom: 0 !important;
     }
 
-    /* Hide native token popup dialog so it never pops up over chat */
+    /* Token counts are shown in the sidebar instead of the native popup. */
     .cdk-overlay-pane:has(.token-count-tooltip),
     .cdk-overlay-backdrop:has(+ .cdk-overlay-pane .token-count-tooltip) {
         display: none !important;
@@ -1001,7 +985,6 @@
         pointer-events: none !important;
     }
 
-    /* Strict native-matched styling for injected items in the overflow menu */
     .toolbar-overflow-menu .sl-injected-header-item {
         height: 32px !important;
         min-height: 32px !important;
@@ -1024,7 +1007,6 @@
         justify-content: center !important;
     }
 
-    /* Refined, seamless Tokens Section in Left Sidebar (below Manage) */
     .sl-token-section-header {
         color: var(--color-v3-text-subtle, rgb(87, 87, 87)) !important;
         font-size: 12px !important;
@@ -1094,13 +1076,11 @@
         font-weight: 500 !important;
     }
 
-    /* ── PART 5: CHATGPT-STYLE TURN NAVIGATOR (Replaces ms-items-scrollbar) ── */
-    /* Hide native ugly scrollbar completely on all viewports */
+    /* The turn navigator replaces ms-items-scrollbar. */
     ms-items-scrollbar {
         display: none !important;
     }
 
-    /* On mobile / small screens: completely remove turn scrollbar as requested */
     @media (max-width: 800px) {
         .sl-chatgpt-toc,
         ms-items-scrollbar {
@@ -1108,7 +1088,6 @@
         }
     }
 
-    /* Desktop Turn Navigator Widget */
     .sl-chatgpt-toc {
         position: absolute !important;
         right: 12px !important;
@@ -1126,7 +1105,7 @@
         justify-content: flex-end !important;
     }
 
-    /* Dashes Column: maximum ~9 dashes visible (9 * 3px + 8 * 5px = 67px) */
+    /* Nine 3px dashes and eight 5px gaps fit the 67px viewport. */
     .sl-toc-dashes-container {
         height: 67px !important;
         max-height: 67px !important;
@@ -1149,7 +1128,6 @@
         transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
     }
 
-    /* Crisp integer height (3px) and rounded pill shape for 100% uniform rendering */
     .sl-toc-dash {
         height: 3px !important;
         min-height: 3px !important;
@@ -1178,7 +1156,6 @@
         box-shadow: 0 0 6px rgba(255, 255, 255, 0.6) !important;
     }
 
-    /* Slide-out Hover Popover Menu (Frosted glass blur matching native History flyout) */
     .sl-toc-popover {
         position: absolute !important;
         right: calc(100% + 10px) !important;
@@ -1190,7 +1167,7 @@
         backdrop-filter: blur(16px) !important;
         -webkit-backdrop-filter: blur(16px) !important;
         border-radius: 16px !important;
-        box-shadow: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.35) 0px 8px 24px !important;
+        box-shadow: rgba(0, 0, 0, 0.35) 0px 8px 24px !important;
         padding: 6px !important;
         opacity: 0 !important;
         pointer-events: none !important;
@@ -1199,7 +1176,6 @@
         box-sizing: border-box !important;
     }
 
-    /* Open on hover of the TOC widget */
     .sl-chatgpt-toc.sl-hovered .sl-toc-popover,
     .sl-chatgpt-toc:hover .sl-toc-popover,
     .sl-chatgpt-toc:focus-within .sl-toc-popover {
@@ -1280,7 +1256,7 @@
         font-weight: 500 !important;
     }
 
-    /* ── Load banner (Smart Optimizer restore area) ─────────────────── */
+    /* Smart Optimizer restore area. */
     .sl-load-banner {
         display: flex !important;
         justify-content: center !important;
@@ -1320,9 +1296,9 @@
         color: #ffffff !important;
     }
 
-    /* ── PART 6: GEMINI-STYLE CHAT MESSAGES & MEDIA ─────────────────────── */
+    /* Chat messages and media. */
 
-    /* Center the chat column with max-width for optimal reading, clearance for floating header (48px) and floating prompt box (240px) */
+    /* Reserve space for the floating header and composer. */
     .chat-session-content {
         display: flex !important;
         flex-direction: row !important;
@@ -1336,16 +1312,14 @@
         box-sizing: border-box !important;
     }
 
-    /* All normal turns (model, prompts with text, video turns) take 100% width */
     .chat-session-content > ms-chat-turn {
         width: 100% !important;
         flex: 0 0 100% !important;
         box-sizing: border-box !important;
     }
 
-    /* Attachment-only turns sit side-by-side in horizontal rows on the right */
-    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)),
-    .chat-session-content > ms-chat-turn:has(.chat-turn-container.user):has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) {
+    .chat-session-content > ms-chat-turn:not([data-sl-buffered-turn]):has(.chat-turn-container.user):has(ms-file-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)),
+    .chat-session-content > ms-chat-turn:not([data-sl-buffered-turn]):has(.chat-turn-container.user):has(ms-image-chunk):not(:has(ms-text-chunk)):not(:has(ms-video-chunk)):not(:has(textarea)) {
         width: 112px !important;
         height: 112px !important;
         min-width: 112px !important;
@@ -1369,7 +1343,6 @@
         position: relative !important;
     }
 
-    /* ELIMINATE FULL-WIDTH TURN BORDER & FOCUS OUTLINES COMPLETELY */
     .chat-turn-container,
     .chat-turn-container:focus,
     .chat-turn-container:focus-within,
@@ -1385,8 +1358,6 @@
         border-color: transparent !important;
     }
 
-    /* ── USER ATTACHMENTS (FILES & IMAGES): CLEAN CONTAINER RESET ── */
-    /* Hide turn author label, separator, word counter, and spacers inside user attachment turns */
     .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .author-label,
     .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .turn-separator,
     .chat-turn-container.user:has(ms-file-chunk, ms-image-chunk) .sl-word-counter,
@@ -1409,7 +1380,6 @@
         padding: 4px 0 !important;
     }
 
-    /* ── GEMINI-STYLE FILE ATTACHMENT CARDS (112x112px) ── */
     ms-file-chunk {
         width: 112px !important;
         height: 112px !important;
@@ -1433,7 +1403,6 @@
         border-color: rgba(255, 255, 255, 0.16) !important;
     }
 
-    /* Clear internal wrappers */
     ms-file-chunk .preview-container,
     ms-file-chunk .token-count {
         display: none !important;
@@ -1471,7 +1440,6 @@
         display: none !important;
     }
 
-    /* Red code icon badge in top left (Gemini Web match) */
     ms-file-chunk .file-icon {
         width: 24px !important;
         height: 24px !important;
@@ -1497,7 +1465,6 @@
         letter-spacing: -0.5px !important;
     }
 
-    /* File name at bottom with 2-line wrap, word break and pinned to bottom edge */
     ms-file-chunk .name {
         margin-top: auto !important;
         flex: 0 0 auto !important;
@@ -1521,7 +1488,6 @@
         align-self: flex-start !important;
     }
 
-    /* ── USER ATTACHMENTS (FILES & IMAGES): STRICT 112x112px SQUARE TILES ── */
     ms-image-chunk,
     ms-file-chunk,
     .image-chunk-container,
@@ -1560,7 +1526,6 @@
         padding: 0 !important;
     }
 
-    /* ── ATTACHMENT CARD HOVER ACTIONS (INSIDE TILE AT TOP-RIGHT: 12px INSET) ── */
     .chat-turn-container:has(ms-file-chunk) .actions-container,
     .chat-turn-container:has(ms-image-chunk) .actions-container,
     ms-chat-turn:has(ms-file-chunk) .actions-container,
@@ -1630,7 +1595,6 @@
         isolation: auto !important;
     }
 
-    /* FULLY CIRCULAR FROSTED-GLASS ACTION BUTTONS FOR MEDIA CARDS (BLURRED BACKGROUND + ZERO SHADOW) */
     .chat-turn-container:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button,
     .chat-turn-container:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button,
     ms-chat-turn:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button,
@@ -1679,7 +1643,6 @@
         pointer-events: none !important;
     }
 
-    /* HOVER STATE: FROSTED GLASS DARKENING + ZERO SHADOW */
     .chat-turn-container:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
     .chat-turn-container:has(ms-image-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
     ms-chat-turn:has(ms-file-chunk) .actions.hover-or-edit ms-chat-turn-options button:hover,
@@ -1701,7 +1664,7 @@
         color: #ffffff !important;
     }
 
-    /* Strictly protect buttons inside prompt-box chips / attachments from being oversized */
+    /* Attachment action sizing must not leak into composer chips. */
     ms-prompt-box ms-file-chunk button,
     ms-prompt-box ms-image-chunk button,
     ms-prompt-box .file-chunk-container button,
@@ -1752,8 +1715,7 @@
         line-height: 1 !important;
     }
 
-    /* ── USER PROMPT TURNS: RIGHT ALIGNED GEMINI BUBBLE (NO SHADOW) ── */
-    ms-chat-turn:has(.chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk))) {
+    ms-chat-turn:not([data-sl-buffered-turn]):has(.chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk))) {
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-end !important;
@@ -1791,7 +1753,6 @@
         gap: 8px !important;
     }
 
-    /* Wrap multiple image/file cards horizontally inside user turns */
     .chat-turn-container.user .turn-content:has(ms-image-chunk),
     .chat-turn-container.user .turn-content:has(ms-file-chunk),
     .chat-turn-container.user ms-prompt-chunk:has(ms-image-chunk),
@@ -1803,14 +1764,12 @@
         gap: 8px !important;
     }
 
-    /* Remove Author Label & Word Counter on User Turns */
     .chat-turn-container.user .author-label,
     .chat-turn-container.user .turn-separator,
     .chat-turn-container.user .sl-word-counter {
         display: none !important;
     }
 
-    /* Reset transparent wrappers inside user turns */
     .chat-turn-container.user ms-prompt-chunk,
     .chat-turn-container.user ms-text-chunk,
     .chat-turn-container.user ms-autosize-textarea {
@@ -1820,12 +1779,11 @@
         box-shadow: none !important;
     }
 
-    /* User Prompt Pill (Flat, No Shadow, Gemini Luminous Style) */
     .chat-turn-container.user ms-prompt-chunk:not(:has(ms-file-chunk)):not(:has(ms-video-chunk)):not(:has(ms-image-chunk)):not(:has(textarea)) {
-        background: #1e1f20 !important;
+        background: var(--sl-mwc-raised,#1e1f20) !important;
         border-radius: 28px !important;
         padding: 12px 24px !important;
-        color: #e3e3e3 !important;
+        color: var(--sl-mwc-text,#e3e3e3) !important;
         font-size: 15px !important;
         line-height: 1.5 !important;
         width: fit-content !important;
@@ -1914,7 +1872,7 @@
         border-top: 1px solid rgba(255, 255, 255, 0.25) !important;
     }
 
-    /* ── EDIT MODE STYLING & SYNCHRONIZED SCROLLBAR ── */
+    /* Message editing. */
     .chat-turn-container.edit {
         box-shadow: none !important;
     }
@@ -1923,7 +1881,7 @@
         display: none !important;
     }
 
-    /* Synchronize font, line-height, letter-spacing and wrapping on ms-autosize-textarea, its ::after, and textarea */
+    /* Textarea and autosize mirror need identical typography to agree on height. */
     .chat-turn-container.edit ms-autosize-textarea,
     .chat-turn-container.edit ms-autosize-textarea::after,
     .chat-turn-container.edit ms-autosize-textarea textarea,
@@ -1938,16 +1896,15 @@
         box-sizing: border-box !important;
     }
 
-    /* Model Turn Edit Mode Box (Gemini Luminous Editor) */
     .chat-turn-container.model.edit {
-        background: #1e1f20 !important;
-        border: 1.5px solid #8ab4f8 !important;
+        background: var(--sl-mwc-raised,#1e1f20) !important;
+        border: none !important;
         border-radius: 20px !important;
         padding: 16px 20px !important;
-        box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.15) !important;
+        box-shadow: none !important;
         width: 100% !important;
         box-sizing: border-box !important;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+        transition: background-color 0.2s ease !important;
     }
 
     .chat-turn-container.model.edit ms-autosize-textarea {
@@ -1968,7 +1925,7 @@
         border: none !important;
         outline: none !important;
         box-shadow: none !important;
-        color: #ffffff !important;
+        color: var(--sl-mwc-text,#e3e3e3) !important;
         width: 100% !important;
         padding: 6px 0 12px 0 !important;
         margin: 0 !important;
@@ -1982,7 +1939,6 @@
         scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
     }
 
-    /* User Turn Edit Mode: right-aligned, transparent container, clean inner box */
     .chat-turn-container.user.edit {
         border: none !important;
         outline: none !important;
@@ -1995,11 +1951,11 @@
     }
 
     .chat-turn-container.user.edit ms-autosize-textarea {
-        background: #1e1f20 !important;
-        border: 1.5px solid #8ab4f8 !important;
+        background: var(--sl-mwc-raised,#1e1f20) !important;
+        border: none !important;
         border-radius: 20px !important;
         padding: 14px 20px 16px 20px !important;
-        box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2) !important;
+        box-shadow: none !important;
         max-height: none !important;
         overflow: visible !important;
         width: 100% !important;
@@ -2020,14 +1976,13 @@
         overflow-x: hidden !important;
         resize: none !important;
         max-height: 440px !important;
-        color: #ffffff !important;
+        color: var(--sl-mwc-text,#e3e3e3) !important;
         width: 100% !important;
         box-sizing: border-box !important;
         scrollbar-width: thin !important;
         scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
     }
 
-    /* General standalone textareas (if any without ms-autosize-textarea) */
     .chat-turn-container textarea.textarea:not(ms-autosize-textarea textarea) {
         max-height: 480px !important;
         overflow-y: auto !important;
@@ -2052,13 +2007,12 @@
         visibility: visible !important;
     }
 
-    /* Model turns: flush horizontal alignment with prompt box and header */
     .chat-turn-container.model {
         padding-left: 0 !important;
         padding-right: 0 !important;
     }
 
-    /* ── ACTION TOOLBARS (GEMINI STYLE: TRANSPARENT, CIRCULAR BORDERLESS) ── */
+    /* Message actions. */
     .chat-turn-container .actions-container {
         position: relative !important;
         top: auto !important;
@@ -2094,7 +2048,6 @@
         gap: 4px !important;
     }
 
-    /* Individual action buttons: Circular, borderless, transparent */
     .chat-turn-container .actions.hover-or-edit button,
     .chat-turn-container .actions.hover-or-edit ms-chat-turn-options button {
         width: 32px !important;
@@ -2126,7 +2079,6 @@
         height: 18px !important;
     }
 
-    /* User Actions: Right-aligned under prompt bubble, hover-only */
     .chat-turn-container.user:not(:has(ms-file-chunk)):not(:has(ms-image-chunk)):not(:has(ms-video-chunk)) .actions-container {
         align-self: flex-end !important;
         justify-content: flex-end !important;
@@ -2150,7 +2102,6 @@
         pointer-events: auto !important;
     }
 
-    /* Model Actions: Left-aligned at bottom of response, always visible */
     .chat-turn-container.model .actions-container {
         align-self: flex-start !important;
         justify-content: flex-start !important;
@@ -2167,8 +2118,8 @@
         visibility: visible !important;
     }
 
-    /* ── WIDESCREEN 16:9 VIDEO PLAYER ── */
-    ms-chat-turn:has(ms-video-chunk) {
+    /* Video messages. */
+    ms-chat-turn:not([data-sl-buffered-turn]):has(ms-video-chunk) {
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-end !important;
@@ -2190,7 +2141,6 @@
         position: relative !important;
     }
 
-    /* Video turn action buttons positioned below video card in natural message flow */
     ms-chat-turn:has(ms-video-chunk) .actions-container,
     .chat-turn-container:has(ms-video-chunk) .actions-container {
         position: static !important;
@@ -2245,7 +2195,7 @@
         color: #ffffff !important;
     }
 
-    /* Hide Edit button and remove button on video turns (videos cannot be edited) */
+    /* Video turns do not support editing. */
     .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button.toggle-edit-button,
     .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button[name="edit-button"],
     .chat-turn-container:has(ms-video-chunk) .actions.hover-or-edit button[aria-label="Edit"],
@@ -2313,19 +2263,18 @@
         aspect-ratio: auto !important;
         flex: 1 1 auto !important;
         padding: 10px 48px 10px 14px !important;
-        background: #1e1f20 !important;
+        background: var(--sl-mwc-raised,#1e1f20) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
         gap: 8px !important;
         border-radius: 0 0 20px 20px !important;
         font-size: 13px !important;
-        color: #e3e3e3 !important;
+        color: var(--sl-mwc-text,#e3e3e3) !important;
         border: none !important;
         box-sizing: border-box !important;
     }
 
-    /* ── MODEL RESPONSE IMAGES (NATURAL ASPECT, LARGE VIEW) ── */
     .chat-turn-container.model ms-image-chunk {
         width: auto !important;
         height: auto !important;
@@ -2364,18 +2313,15 @@
         border-radius: 16px !important;
     }
 
-    /* ── TURN FOOTER, TIMESTAMPS & EDITED BADGES ── */
-    /* Hide native multi-line turn footers */
+    /* Turn metadata. */
     .turn-footer {
         display: none !important;
     }
 
-    /* Hide any turn-status-badge at the bottom */
     .sl-turn-status-badge {
         display: none !important;
     }
 
-    /* Model turn: only display "• Edited" next to time in .author-label at top */
     .sl-model-edited-badge {
         font-size: 11px !important;
         color: #8c8c8c !important;
@@ -2386,7 +2332,7 @@
         display: inline !important;
     }
 
-    /* Filter media menu options: keep ONLY Download, Delete, and Branch from here */
+    /* Media menus support Download, Delete and Branch from here. */
     .sl-media-menu .copy-rendered-button,
     .sl-media-menu button:has(.copy-rendered-button),
     .sl-media-menu .copy-markdown-button,
@@ -2394,7 +2340,7 @@
         display: none !important;
     }
 
-    /* ── RESPONSIVE & ADAPTIVE BREAKPOINTS ── */
+    /* Responsive layout. */
     @media screen and (max-width: 1400px) {
         .sl-chatgpt-toc {
             right: 8px !important;
@@ -2414,12 +2360,11 @@
     }
 
     @media screen and (max-width: 768px) {
-        /* Mobile: completely hide turn navigator on small/touch screens */
         .sl-chatgpt-toc {
             display: none !important;
         }
 
-        /* Mobile: hide thinking level in header; restore inside Run Settings drawer */
+        /* On mobile, thinking level remains available in Run Settings. */
         .sl-header-thinking-btn {
             display: none !important;
         }
@@ -2459,7 +2404,6 @@
             overflow: visible !important;
         }
 
-        /* Compact cards on mobile (96x96px) */
         ms-file-chunk,
         .chat-turn-container.user ms-image-chunk,
         .chat-turn-container.user ms-image-chunk img {
@@ -2535,7 +2479,7 @@
     body.light-theme .sl-toc-popover,
     body.light-theme .sl-saving-pill {
         background: rgba(255, 255, 255, 0.97) !important;
-        box-shadow: 0 0 0 1px var(--sl-mwc-border), 0 8px 28px rgba(27, 27, 30, 0.15) !important;
+        box-shadow: 0 8px 28px rgba(27, 27, 30, 0.15) !important;
         color: var(--sl-mwc-text) !important;
     }
     body.light-theme .sl-custom-dropdown .sl-dropdown-item,

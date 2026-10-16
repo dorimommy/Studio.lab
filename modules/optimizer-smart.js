@@ -1,33 +1,31 @@
-/**
- * StudioLab module: optimizer-smart
- *
- * Buffered mode detaches old rendered turns and keeps them available through a
- * restore banner. It avoids touching AI Studio's saved chat data.
- * Fully coordinates with native AI Studio search (Ctrl+Shift+F) and smooth upward scrolling.
- */
+// Keep Angular's turn nodes and insertion anchors intact while reducing visible history.
 (function () {
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
   const AUTO_KEEP = 15;
-
+  const BUFFERED_ATTRIBUTE = 'data-sl-buffered-turn';
+  const OLDER_TURNS_ATTRIBUTE = 'data-sl-older-turns';
+  const STYLE_ID = 'sl-buffered-turn-style';
   let ctxRef = null;
-  let intervalId = null;
-  let detachedTurns = [];
-  let detachedParent = null;
-  let pauseUntil = 0;
-  let bottomStayStartTime = 0;
-  let lastUserScrollTime = 0;
-  let isInitialEntry = true;
   let watcherScope = null;
+  let currentParent = null;
+  let parentRoute = null;
+  let bufferedTurns = new Set();
+  let banner = null;
+  let style = null;
+  let manualReveal = false;
+  let pinned = true;
+  let userScrollIntent = false;
+  let applying = false;
 
   window.StudioLab.registerModule({
     id: 'optimizer-smart',
     group: 'optimizer',
     order: 10,
     title: 'Buffered (Safe)',
-    subtitle: 'auto-detach-on-overflow',
+    subtitle: 'Keep recent messages visible',
     icon: 'storage',
     modeKey: 'optimizerMode',
     modeValue: 'smart',
@@ -39,26 +37,21 @@
       autoKeep: true
     },
     details: [
-      { icon: 'visibility_off', text: 'Hides old messages from the DOM while keeping them restorable.' },
-      { icon: 'history', text: 'Adds restore controls above the chat when turns are buffered.' }
+      { icon: 'visibility_off', text: 'Hides older messages while keeping their native elements in place.' },
+      { icon: 'history', text: 'Restore earlier messages above the chat whenever you need them.' }
     ],
-    init(ctx) {
-      ctxRef = ctx;
-      isInitialEntry = true;
-      sync();
-    },
-    onStateChange() {
-      sync();
-    },
+    init(ctx) { ctxRef = ctx; sync(); },
+    onStateChange() { sync(); },
     onRouteChange(ctx, current, previous) {
       if (current && previous && current.key === previous.key) return;
+      if (manualReveal && current?.key === parentRoute && parentRoute === currentRoute()) {
+        applySmartOptimizer();
+        return;
+      }
       stop();
-      // Never insert old-chat nodes into a newly reused Angular container.
-      clearDetachedState();
-      isInitialEntry = true;
       sync();
     },
-    dispose() { stop(); restoreDetached(); clearDetachedState(); }
+    dispose() { stop(); }
   });
 
   function isActive() {
@@ -67,343 +60,263 @@
   }
 
   function sync() {
-    if (isActive()) {
-      start();
-    } else {
-      stop();
-      restoreDetached();
-    }
+    if (!isActive()) { stop(); return; }
+    if (!watcherScope) start();
+    else applySmartOptimizer();
   }
 
   function start() {
-    if (intervalId) return;
     watcherScope = window.StudioLab.createScope();
-    setupSearchAndScrollWatchers();
-    intervalId = setInterval(applySmartOptimizer, 500);
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `ms-chat-turn[${BUFFERED_ATTRIBUTE}]{display:none!important}`;
+    (document.head || document.documentElement).appendChild(style);
+    setupWatchers();
     applySmartOptimizer();
-
-    // Clean up any legacy intrusive styles
-    const legacyStyle = document.getElementById('sl-fast-render-style');
-    if (legacyStyle) legacyStyle.remove();
   }
 
   function stop() {
     if (watcherScope) watcherScope.dispose();
     watcherScope = null;
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
+    clearChat();
+    if (style) style.remove();
+    style = null;
+  }
+
+  function currentRoute() {
+    return window.location?.pathname?.replace(/\/+$/, '') || '/';
+  }
+
+  function turnSelector() {
+    return window.StudioLab.SELECTORS?.CHAT_TURN || 'ms-chat-turn';
+  }
+
+  function currentTurns() {
+    if (!currentParent?.isConnected || parentRoute !== currentRoute()) return [];
+    return Array.from(currentParent.children).filter(node => node.matches?.(turnSelector()));
+  }
+
+  function clearChat() {
+    for (const turn of bufferedTurns) turn.removeAttribute(BUFFERED_ATTRIBUTE);
+    bufferedTurns.clear();
+    if (banner) banner.remove();
+    banner = null;
+    currentParent = null;
+    parentRoute = null;
+    manualReveal = false;
+    pinned = true;
+    userScrollIntent = false;
+  }
+
+  function findCurrentTurns() {
+    const all = Array.from(document.querySelectorAll(turnSelector()));
+    const parent = all[all.length - 1]?.parentNode || null;
+    if (parent !== currentParent || parentRoute !== currentRoute()) {
+      const revealBeforeMount = !currentParent && parentRoute === currentRoute() && manualReveal;
+      clearChat();
+      currentParent = parent;
+      parentRoute = currentRoute();
+      manualReveal = revealBeforeMount;
+      if (manualReveal) pinned = false;
     }
-    const legacyStyle = document.getElementById('sl-fast-render-style');
-    if (legacyStyle) legacyStyle.remove();
+    const turns = currentTurns();
+    for (const turn of bufferedTurns) {
+      if (turn.parentNode !== currentParent || !turn.isConnected) {
+        turn.removeAttribute(BUFFERED_ATTRIBUTE);
+        bufferedTurns.delete(turn);
+      }
+    }
+    return turns;
   }
 
   function isSearchDialogOpen() {
-    const omnibarSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR : 'ms-omnibar';
-    const omnibar = document.querySelector(omnibarSel);
-    if (omnibar && (omnibar.querySelector('.overlay-backdrop') || omnibar.querySelector('.overlay-content'))) {
-      return true;
-    }
-    return !!document.querySelector('.overlay-content[role="dialog"], [aria-label="Command Palette"]');
+    const omnibar = document.querySelector(window.StudioLab.SELECTORS?.OMNIBAR || 'ms-omnibar');
+    return !!(omnibar?.querySelector('.overlay-backdrop, .overlay-content') ||
+      document.querySelector('[role="dialog"][aria-label="Command Palette"], [aria-label="Command Palette"] [role="dialog"]'));
   }
 
-  function isGenerating() {
-    return !!document.querySelector('button.stop, button[aria-label*="Stop"], ms-run-button .stop, [data-test-id="stop-button"], .generating');
+  function isProtectedTurn(turn) {
+    return !!(document.activeElement && turn.contains(document.activeElement)) ||
+      turn.matches('.generating') || !!turn.querySelector('.generating, [data-test-id="stop-button"]');
+  }
+
+  function unmark(turn) {
+    turn.removeAttribute(BUFFERED_ATTRIBUTE);
+    bufferedTurns.delete(turn);
   }
 
   function applySmartOptimizer() {
-    if (!isActive()) return;
-
-    const now = Date.now();
-    // Never detach if:
-    // 1. Search palette is open or in navigation pause
-    // 2. Chat is actively streaming / generating
-    if (isSearchDialogOpen() || now < pauseUntil || isGenerating()) {
-      bottomStayStartTime = 0;
-      return;
-    }
-
-    // 3. User was actively scrolling manually within the last 1.5s (only checked after initial entry)
-    if (!isInitialEntry && (now - lastUserScrollTime < 1500)) {
-      bottomStayStartTime = 0;
-      return;
-    }
-
-    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const turns = Array.from(document.querySelectorAll(turnSel));
-    if (!turns.length) return;
-
-    const keep = getKeepCount();
-    if (turns.length <= keep) return;
-
-    const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
-    const scroller = findScroller(turns[0]) ||
-      document.querySelector(autoSel) ||
-      document.querySelector(`${autoSel} div`);
-    if (!scroller) return;
-
-    // Check if user is at the bottom of the chat
-    const distFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    const lastTurn = turns[turns.length - 1];
-    const lastRect = lastTurn ? lastTurn.getBoundingClientRect() : null;
-    const isLastVisible = lastRect ? (lastRect.top < window.innerHeight && lastRect.bottom > 0) : false;
-    const isAtBottom = distFromBottom <= 350 || isLastVisible;
-
-    if (!isAtBottom) {
-      bottomStayStartTime = 0;
-      return;
-    }
-
-    // Settling threshold (1200ms of completely stationary idle at bottom) before buffering older turns during active chat
-    if (!isInitialEntry) {
-      if (bottomStayStartTime === 0) {
-        bottomStayStartTime = now;
-        return;
-      }
-      if (now - bottomStayStartTime < 1200) {
-        return;
-      }
-    }
-
-    isInitialEntry = false;
-
-    if (!detachedParent && turns[0].parentNode) {
-      detachedParent = turns[0].parentNode;
-    }
-
-    const cutoff = turns.length - keep;
-    for (let index = 0; index < cutoff; index++) {
-      detachedTurns.push(turns[index]);
-      turns[index].remove();
-    }
-
-    if (cutoff > 0) injectLoadBanner();
-  }
-
-  function setupSearchAndScrollWatchers() {
-    const recordUserScroll = () => {
-      if (!isActive()) return;
-      lastUserScrollTime = Date.now();
-    };
-
-    watcherScope.listen(window, 'wheel', recordUserScroll, { passive: true });
-    watcherScope.listen(window, 'touchmove', recordUserScroll, { passive: true });
-
-    // 1. Keyboard shortcuts: Restore detached turns when native search is triggered
-    // Handles English (KeyF / 'f') and international Cyrillic layouts (where key might be 'а')
-    watcherScope.listen(document, 'keydown', (e) => {
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
-        recordUserScroll();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyF' || (e.key && e.key.toLowerCase() === 'f') || e.key === '/')) {
-        pauseUntil = Date.now() + 20000;
-        bottomStayStartTime = 0;
-        if (detachedTurns.length > 0) {
-          restoreDetached();
-        }
-      }
-    }, { capture: true });
-
-    // 2. Watch for native Command Palette / Omnibar dialog appearing
-    const paletteObserver = new MutationObserver(() => {
+    if (!isActive() || applying) return;
+    applying = true;
+    try {
+      const turns = findCurrentTurns();
       if (isSearchDialogOpen()) {
-        pauseUntil = Date.now() + 20000;
-        bottomStayStartTime = 0;
-        if (detachedTurns.length > 0) {
-          restoreDetached();
+        manualReveal = true;
+        pinned = false;
+        userScrollIntent = false;
+        for (const turn of turns) unmark(turn);
+      }
+      const cutoff = Math.max(0, turns.length - getKeepCount());
+      for (let index = 0; index < turns.length; index++) {
+        const turn = turns[index];
+        if (index >= cutoff || isProtectedTurn(turn)) {
+          if (bufferedTurns.has(turn)) unmark(turn);
+        } else if (!manualReveal && !bufferedTurns.has(turn)) {
+          turn.setAttribute(BUFFERED_ATTRIBUTE, '');
+          bufferedTurns.add(turn);
         }
       }
-    });
-    if (document.body) {
-      watcherScope.observe(paletteObserver, document.body, { childList: true, subtree: true });
-    }
-
-    // 3. Search result selection interceptor (click and Enter)
-    const handleResultSelection = (targetItem) => {
-      if (!targetItem) return;
-
-      // Always restore everything so the turn exists in the DOM for AI Studio's scrollIntoView
-      pauseUntil = Date.now() + 30000;
-      bottomStayStartTime = 0;
-      if (detachedTurns.length > 0) {
-        restoreDetached();
-      }
-
-      // Extract target turn UUID if available from MakerSuiteVeMetadataKey in jslog
-      let targetTurnId = null;
-      const jslog = targetItem.getAttribute('jslog') || '';
-      const metaMatch = jslog.match(/MakerSuiteVeMetadataKey:([^;]+)/);
-      if (metaMatch) {
-        try {
-          const decoded = atob(metaMatch[1]);
-          const idMatch = decoded.match(/chat-result-([A-Fa-f0-9-]+)/);
-          if (idMatch) {
-            targetTurnId = 'turn-' + idMatch[1];
-          }
-        } catch (err) {}
-      }
-
-      // Ensure smooth navigation to target and trigger brief visual highlight
-      const verifyNavigation = (attemptsLeft) => {
-        let targetEl = targetTurnId ? document.getElementById(targetTurnId) : null;
-        if (!targetEl && targetTurnId) {
-          targetEl = document.querySelector(`[id*="${targetTurnId}"]`);
-        }
-
-        if (targetEl) {
-          const rect = targetEl.getBoundingClientRect();
-          // If not currently in top view, smoothly scroll it
-          if (rect.top < 0 || rect.top > 400) {
-            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          targetEl.classList.add('sl-turn-highlight');
-          watcherScope?.add(() => targetEl.classList.remove('sl-turn-highlight'));
-          watcherScope?.timeout(() => targetEl.classList.remove('sl-turn-highlight'), 3000);
-        } else if (attemptsLeft > 0) {
-          watcherScope?.timeout(() => verifyNavigation(attemptsLeft - 1), 100);
-        }
-      };
-
-      watcherScope?.timeout(() => verifyNavigation(3), 80);
-    };
-
-    watcherScope.listen(document, 'click', (e) => {
-      const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
-      const item = e.target.closest?.(`${resultsSel} .result-item, ${resultsSel} [role="option"]`);
-      if (item) {
-        handleResultSelection(item);
-      }
-    }, { capture: true });
-
-    watcherScope.listen(document, 'keydown', (e) => {
-      if (e.key === 'Enter') {
-        const resultsSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.OMNIBAR_RESULTS : '#omnibar-results';
-        const activeItem = document.querySelector(`${resultsSel} .result-item[aria-selected="true"], ${resultsSel} .result-item:hover, ${resultsSel} [role="option"][aria-selected="true"]`) ||
-          (document.activeElement && document.activeElement.closest(`${resultsSel} .result-item`));
-        if (activeItem) {
-          handleResultSelection(activeItem);
-        }
-      }
-    }, { capture: true });
-
-    // 4. External module trigger (e.g. Modern Web Chat turn navigator jump)
-    watcherScope.listen(window, '__sl_restoreAllTurns', () => {
-      pauseUntil = Date.now() + 30000;
-      bottomStayStartTime = 0;
-      if (detachedTurns.length > 0) {
-        restoreDetached();
-      }
-    });
-
-    // 5. Listen for scroll on chat container to track position and reset bottom stay
-    const watchScroller = () => {
-      const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-      const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
-      const scroller = findScroller(document.querySelector(turnSel)) ||
-        document.querySelector(autoSel) ||
-        document.querySelector(`${autoSel} div`);
-
-      if (!scroller) {
-        watcherScope?.timeout(watchScroller, 500);
-        return;
-      }
-
-      let lastScrollTop = scroller.scrollTop;
-      watcherScope.listen(scroller, 'scroll', () => {
-        if (!isActive()) return;
-
-        const currentScrollTop = scroller.scrollTop;
-        const scrollingUp = currentScrollTop < lastScrollTop;
-        lastScrollTop = currentScrollTop;
-
-        const distFromBottom = scroller.scrollHeight - currentScrollTop - scroller.clientHeight;
-        if (distFromBottom > 350) {
-          bottomStayStartTime = 0;
-        }
-      }, { passive: true });
-    };
-
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      watchScroller();
-    } else {
-      watcherScope.listen(window, 'DOMContentLoaded', watchScroller);
+      updateBanner(turns.length);
+    } finally {
+      applying = false;
     }
   }
 
-  function injectLoadBanner() {
-    if (!detachedParent || detachedTurns.length === 0) return;
+  function restoreBuffered(amount) {
+    if (!isActive()) return 0;
+    const turns = findCurrentTurns();
+    manualReveal = true;
+    pinned = false;
+    userScrollIntent = false;
+    const hidden = turns.filter(turn => bufferedTurns.has(turn));
+    const count = typeof amount === 'number' && Number.isFinite(amount) ? Math.max(0, amount) : hidden.length;
+    const restored = hidden.slice(Math.max(0, hidden.length - count));
+    for (const turn of restored) unmark(turn);
+    updateBanner(turns.length);
+    return restored.length;
+  }
 
-    let banner = document.querySelector('.sl-load-banner');
+  function currentSession() {
+    if (!currentParent?.isConnected || parentRoute !== currentRoute()) return null;
+    return currentParent.closest('ms-chat-session');
+  }
+
+  function olderTurnCount() {
+    const value = currentSession()?.getAttribute(OLDER_TURNS_ATTRIBUTE);
+    if (!value || !/^\d+$/.test(value)) return 0;
+    const count = Number(value);
+    return Number.isSafeInteger(count) ? count : 0;
+  }
+
+  function showEarlierTurns() {
+    const restored = restoreBuffered(20);
+    const count = Math.min(20 - restored, olderTurnCount());
+    if (count > 0) window.dispatchEvent(new CustomEvent('__sl_requestOlderTurns', { detail: { count } }));
+  }
+
+  function resumeBuffering() {
+    manualReveal = false;
+    pinned = true;
+    userScrollIntent = false;
+    applySmartOptimizer();
+  }
+
+  function updateBanner(turnCount) {
+    const count = bufferedTurns.size;
+    const earlier = olderTurnCount();
+    if (!currentParent?.isConnected || (!count && !earlier && (!manualReveal || turnCount <= getKeepCount()))) {
+      if (banner) banner.remove();
+      banner = null;
+      return;
+    }
     if (!banner) {
       banner = document.createElement('div');
       banner.className = 'sl-load-banner';
-      detachedParent.insertBefore(banner, detachedParent.firstChild);
+      currentParent.insertBefore(banner, currentParent.firstChild);
     }
-
-    const currentCount = detachedTurns.length;
-    if (banner.getAttribute('data-count') === String(currentCount)) return;
-
-    banner.setAttribute('data-count', String(currentCount));
+    const signature = `${count}:${earlier}:${manualReveal}`;
+    if (banner.getAttribute('data-buffered-state') === signature) return;
+    banner.setAttribute('data-buffered-state', signature);
     banner.textContent = '';
-
-    const restoreAllButton = document.createElement('button');
-    restoreAllButton.type = 'button';
-    restoreAllButton.textContent = `Restore Everything (${currentCount} hidden)`;
-    restoreAllButton.addEventListener('click', () => restoreDetached());
-    banner.appendChild(restoreAllButton);
-
-    if (currentCount > 20) {
-      const restoreSomeButton = document.createElement('button');
-      restoreSomeButton.type = 'button';
-      restoreSomeButton.textContent = 'Restore +20';
-      restoreSomeButton.addEventListener('click', () => restoreDetached(20));
-      banner.appendChild(restoreSomeButton);
-    }
-  }
-
-  function restoreDetached(amount) {
-    pauseUntil = Date.now() + 20000;
-    bottomStayStartTime = 0;
-
-    const banner = document.querySelector('.sl-load-banner');
-    const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const anchor = detachedParent ? detachedParent.querySelector(turnSel) : null;
-
-    if (!detachedTurns.length || !detachedParent) {
-      if (banner) banner.remove();
-      return;
-    }
-
-    const countToRestore = typeof amount === 'number' ? amount : detachedTurns.length;
-    let toRestore;
-
-    if (countToRestore >= detachedTurns.length) {
-      toRestore = detachedTurns;
-      detachedTurns = [];
-      if (banner) banner.remove();
-    } else {
-      toRestore = detachedTurns.splice(detachedTurns.length - countToRestore, countToRestore);
-      injectLoadBanner();
-    }
-
-    // Insert turns in order before current anchor.
-    // Chromium's native scroll anchoring (overflow-anchor: auto) preserves visible position without manual jitter.
-    toRestore.forEach((turn) => {
-      if (anchor) detachedParent.insertBefore(turn, anchor);
-      else detachedParent.appendChild(turn);
+    const owner = currentParent;
+    const route = parentRoute;
+    const addButton = (text, action) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.addEventListener('click', () => {
+        if (!isActive() || currentParent !== owner || !owner.isConnected || route !== currentRoute()) return;
+        action();
+      });
+      banner.appendChild(button);
+    };
+    const summary = earlier ? `${count ? count + ' hidden, ' : ''}${earlier} earlier` : `${count} hidden`;
+    if (count || earlier) addButton(`Restore Everything (${summary})`, () => {
+      restoreBuffered();
+      window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
     });
+    if (count || earlier) addButton(`${earlier ? 'Show earlier ' : 'Restore +'}${Math.min(20, count + earlier)}`, showEarlierTurns);
+    if (manualReveal) addButton('Show recent only', resumeBuffering);
   }
 
-  function clearDetachedState() {
-    detachedTurns = [];
-    detachedParent = null;
-    pauseUntil = 0;
-    bottomStayStartTime = 0;
-    lastUserScrollTime = 0;
-    isInitialEntry = true;
+  function setupWatchers() {
+    watcherScope.listen(window, '__sl_chatRenderCommitted', applySmartOptimizer);
+    watcherScope.listen(window, '__sl_restoreAllTurns', () => restoreBuffered());
 
-    const banner = document.querySelector('.sl-load-banner');
-    if (banner) banner.remove();
+    const recordScrollIntent = event => {
+      if (event.isTrusted === false) return;
+      if (currentParent && (currentParent.contains(event.target) || event.target?.contains?.(currentParent))) {
+        userScrollIntent = true;
+      }
+    };
+    watcherScope.listen(document, 'wheel', recordScrollIntent, { capture: true, passive: true });
+    watcherScope.listen(document, 'touchmove', recordScrollIntent, { capture: true, passive: true });
+    watcherScope.listen(document, 'pointerdown', event => {
+      if (event.target?.contains?.(currentParent)) recordScrollIntent(event);
+    }, { capture: true, passive: true });
+    watcherScope.listen(document, 'scroll', event => {
+      if (!userScrollIntent || !currentParent?.isConnected || !event.target?.contains?.(currentParent)) return;
+      userScrollIntent = false;
+      const scroller = event.target;
+      // Only an actual user scroll samples layout; native render batches use the cached state.
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      if (!Number.isFinite(distance)) return;
+      const wasPinned = pinned;
+      pinned = distance <= 2;
+      if (pinned && !wasPinned) manualReveal = false;
+      applySmartOptimizer();
+    }, { capture: true, passive: true });
+
+    watcherScope.listen(document, 'keydown', event => {
+      if (event.isTrusted !== false && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+        recordScrollIntent(event);
+      }
+      // KeyF also supports search with a non-Latin keyboard layout.
+      if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyF' || event.key?.toLowerCase() === 'f' || event.key === '/')) {
+        restoreBuffered();
+      }
+    }, { capture: true });
+
+    const resultsSelector = () => window.StudioLab.SELECTORS?.OMNIBAR_RESULTS || '#omnibar-results';
+    watcherScope.listen(document, 'click', event => {
+      if (event.target.closest?.(`${resultsSelector()} .result-item, ${resultsSelector()} [role="option"]`)) restoreBuffered();
+    }, { capture: true });
+    watcherScope.listen(document, 'keydown', event => {
+      if (event.key !== 'Enter') return;
+      const selector = resultsSelector();
+      if (document.querySelector(`${selector} .result-item[aria-selected="true"], ${selector} [role="option"][aria-selected="true"]`) ||
+        document.activeElement?.closest(`${selector} .result-item, ${selector} [role="option"]`)) restoreBuffered();
+    }, { capture: true });
+    watcherScope.listen(document, 'focusin', event => {
+      const turn = event.target.closest?.(turnSelector());
+      if (turn?.parentNode === currentParent && bufferedTurns.has(turn)) {
+        unmark(turn);
+        updateBanner(currentTurns().length);
+      }
+    }, { capture: true });
+
+    const observer = new MutationObserver(records => {
+      const containsTurn = node => node.nodeType === 1 && (node.matches?.(turnSelector()) || node.querySelector?.(turnSelector()));
+      const changed = records.some(record => {
+        if (banner && (record.target === banner || banner.contains(record.target))) return false;
+        if (record.type === 'attributes' && record.attributeName === OLDER_TURNS_ATTRIBUTE) return record.target === currentSession();
+        return record.type === 'childList' && [...record.addedNodes, ...record.removedNodes].some(containsTurn);
+      });
+      if (changed || (isSearchDialogOpen() && !manualReveal) || (currentParent && !currentParent.isConnected)) applySmartOptimizer();
+    });
+    watcherScope.observe(observer, document, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'role', 'aria-label', OLDER_TURNS_ATTRIBUTE]
+    });
   }
 
   function getKeepCount() {
@@ -413,19 +326,8 @@
     return Number.isFinite(keep) ? Math.max(2, keep) : AUTO_KEEP;
   }
 
-  function findScroller(element) {
-    let node = element;
-    while (node && node !== document.body) {
-      if (node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY !== 'hidden') {
-        return node;
-      }
-      node = node.parentElement;
-    }
-    return null;
-  }
-
   window.StudioLab = Object.assign(window.StudioLab || {}, {
-    getDetachedTurns: () => detachedTurns,
-    restoreDetached: (amount) => restoreDetached(amount)
+    getDetachedTurns: () => [],
+    restoreDetached: amount => restoreBuffered(amount)
   });
 })();

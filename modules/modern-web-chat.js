@@ -1,13 +1,4 @@
-/**
- * Studio.lab module: modern-web-chat
- *
- * Replicates the Gemini web app input bar using 100% NATIVE Angular elements.
- * NO PROXY DOM. NO FAKE CLICKS.
- *
- * - Uses CSS `display: contents` to flatten the bottom row.
- * - Uses CSS `order` to rearrange native elements.
- * - Injects custom [Other Uploads] button to split the + menu.
- */
+// Restyle native AI Studio controls while retaining Angular ownership.
 (function () {
   'use strict';
 
@@ -20,26 +11,24 @@
   let updateScheduled = false;
   let globalHandlersAttached = false;
   const hiddenNativeButtons = new Map();
-  const movedNativeNodes = new Map();
   const viewerHandlers = new Map();
   const decoratedMediaPanels = new Set();
   const modifiedMenuContents = new Set();
   const injectedRoots = new Set();
   let dropdownGeneration = 0;
   let tokenExtractionTimeout = null;
-  let modelDialogCleanupTimeout = null;
   let domUpdateTimeout = null;
   let disposed = false;
+
+  // The packaged theme preview uses the same controls and styles with a local
+  // provider. It never invokes AI Studio's model picker, account, or chat APIs.
+  function getPreviewControls() {
+    return ctxRef?.previewControls || null;
+  }
 
   function markCreated(node) {
     node.setAttribute('data-sl-modern-created', '');
     injectedRoots.add(node);
-  }
-
-  function rememberNativePosition(node) {
-    if (node?.parentNode && !movedNativeNodes.has(node)) {
-      movedNativeNodes.set(node, { parent: node.parentNode, next: node.nextSibling });
-    }
   }
 
   function rememberNativeDisplay(node) {
@@ -51,8 +40,51 @@
     }
   }
 
+  function createNativeMenuProxy(nativeItem) {
+    const proxy = document.createElement('button');
+    proxy.type = 'button';
+    proxy.className = nativeItem.className + ' sl-native-menu-proxy';
+    proxy.setAttribute('role', 'menuitem');
+    const label = nativeItem.getAttribute('aria-label');
+    if (label) proxy.setAttribute('aria-label', label);
+    for (const child of nativeItem.childNodes) proxy.appendChild(child.cloneNode(true));
+    // Clones have no Angular listeners and must not duplicate native ID references.
+    proxy.querySelectorAll('[id], [aria-describedby], [aria-labelledby], [aria-controls]').forEach(node => {
+      for (const attribute of ['id', 'aria-describedby', 'aria-labelledby', 'aria-controls']) node.removeAttribute(attribute);
+    });
+    proxy.disabled = nativeItem.disabled || nativeItem.getAttribute('aria-disabled') === 'true';
+    proxy.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!isEnabled() || !nativeItem.isConnected || nativeItem.disabled || nativeItem.getAttribute('aria-disabled') === 'true') return;
+      nativeItem.click();
+    };
+    return proxy;
+  }
+
+  function getNativeRunSettingsToggle() {
+    return Array.from(document.querySelectorAll('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"], button[aria-label="Run Settings"], button[aria-label*="run settings" i]'))
+      .find(button => !button.closest('.sl-header-btn, [data-sl-modern-created]')) || null;
+  }
+
+  function getOverlayBackdrop(overlay) {
+    for (let owner = overlay?.closest('.cdk-overlay-pane'); owner?.parentElement; owner = owner.parentElement) {
+      const parent = owner.parentElement;
+      const previous = owner.previousElementSibling;
+      if (previous?.classList.contains('cdk-overlay-backdrop')) return previous;
+      if (parent.classList.contains('cdk-overlay-container')) break;
+      if (parent.matches('.cdk-overlay-popover, .cdk-overlay-connected-position-bounding-box, .cdk-global-overlay-wrapper')) {
+        const backdrops = Array.from(parent.children).filter(node => node.classList.contains('cdk-overlay-backdrop'));
+        if (backdrops.length === 1) return backdrops[0];
+        if (parent.classList.contains('cdk-overlay-popover')) return null;
+      }
+    }
+    return null;
+  }
+
   function isEnabled() {
     if (disposed) return false;
+    if (!getPreviewControls() && window.StudioLab.isExtensionActive && !window.StudioLab.isExtensionActive()) return false;
     if (!ctxRef) {
       try {
         const raw = localStorage.getItem('sl_state');
@@ -72,13 +104,6 @@
     return false;
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  CSS (Native Restyling & Menu Hacks)
-  // ══════════════════════════════════════════════════════════════════
-  // CSS is cleanly isolated in modules/modern-web-chat.css and loaded via updateStyles()
-  // ══════════════════════════════════════════════════════════════════
-  //  NATIVE DOM REARRANGEMENT
-  // ══════════════════════════════════════════════════════════════════
 
   function getToolControl(toolName) {
     const name = toolName.toLowerCase();
@@ -138,8 +163,7 @@
     const control = getToolControl(toolName);
     if (!control?.button || isToolDisabled(toolName)) return false;
     const expected = !isToolActive(toolName);
-    // One native click is authoritative. The former signal + synthetic pointer
-    // sequence could toggle twice and leave the custom checkmark out of sync.
+    // Mixing a native click with synthetic pointer events can toggle twice.
     control.button.click();
     return !!(await waitForModelValue(() => isToolActive(toolName) === expected, 1200));
   }
@@ -206,7 +230,7 @@
     }
 
     contents.forEach(content => {
-      // Find the native Drive button to verify this is the + menu
+      // The native Drive action distinguishes this from other menus.
       const driveBtn = content.querySelector('.drive-file-menu-item');
       if (!driveBtn) return; // Silent return for other menus
 
@@ -216,7 +240,6 @@
       const panel = content.closest('.mat-mdc-menu-panel');
       if (panel) panel.setAttribute('data-sl-injected', 'true');
 
-      // Find all items in this specific menu
       const allItems = Array.from(content.querySelectorAll('button[mat-menu-item], button.mat-mdc-menu-item, button[role="menuitem"]'));
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + allItems.length + ' core items inside the menu', 'info');
 
@@ -273,18 +296,15 @@
         submenuContent.dataset.slInjected = 'true';
         submenu.appendChild(submenuContent);
 
-        // Move the secondary items into the submenu
         itemsToMove.forEach(item => {
-          rememberNativePosition(item);
           rememberNativeDisplay(item);
-          item.style.display = 'flex';
-          submenuContent.appendChild(item);
+          item.style.setProperty('display', 'none');
+          submenuContent.appendChild(createNativeMenuProxy(item));
         });
 
         otherWrapper.appendChild(otherBtn);
         otherWrapper.appendChild(submenu);
 
-        // Insert 'Other uploads' right after the last primary item (e.g. Record Audio)
         if (insertAfterNode && insertAfterNode.parentNode) {
           insertAfterNode.after(otherWrapper);
         } else {
@@ -304,7 +324,6 @@
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('No items found to move to submenu.', 'warn');
       }
 
-      // Add Divider
       const divider = document.createElement('mat-divider');
       markCreated(divider);
       divider.setAttribute('role', 'separator');
@@ -316,7 +335,6 @@
       content.appendChild(divider);
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
 
-      // Add Tools as hover flyout submenu
       const nativeTools = document.querySelector('ms-prompt-box-tools button') || document.querySelector('.prompt-box-tools button');
       if (nativeTools) {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding flyout submenu to menu.', 'info');
@@ -432,7 +450,6 @@
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
       }
 
-      // Add Paid API
       const nativeKey = document.querySelector('ms-paid-api-key-button button') || document.querySelector('.paid-api-key-button');
       if (nativeKey) {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
@@ -460,9 +477,6 @@
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  TOOLBAR OVERFLOW MENU PROXYING (ChatGPT-style header)
-  // ══════════════════════════════════════════════════════════════════
 
   function dispatchPointerClick(el) {
     if (!el) return;
@@ -476,22 +490,17 @@
   }
 
   function modifyHeaderMenu() {
-    // When clicking the three-dots button in the header toolbar, Angular creates
-    // a menu panel with class .toolbar-overflow-menu
     const menuContent = document.querySelector('.toolbar-overflow-menu .mat-mdc-menu-content:not([data-sl-header-injected])');
     if (!menuContent) return;
 
     menuContent.dataset.slHeaderInjected = 'true';
     modifiedMenuContents.add(menuContent);
 
-    // Determine if the current session is an empty/new chat
     const hasTurns = !!document.querySelector('ms-chat-turn');
     const promptValue = document.querySelector('ms-prompt-box textarea')?.value?.trim();
     const isEmptyChat = !hasTurns && !promptValue;
 
     if (isEmptyChat) {
-      // In an empty chat, hide redundant and disabled actions:
-      // "No changes to save", "Make a copy", "Delete"
       const items = menuContent.querySelectorAll('button.mat-mdc-menu-item');
       items.forEach(item => {
         const txt = item.textContent.trim().toLowerCase();
@@ -505,12 +514,11 @@
           hideNativeButton(item);
         }
       });
-      // In empty chat, only Temporary chat (and active toggles like Raw Mode) make sense.
-      // Do NOT inject "Edit title", "Share prompt", "Compare mode", "Make this an app".
+      // Unsaved chats keep native toggles but have no title/share/app actions yet.
       return;
     }
 
-    // Hide native unstyled Share item on all chats (we inject our own styled 'Share prompt')
+    // The injected Share prompt action replaces the native item.
     const nativeItems = menuContent.querySelectorAll('button.mat-mdc-menu-item:not(.sl-injected-header-item)');
     nativeItems.forEach(item => {
       const txt = item.textContent.trim().toLowerCase();
@@ -520,7 +528,6 @@
       }
     });
 
-    // Divider separating native items from injected actions
     const divider = document.createElement('div');
     divider.className = 'mat-divider sl-header-menu-divider';
     divider.setAttribute('role', 'separator');
@@ -528,11 +535,6 @@
     divider.style.margin = '4px 0';
     menuContent.appendChild(divider);
 
-    // Proxy actions in requested order:
-    // 1. Edit title (above Share prompt)
-    // 2. Share prompt
-    // 3. Compare mode (desktop only, omitted on mobile <= 768px)
-    // 4. Make this an app (at the very bottom)
     const proxyItems = [
       {
         icon: 'edit',
@@ -587,7 +589,7 @@
         e.preventDefault();
         e.stopPropagation();
 
-        // Immediately dismiss the menu backdrop without interfering with opening dialogs
+        // Dismiss only this menu's backdrop so newly opened dialogs stay intact.
         const menuBackdrop = document.querySelector('.mat-mdc-menu-backdrop');
         if (menuBackdrop) {
           menuBackdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -602,7 +604,6 @@
               dispatchPointerClick(target);
             }
           } else {
-            // Signal main world / DynamicStudioAPI to mount and trigger native edit title dialog
             window.dispatchEvent(new CustomEvent('__sl_openEditPromptTitle'));
           }
           return;
@@ -622,9 +623,6 @@
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  HEADER CONTROLS RESTRUCTURING (ChatGPT / Gemini style)
-  // ══════════════════════════════════════════════════════════════════
 
   let cachedModelName = '';
   let cachedModelId = '';
@@ -658,7 +656,7 @@
   let modelDropdownOpening = false;
 
   function getFeaturedModels() {
-    return featuredModels;
+    return getPreviewControls()?.getModels() || featuredModels;
   }
 
   const thinkingSelectSelector = 'mat-select[aria-label="Thinking Level"], ms-thinking-level-setting mat-select, ms-run-settings mat-select[aria-label*="hinking"], ms-run-settings .thinking-level mat-select';
@@ -668,7 +666,7 @@
   }
 
   function getThinkingPanel(select) {
-    const panelId = select?.getAttribute('aria-controls') || select?.getAttribute('aria-owns');
+    const panelId = select?.getAttribute('aria-controls') || select?.getAttribute('aria-owns') || (select?.id ? select.id + '-panel' : null);
     return panelId ? document.getElementById(panelId) : document.querySelector('.mat-mdc-select-panel');
   }
 
@@ -695,6 +693,8 @@
   }
 
   function getModelDisplayName() {
+    const previewModel = getPreviewControls()?.getModel();
+    if (previewModel) return previewModel.name;
     syncModelRoute();
     // The native card and URL are authoritative. A previous custom-menu label
     // must never mask a model selected in AI Studio itself.
@@ -737,6 +737,7 @@
   }
 
   function getSelectedThinkingLevel() {
+    if (getPreviewControls()) return getPreviewControls().getThinkingLevel();
     const select = getThinkingSelect();
     if (select) {
       const valText = select.querySelector('.mat-mdc-select-value-text, .mat-mdc-select-value, .mat-select-value-text');
@@ -748,6 +749,10 @@
   }
 
   function updateEmptyChatState() {
+    if (getPreviewControls()) {
+      document.body.classList.toggle('sl-empty-chat', !document.querySelector('ms-chat-turn'));
+      return;
+    }
     const isNew = window.location.pathname.includes('/prompts/new_chat');
     const turns = document.querySelectorAll('ms-chat-turn');
     const isEmpty = isNew || turns.length === 0;
@@ -801,11 +806,12 @@
   }
 
   async function ensureRunSettingsMounted() {
+    if (getPreviewControls()) return document.querySelector('ms-model-selector button');
     if (!isEnabled()) return null;
     let nativeTrigger = document.querySelector('ms-model-selector button.model-selector-card, ms-model-selector button');
     if (nativeTrigger) return nativeTrigger;
 
-    const toggleBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Run Settings"], button[aria-label*="run settings" i], button[aria-label="Toggle run settings panel"]');
+    const toggleBtn = getNativeRunSettingsToggle();
     if (toggleBtn) {
       toggleBtn.click();
       const t0 = performance.now();
@@ -822,6 +828,14 @@
     const hasPanel = !!document.querySelector('ms-run-settings');
     const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sl-settings-open');
 
+    if (getPreviewControls()) {
+      closeCustomDropdowns();
+      document.body.classList.toggle('sl-settings-open', shouldOpen);
+      document.querySelector('.sl-header-settings-btn')?.setAttribute('aria-expanded', String(shouldOpen));
+      getPreviewControls().onSettingsToggle?.(shouldOpen);
+      return;
+    }
+
     if (shouldOpen) {
       // On narrow screens the drawers overlap; on desktop they can coexist.
       if (window.innerWidth <= 768) {
@@ -836,27 +850,14 @@
       closeCustomDropdowns();
       document.body.classList.add('sl-settings-open');
       if (!hasPanel) {
-        const openBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"], button[aria-label="Run Settings"]');
+        const openBtn = getNativeRunSettingsToggle();
         if (openBtn) openBtn.click();
       }
     } else {
       document.body.classList.remove('sl-settings-open');
-      // Dismiss any lingering backdrops when closing the drawer (if no modal dialog is open)
-      if (!document.querySelector('mat-dialog-container, .mat-mdc-dialog-container')) {
-        const backdrops = document.querySelectorAll('.cdk-overlay-backdrop-showing:not(.mat-mdc-menu-backdrop)');
-        backdrops.forEach(b => {
-          b.classList.remove('cdk-overlay-backdrop-showing');
-          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-        });
-        const orphanedOverlay = document.querySelector('.sidebar-overlay');
-        if (orphanedOverlay && !document.querySelector('.v3-left-nav.expanded, .nav-content.expanded')) {
-          orphanedOverlay.remove();
-        }
-      }
     }
   }
 
-  // Global pointerdown & click listener with capture to reliably close settings drawer and custom dropdowns
   if (window._slGlobalDrawerHandler) {
     document.removeEventListener('pointerdown', window._slGlobalDrawerHandler, true);
     document.removeEventListener('click', window._slGlobalDrawerHandler, true);
@@ -864,7 +865,6 @@
   window._slGlobalDrawerHandler = (e) => {
     if (!isEnabled()) return;
     if (e.type === 'click' && window._slMediaPointerListener) window._slMediaPointerListener(e);
-    // Close custom dropdowns if clicked outside
     if ((e.isTrusted || (!document.body.classList.contains('sl-syncing-model-picker') && !document.body.classList.contains('sl-reading-thinking-options'))) &&
       !e.target.closest('.sl-custom-dropdown') && !e.target.closest('.sl-header-btn')) {
       closeCustomDropdowns();
@@ -876,20 +876,17 @@
       toggleSettingsDrawer(false);
     }
 
-    // Handle close button click inside run settings drawer STRICTLY scoped to the panel
+    // A close button in another dialog must not close Run Settings.
     const panel = e.target.closest('ms-right-side-panel, ms-run-settings, .drawer-container:has(ms-run-settings)');
     if (panel) {
       const closeBtn = e.target.closest('button[aria-label="Close run settings panel"], button[aria-label*="close" i], .close-button');
-      if (closeBtn) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (closeBtn && e.type === 'click') {
         window._slLastDrawerCloseTime = Date.now();
         toggleSettingsDrawer(false);
         return;
       }
     }
 
-    // Close settings drawer if open and clicked outside ms-right-side-panel and not on settings button
     if (document.body.classList.contains('sl-settings-open')) {
       const btn = e.target.closest('.sl-header-settings-btn, button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
       const overlay = e.target.closest('.cdk-overlay-container, .sl-custom-dropdown, mat-dialog-container');
@@ -905,10 +902,12 @@
     if (globalHandlersAttached) return;
     document.addEventListener('pointerdown', window._slGlobalDrawerHandler, true);
     document.addEventListener('click', window._slGlobalDrawerHandler, true);
-    if (window._slMediaPointerListener) document.addEventListener('pointerdown', window._slMediaPointerListener, true);
+    if (!getPreviewControls() && window._slMediaPointerListener) document.addEventListener('pointerdown', window._slMediaPointerListener, true);
     if (window._slKeydownListener) window.addEventListener('keydown', window._slKeydownListener);
-    window.addEventListener('__sl_modelChanged', onModelChanged);
-    window.addEventListener('__sl_savingState', onSavingState);
+    if (!getPreviewControls()) {
+      window.addEventListener('__sl_modelChanged', onModelChanged);
+      window.addEventListener('__sl_savingState', onSavingState);
+    }
     globalHandlersAttached = true;
   }
 
@@ -1021,9 +1020,13 @@
   }
 
   async function selectNativeModel(modelId, modelName) {
-    // The direct signal is safe only for ordinary text models in an existing
-    // chat: new-chat and specialized models need AI Studio's own route flow.
-    // Keep the fast path there, but require the native card to confirm it.
+    if (getPreviewControls()) {
+      const changed = getPreviewControls().setModel(modelId);
+      reorganizeHeader();
+      return changed;
+    }
+    // Direct signals require an existing text chat and native-card confirmation;
+    // new chats and specialized models need AI Studio's route flow.
     const canTryDirect = /^\/prompts\/(?!new_chat$)[^/]+$/.test(window.location.pathname) &&
       /^gemini-\d+(?:\.\d+)?-(?:flash(?:-lite)?|pro)$/.test(modelId);
     if (canTryDirect) {
@@ -1051,8 +1054,7 @@
       }
     }
 
-    // For new chats and specialized models, the hidden native picker is still
-    // visually seamless and completes the host's URL/capability workflow.
+    // The native picker completes URL and capability updates for these models.
     const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
     let selected = false;
     document.body.classList.add('sl-syncing-model-picker');
@@ -1090,7 +1092,6 @@
     }
   }
 
-  // Listen for model change notifications from interceptor or other components
   function onModelChanged(e) {
     if (e.detail?.modelId || e.detail?.modelName) {
       rememberModel(e.detail.modelId || '', e.detail.modelName || formatModelSlug(e.detail.modelId));
@@ -1102,6 +1103,11 @@
   }
 
   async function selectNativeThinkingLevel(level) {
+    if (getPreviewControls()) {
+      const changed = getPreviewControls().setThinkingLevel(level);
+      reorganizeHeader();
+      return changed;
+    }
     await ensureRunSettingsMounted();
     if (!isEnabled()) return false;
     const select = getThinkingSelect();
@@ -1125,17 +1131,27 @@
       }
       return applied;
     } finally {
-      dismissThinkingPanel(panel, select);
+      await dismissThinkingPanel(panel, select);
       document.body.classList.remove('sl-reading-thinking-options');
     }
   }
 
-  function dismissThinkingPanel(panel, select) {
-    if (!panel?.isConnected || select?.getAttribute('aria-expanded') === 'false') return;
-    const pane = panel.closest('.cdk-overlay-pane');
-    const backdrop = pane?.previousElementSibling;
-    if (backdrop?.classList.contains('cdk-overlay-backdrop')) backdrop.click();
-    else select?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  async function dismissThinkingPanel(panel, select) {
+    let backdrop = getOverlayBackdrop(panel);
+    const isClosed = () => (!select?.isConnected || select.getAttribute('aria-expanded') === 'false') &&
+      !panel?.isConnected && !backdrop?.isConnected && !getThinkingPanel(select)?.isConnected;
+    if (isClosed()) return true;
+    if (backdrop) {
+      backdrop.click();
+      if (await waitForModelValue(isClosed, 800)) return true;
+    }
+    if (!isEnabled()) return false;
+    panel = getThinkingPanel(select) || panel;
+    backdrop = getOverlayBackdrop(panel) || backdrop;
+    (panel?.isConnected ? panel : select)?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true
+    }));
+    return !!(await waitForModelValue(isClosed, 800));
   }
 
   async function openModelDropdown(button) {
@@ -1149,7 +1165,7 @@
     closeCustomDropdowns();
     const generation = dropdownGeneration;
     try {
-      if (featuredModels.length !== 3 || Date.now() - featuredSyncedAt > 5 * 60 * 1000) {
+      if (!getPreviewControls() && (featuredModels.length !== 3 || Date.now() - featuredSyncedAt > 5 * 60 * 1000)) {
         await refreshFeaturedModels();
       }
     } catch (_) {
@@ -1162,9 +1178,9 @@
     const currentName = getModelDisplayName();
     const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '');
     const urlId = new URLSearchParams(window.location.search).get('model')?.replace(/^models\//, '');
-    const currentId = window.location.pathname === '/prompts/new_chat'
+    const currentId = getPreviewControls()?.getModel().id || (window.location.pathname === '/prompts/new_chat'
       ? (urlId || nativeId || cachedModelId)
-      : (nativeId || cachedModelId || urlId);
+      : (nativeId || cachedModelId || urlId));
     const dropdown = document.createElement('div');
     dropdown.className = 'sl-custom-dropdown sl-model-dropdown';
 
@@ -1206,6 +1222,11 @@
       dropdown.appendChild(unavailable);
     }
 
+    if (getPreviewControls()) {
+      mountCustomDropdown(dropdown, button);
+      return;
+    }
+
     const divider = document.createElement('div');
     divider.className = 'sl-dropdown-divider';
     dropdown.appendChild(divider);
@@ -1239,24 +1260,6 @@
       const nativeTrigger = await ensureRunSettingsMounted();
       if (nativeTrigger && isEnabled()) {
         nativeTrigger.click();
-        // Monitor dialog dismissal to clean up any orphaned backdrop left behind
-        const checkCleanup = () => {
-          modelDialogCleanupTimeout = null;
-          if (!isEnabled()) return;
-          const dialog = document.querySelector('mat-dialog-container, .mat-mdc-dialog-container');
-          if (!dialog) {
-            if (!document.body.classList.contains('sl-settings-open')) {
-              const backdrops = document.querySelectorAll('.cdk-overlay-backdrop-showing:not(.mat-mdc-menu-backdrop)');
-              backdrops.forEach(b => {
-                b.classList.remove('cdk-overlay-backdrop-showing');
-                b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-              });
-            }
-          } else {
-            modelDialogCleanupTimeout = setTimeout(checkCleanup, 150);
-          }
-        };
-        modelDialogCleanupTimeout = setTimeout(checkCleanup, 350);
       }
     };
     dropdown.appendChild(moreBtn);
@@ -1275,19 +1278,23 @@
     await ensureRunSettingsMounted();
     if (!isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
     const select = getThinkingSelect();
-    if (!select || select.getAttribute('aria-disabled') === 'true') return;
+    if (!getPreviewControls() && (!select || select.getAttribute('aria-disabled') === 'true')) return;
     let panel = null;
     let levels = [];
-    document.body.classList.add('sl-reading-thinking-options');
-    try {
-      (select.querySelector('.mat-mdc-select-trigger') || select).click();
-      panel = await waitForModelValue(() => getThinkingPanel(select), 800);
-      levels = getAvailableThinkingLevels(panel);
-    } finally {
-      dismissThinkingPanel(panel, select);
-      document.body.classList.remove('sl-reading-thinking-options');
+    let nativeDismissed = true;
+    if (getPreviewControls()) levels = getPreviewControls().getThinkingLevels();
+    else {
+      document.body.classList.add('sl-reading-thinking-options');
+      try {
+        (select.querySelector('.mat-mdc-select-trigger') || select).click();
+        panel = await waitForModelValue(() => getThinkingPanel(select), 800);
+        levels = getAvailableThinkingLevels(panel);
+      } finally {
+        nativeDismissed = await dismissThinkingPanel(panel, select);
+        document.body.classList.remove('sl-reading-thinking-options');
+      }
     }
-    if (!levels.length || !isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
+    if (!nativeDismissed || !levels.length || !isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
 
     const currentThinking = getSelectedThinkingLevel();
     const dropdown = document.createElement('div');
@@ -1337,7 +1344,6 @@
     const toolbarRight = document.querySelector('.toolbar-right');
     if (!toolbarLeft || !toolbarRight) return;
 
-    // Update empty chat state (controls '+' visibility in toolbar-left)
     updateEmptyChatState();
 
     // Hide the header's redundant New Chat controls without removing Angular-owned nodes.
@@ -1359,21 +1365,6 @@
       }
     });
 
-    // 2. Position overflow menu '⋮' in .toolbar-left right after the navigation menu button [☰]
-    const navBtn = toolbarLeft.querySelector('button[aria-label*="nav" i], button[aria-label*="menu" i]') || toolbarLeft.firstElementChild;
-    const overflowMenuWrapper = document.querySelector('.overflow-menu-wrapper');
-    if (overflowMenuWrapper && navBtn) {
-      if (overflowMenuWrapper.parentElement !== toolbarLeft) {
-        rememberNativePosition(overflowMenuWrapper);
-        navBtn.after(overflowMenuWrapper);
-      } else if (navBtn.nextElementSibling !== overflowMenuWrapper) {
-        rememberNativePosition(overflowMenuWrapper);
-        navBtn.after(overflowMenuWrapper);
-      }
-    }
-
-    // 3. Right Toolbar controls: [Model] [Thinking level] [Settings]
-    // A. Model Button (Clean text with chevron, NO emojis/icons):
     let modelBtn = toolbarRight.querySelector('.sl-header-model-btn');
     if (!modelBtn) {
       modelBtn = document.createElement('button');
@@ -1409,10 +1400,9 @@
       }
     }
 
-    // B. Thinking Level Button (Selected option with chevron, NO emojis/icons):
     let thinkingBtn = toolbarRight.querySelector('.sl-header-thinking-btn');
     const thinkingSelect = getThinkingSelect();
-    const hasThinkingSetting = !!thinkingSelect;
+    const hasThinkingSetting = getPreviewControls() ? getPreviewControls().getThinkingLevels().length > 0 : !!thinkingSelect;
     if (!thinkingBtn) {
       thinkingBtn = document.createElement('button');
       thinkingBtn.type = 'button';
@@ -1452,7 +1442,6 @@
       thinkingBtn.disabled = thinkingSelect?.getAttribute('aria-disabled') === 'true';
     }
 
-    // C. Settings Button (Run Settings trigger):
     let settingsBtn = toolbarRight.querySelector('.sl-header-settings-btn');
     if (!settingsBtn) {
       settingsBtn = document.createElement('button');
@@ -1476,9 +1465,6 @@
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  SIDEBAR TOKENS PANEL (under Manage section)
-  // ══════════════════════════════════════════════════════════════════
 
   let lastTokenCountText = '';
   let isExtractingTokens = false;
@@ -1569,11 +1555,9 @@
     const path = window.location.pathname;
     if (path.includes('/new_chat') || path === '/prompts/new_chat') return false;
 
-    // Check if chat has any turns
     const turns = document.querySelectorAll('ms-chat-turn');
     if (turns.length === 0) return false;
 
-    // Check if token count is 0 or empty
     const tokenSpan = document.querySelector('ms-token-count .v3-token-count-value');
     const currentText = tokenSpan ? tokenSpan.textContent?.trim().replace(/\s+/g, ' ') : '';
     if (!currentText || currentText === '0' || currentText === '0 tokens') return false;
@@ -1624,7 +1608,6 @@
     lastTokenCountText = currentText;
     isExtractingTokens = true;
 
-    // Trigger silent tooltip inspection
     if (tokenSpan) {
       try {
         tokenSpan.click();
@@ -1648,8 +1631,7 @@
                 }
               });
             }
-            const tokenBackdrop = document.querySelector('.cdk-overlay-backdrop:has(+ .cdk-overlay-pane .token-count-tooltip), .cdk-overlay-pane:has(.token-count-tooltip) ~ .cdk-overlay-backdrop') || document.querySelector('.cdk-overlay-backdrop');
-            tokenBackdrop?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            getOverlayBackdrop(tooltip)?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           } catch (err) {}
           if (!cachedTokenBreakdown.usageStr) cachedTokenBreakdown.usageStr = currentText;
           const currentCard = document.querySelector('.sl-tokens-card');
@@ -1666,21 +1648,16 @@
 
 
 
-  // ══════════════════════════════════════════════════════════════════
-  //  FULL-SCREEN VIEWER INJECTION
-  // ══════════════════════════════════════════════════════════════════
 
   function injectViewerElements() {
     const dialog = document.querySelector('ms-view-media-dialog');
     if (!dialog) return;
 
-    // Backdrop tinting
     const pane = dialog.closest('.cdk-overlay-pane');
     if (pane && pane.previousElementSibling && pane.previousElementSibling.classList.contains('cdk-overlay-backdrop')) {
       pane.previousElementSibling.classList.add('sl-backdrop-tint');
     }
 
-    // Click-to-close on empty space
     const main = dialog.querySelector('main');
     if (main && !viewerHandlers.has(main)) {
       const onClick = (e) => {
@@ -1694,9 +1671,6 @@
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  CENTERED TOP SAVING PILL (ChatGPT / Gemini style)
-  // ══════════════════════════════════════════════════════════════════
 
   let savingPillEl = null;
   let savingHideTimeout = null;
@@ -1749,7 +1723,7 @@
   function checkNativeSavingState() {
     const indicators = Array.from(document.querySelectorAll('.toolbar-saving-indicator, ms-drive-save-indicator, .saving-status.visible'));
     const isActivelySaving = indicators.some(el => {
-      // Ignore static save indicators inside menus (e.g. overflow menu "Saved to Drive" checkmark)
+      // Menu checkmarks such as Saved to Drive are not live save status.
       if (el.closest('.mat-mdc-menu-panel, .toolbar-overflow-menu, .mat-mdc-menu-content')) return false;
       const text = (el.textContent || '').toLowerCase();
       const hasSpinner = !!el.querySelector('mat-progress-spinner, mat-spinner, .spinner, .saving-spinner');
@@ -1772,9 +1746,6 @@
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  CHATGPT-STYLE TURN NAVIGATOR (replaces ms-items-scrollbar)
-  // ══════════════════════════════════════════════════════════════════
 
   let lastTocButtonCount = 0;
   let lastActiveTocIndex = -1;
@@ -1785,6 +1756,13 @@
   let tocResizeFrame = null;
   let lastTocNativeButtons = [];
   let lastTocTitles = '';
+  let pendingTurnJump = null;
+  let pendingTurnJumpFrame = null;
+  const bufferedTurnSelector = 'ms-chat-turn[data-sl-buffered-turn]';
+
+  function isBufferedTurnHidden(element) {
+    return !!element?.closest(bufferedTurnSelector);
+  }
 
   function detachTocScrollListener() {
     if (tocScroller && tocScrollHandler) tocScroller.removeEventListener('scroll', tocScrollHandler);
@@ -1795,6 +1773,7 @@
   }
 
   function detachTurnNavigatorListeners() {
+    cancelPendingTurnJump();
     detachTocScrollListener();
     if (tocResizeHandler) window.removeEventListener('resize', tocResizeHandler);
     if (tocResizeFrame !== null) cancelAnimationFrame(tocResizeFrame);
@@ -1819,44 +1798,83 @@
   }
 
   function jumpToTurn(controlsId, nBtn) {
+    cancelPendingTurnJump();
     let target = controlsId ? document.getElementById(controlsId) : null;
+    const wasDeferred = !target || isBufferedTurnHidden(target);
 
-    // 1. Only restore Smart Optimizer turns if target turn is NOT present in DOM (i.e. detached)
-    const wasDetached = !target;
-    if (wasDetached) {
-      if (window.StudioLab && typeof window.StudioLab.restoreDetached === 'function') {
-        window.StudioLab.restoreDetached();
-      }
-      window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
-      target = controlsId ? document.getElementById(controlsId) : null;
+    // The buffer retains native hosts; reveal them before Angular scrolls to one.
+    if (window.StudioLab && typeof window.StudioLab.restoreDetached === 'function') {
+      window.StudioLab.restoreDetached();
     }
+    window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
+    target = controlsId ? document.getElementById(controlsId) : null;
 
-    // 2. Click native button to update Angular's model
-    if (nBtn) {
-      try { nBtn.click(); } catch (e) { }
+    if (!controlsId) return;
+    if (!target || isBufferedTurnHidden(target)) {
+      pendingTurnJump = { controlsId, nativeButton: nBtn, wasDeferred, route: window.location.pathname + window.location.search };
+      window.addEventListener('__sl_chatRenderCommitted', schedulePendingTurnJump);
+      window.addEventListener('popstate', cancelPendingTurnJump);
+      return;
     }
+    finishTurnJump(controlsId, nBtn, wasDeferred);
+  }
 
-    if (!target) return;
+  function cancelPendingTurnJump() {
+    pendingTurnJump = null;
+    if (pendingTurnJumpFrame !== null) cancelAnimationFrame(pendingTurnJumpFrame);
+    pendingTurnJumpFrame = null;
+    window.removeEventListener('__sl_chatRenderCommitted', schedulePendingTurnJump);
+    window.removeEventListener('popstate', cancelPendingTurnJump);
+  }
 
-    // 3. Non-jarring navigation: only scroll if not already on screen
+  function schedulePendingTurnJump() {
+    if (!pendingTurnJump || pendingTurnJumpFrame !== null) return;
+    pendingTurnJumpFrame = requestAnimationFrame(() => {
+      pendingTurnJumpFrame = null;
+      resumePendingTurnJump();
+    });
+  }
+
+  function resumePendingTurnJump() {
+    const pending = pendingTurnJump;
+    if (!pending) return;
+    if (!isEnabled() || pending.route !== window.location.pathname + window.location.search) {
+      cancelPendingTurnJump();
+      return;
+    }
+    const target = document.getElementById(pending.controlsId);
+    if (!target || isBufferedTurnHidden(target)) return;
+    cancelPendingTurnJump();
+    finishTurnJump(pending.controlsId, pending.nativeButton, pending.wasDeferred);
+  }
+
+  function finishTurnJump(controlsId, nBtn, wasDeferred) {
+    const nativeButton = nBtn?.isConnected && nBtn.getAttribute('aria-controls') === controlsId ? nBtn
+      : Array.from(document.querySelectorAll('ms-items-scrollbar .items-scrollbar-item button'))
+        .find(button => button.getAttribute('aria-controls') === controlsId);
+    // The native button updates Angular's active-turn state after its target exists.
+    if (nativeButton) {
+      try { nativeButton.click(); } catch (e) { }
+    }
+    const target = document.getElementById(controlsId);
+    if (!target || isBufferedTurnHidden(target)) return;
+
     const scroller = document.querySelector('ms-autoscroll-container');
     if (!scroller) return;
 
     const scrollerRect = scroller.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
 
-    // Check if target is already partially or fully visible in the viewport
     const isAlreadyVisible = targetRect.bottom > scrollerRect.top + 60 && targetRect.top < scrollerRect.bottom - 60;
 
     if (isAlreadyVisible) {
-      // Already on screen - do NOT scroll, just highlight!
+      // Keep the viewport steady when any part of the target is already visible.
       target.classList.add('sl-turn-highlight');
       setTimeout(() => target.classList.remove('sl-turn-highlight'), 2000);
       return;
     }
 
-    // If out of view, scroll smoothly into view
-    target.scrollIntoView({ behavior: 'smooth', block: wasDetached ? 'start' : 'nearest' });
+    target.scrollIntoView({ behavior: 'smooth', block: wasDeferred ? 'start' : 'nearest' });
     target.classList.add('sl-turn-highlight');
     setTimeout(() => target.classList.remove('sl-turn-highlight'), 2000);
   }
@@ -1872,18 +1890,19 @@
 
     const targetScroll = scroller.scrollTop + 140;
 
-    let activeIdx = 0;
+    let activeIdx = -1;
     for (let i = 0; i < nativeBtns.length; i++) {
       const cid = nativeBtns[i].getAttribute('aria-controls');
       const el = cid ? document.getElementById(cid) : null;
-      if (!el) continue;
+      if (!el || isBufferedTurnHidden(el)) continue;
+      if (activeIdx === -1) activeIdx = i;
       if (el.offsetTop <= targetScroll) {
         activeIdx = i;
       } else {
         break;
       }
     }
-    return activeIdx;
+    return Math.max(0, activeIdx);
   }
 
   function updateTurnNavigator() {
@@ -1927,7 +1946,6 @@
 
     const scroller = document.querySelector('ms-autoscroll-container');
 
-    // Check if we need to rebuild the DOM tree
     let existingToc = document.querySelector('.sl-chatgpt-toc');
     const titles = nativeBtns.map(button => button.getAttribute('aria-label') || '').join('\n');
     const needsRebuild = !existingToc || existingToc.parentElement !== chatSession ||
@@ -1950,7 +1968,6 @@
       const dashesContainer = document.createElement('div');
       dashesContainer.className = 'sl-toc-dashes-container';
 
-      // Constrain dashes container height to max 9 visible items
       const VISIBLE_DASHES = 9;
       const visibleCount = Math.min(nativeBtns.length, VISIBLE_DASHES);
       dashesContainer.style.height = `${visibleCount * 3 + (visibleCount - 1) * 5}px`;
@@ -1968,7 +1985,6 @@
         const cleanTitle = cleanTurnTitle(nBtn.getAttribute('aria-label'), idx);
         const controlsId = nBtn.getAttribute('aria-controls');
 
-        // Dash button (3px pill)
         const dash = document.createElement('button');
         dash.type = 'button';
         dash.className = 'sl-toc-dash';
@@ -1980,7 +1996,6 @@
         };
         dashesList.appendChild(dash);
 
-        // Popover list item (matching native History style)
         const li = document.createElement('li');
         const pBtn = document.createElement('button');
         pBtn.type = 'button';
@@ -2006,7 +2021,6 @@
       wrapper.appendChild(popover);
       toc.appendChild(wrapper);
 
-      // On hover: auto scroll active popover item into view with debounced hover state
       let hoverTimeout = null;
       toc.addEventListener('mouseenter', () => {
         if (hoverTimeout) clearTimeout(hoverTimeout);
@@ -2027,13 +2041,11 @@
       existingToc = toc;
     }
 
-    // Ensure toc is visible
     existingToc.style.display = '';
 
-    // Synchronize active turn state accurately using viewport positioning
     syncTocActiveState();
 
-    // Attach listeners once with RAF throttling to prevent scroll jitter
+    // Throttle scroll updates to animation frames to avoid navigator jitter.
     let lastTocScrollCheck = 0;
     if (scroller !== tocScroller) {
       detachTocScrollListener();
@@ -2081,7 +2093,6 @@
         else it.classList.remove('active');
       });
 
-      // Slide the 9-dash window to center on active dash
       if (dashesList && nativeBtns.length > 9) {
         const DASH_STRIDE = 8; // 3px + 5px
         const maxOffset = (nativeBtns.length - 9) * DASH_STRIDE;
@@ -2091,24 +2102,6 @@
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  DOM UPDATE CYCLE
-  // ══════════════════════════════════════════════════════════════════
-
-  function relocateToolsBar() {
-    const buttonsRow = document.querySelector('ms-prompt-box .buttons-row');
-    if (!buttonsRow) return;
-
-    const toolsBar = document.querySelector('ms-horizontal-scroll.enabled-tool-container');
-    if (!toolsBar) return;
-
-    // Already relocated?
-    if (toolsBar.parentElement === buttonsRow) return;
-
-    if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Relocating enabled-tools bar into buttons-row.', 'info');
-    rememberNativePosition(toolsBar);
-    buttonsRow.appendChild(toolsBar);
-  }
 
   let pendingMediaMenu = null;
 
@@ -2188,12 +2181,10 @@
         ? pane.previousElementSibling : document.querySelector('.mat-mdc-menu-backdrop');
       if (backdrop) backdrop.click();
 
-      // Download photo
       if (chunk.matches('ms-image-chunk')) {
         chunk.setAttribute('data-sl-dl-target', 'true');
         window.dispatchEvent(new CustomEvent('__sl_download_media', { detail: { filename: 'image.png' } }));
       }
-      // Download file
       else if (chunk.matches('ms-file-chunk')) {
         const nameEl = chunk.querySelector('.name');
         const filename = nameEl ? nameEl.textContent.trim() : 'file';
@@ -2201,7 +2192,6 @@
         chunk.setAttribute('data-sl-dl-target', 'true');
         window.dispatchEvent(new CustomEvent('__sl_download_media', { detail: { filename } }));
       }
-      // Download / view video
       else if (chunk.matches('ms-video-chunk')) {
         const iframe = chunk.querySelector('iframe');
         if (iframe && iframe.src) {
@@ -2228,12 +2218,7 @@
   }
 
   function syncTurnTimestampsAndStatus() {
-    // 1. Purge any bottom status badges from all turns (user turns, model turns, edit mode)
-    const oldBadges = document.querySelectorAll('.sl-turn-status-badge');
-    oldBadges.forEach(b => b.remove());
-
-    // 2. On model turns: only show "• Edited" in .author-label at top if edited
-    const turns = document.querySelectorAll('ms-chat-turn');
+    const turns = document.querySelectorAll('ms-chat-turn:not([data-sl-buffered-turn])');
     turns.forEach(turn => {
       const container = turn.querySelector('.chat-turn-container');
       const isModel = container && container.classList.contains('model');
@@ -2261,8 +2246,11 @@
 
   function performDOMUpdates() {
     if (!isEnabled()) return;
+    if (getPreviewControls()) {
+      reorganizeHeader();
+      return;
+    }
     syncFeaturedModelsFromDialog(findModelDialog());
-    relocateToolsBar();
     modifyPlusMenu();
     modifyHeaderMenu();
     reorganizeHeader();
@@ -2283,18 +2271,10 @@
     domUpdateTimeout = null;
     if (tokenExtractionTimeout !== null) clearTimeout(tokenExtractionTimeout);
     tokenExtractionTimeout = null;
-    if (modelDialogCleanupTimeout !== null) clearTimeout(modelDialogCleanupTimeout);
-    modelDialogCleanupTimeout = null;
     isExtractingTokens = false;
     lastTokenCountText = '';
     if (overlayObserver) { overlayObserver.disconnect(); overlayObserver = null; }
     if (mainObserver) { mainObserver.disconnect(); mainObserver = null; }
-    for (const [node, original] of Array.from(movedNativeNodes).reverse()) {
-      if (original.parent.isConnected || modifiedMenuContents.has(original.parent)) {
-        original.parent.insertBefore(node, original.next?.parentNode === original.parent ? original.next : null);
-      }
-    }
-    movedNativeNodes.clear();
     for (const root of injectedRoots) root.remove();
     injectedRoots.clear();
     for (const content of modifiedMenuContents) {
@@ -2329,23 +2309,15 @@
     const divider = document.querySelector('.sl-divider');
     if (divider) divider.remove();
     document.querySelectorAll('.sl-injected-header-item, .sl-header-menu-divider, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, .sl-custom-dropdown, .sl-drawer-backdrop').forEach(el => el.remove());
-    document.body.classList.remove('sl-settings-open', 'sl-empty-chat', 'sl-reading-thinking-options', 'sl-switching-model', 'sl-syncing-model-picker');
+    document.body?.classList.remove('sl-settings-open', 'sl-empty-chat', 'sl-reading-thinking-options', 'sl-switching-model', 'sl-syncing-model-picker');
     document.querySelectorAll('.sl-backdrop-tint').forEach(node => node.classList.remove('sl-backdrop-tint'));
     const tokenHeader = document.querySelector('.sl-token-section-header');
     if (tokenHeader) tokenHeader.remove();
     const tokenCard = document.querySelector('.sl-tokens-card');
     if (tokenCard) tokenCard.remove();
-    // Dismiss any orphaned token count tooltip overlays or backdrops
-    const tokenTooltips = document.querySelectorAll('.cdk-overlay-pane:has(.token-count-tooltip), .token-count-tooltip');
+    const tokenTooltips = document.querySelectorAll('.token-count-tooltip');
     tokenTooltips.forEach(t => {
-      const pane = t.closest('.cdk-overlay-pane');
-      if (pane) {
-        const backdrop = pane.previousElementSibling?.classList.contains('cdk-overlay-backdrop')
-          ? pane.previousElementSibling
-          : document.querySelector('.cdk-overlay-backdrop');
-        if (backdrop) backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-        pane.remove();
-      }
+      getOverlayBackdrop(t)?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
     const toc = document.querySelector('.sl-chatgpt-toc');
     if (toc) toc.remove();
@@ -2364,9 +2336,6 @@
     lastTocTitles = '';
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  MODULE REGISTRATION
-  // ══════════════════════════════════════════════════════════════════
 
   const modernChatModule = {
     id: 'modern-web-chat',
@@ -2391,7 +2360,6 @@
           !e.target.closest('.sl-custom-dropdown') && !e.target.closest('.sl-header-model-btn') && !e.target.closest('.sl-header-thinking-btn')) {
           closeCustomDropdowns();
         }
-        // Instant trigger for '+' menu
         if (e.target.closest('ms-prompt-box button, .prompt-box-button, button[aria-haspopup="menu"]')) {
           requestAnimationFrame(() => {
             if (!isEnabled()) return;
@@ -2401,11 +2369,14 @@
         }
       };
 
+      if (getPreviewControls()) window._slMediaPointerListener = null;
+
       if (window._slKeydownListener) {
         window.removeEventListener('keydown', window._slKeydownListener);
       }
       window._slKeydownListener = (e) => {
         if (e.key === 'Escape') {
+          if (!e.isTrusted && document.body.classList.contains('sl-reading-thinking-options')) return;
           closeCustomDropdowns(true);
           toggleSettingsDrawer(false);
         }
@@ -2416,6 +2387,8 @@
       this.updateStyles();
     },
     onRouteChange(ctx) {
+      cancelPendingTurnJump();
+      if (getPreviewControls()) return;
       closeCustomDropdowns();
       pendingMediaMenu = null;
       syncModelRoute();
@@ -2428,26 +2401,40 @@
       if (mainObserver) mainObserver.disconnect();
       if (domUpdateTimeout !== null) clearTimeout(domUpdateTimeout);
       domUpdateTimeout = null;
-      mainObserver = new MutationObserver(() => {
+      let chatOnlyUpdate = true;
+      mainObserver = new MutationObserver(mutations => {
+        if (pendingTurnJump && mutations.some(mutation => mutation.addedNodes?.length)) schedulePendingTurnJump();
+        chatOnlyUpdate = chatOnlyUpdate && mutations.every(mutation => {
+          const element = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+          return !!element?.closest('ms-chat-session');
+        });
         if (domUpdateTimeout !== null) return;
         domUpdateTimeout = setTimeout(() => {
           domUpdateTimeout = null;
           if (!isEnabled()) return;
+          const updateChatOnly = chatOnlyUpdate;
+          chatOnlyUpdate = true;
           if (mainObserver) mainObserver.disconnect();
-          try { performDOMUpdates(); } catch (e) { }
+          try {
+            if (updateChatOnly) {
+              updateTurnNavigator();
+              syncTurnTimestampsAndStatus();
+            } else performDOMUpdates();
+          } catch (e) { }
           if (mainObserver && isEnabled()) {
-            mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected'] });
+            mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected', 'data-sl-buffered-turn'] });
           }
         }, 120);
       });
-      mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected'] });
+      mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected', 'data-sl-buffered-turn'] });
 
-      // Synchronous instant observer for overlay panels (eliminates '+' menu flash)
+      // Decorate new overlay panels synchronously to avoid an unstyled + menu flash.
       if (overlayObserver) overlayObserver.disconnect();
       overlayObserver = new MutationObserver((mutations) => {
         if (!isEnabled()) return;
         for (const m of mutations) {
-          if (m.addedNodes && m.addedNodes.length > 0) {
+          if (Array.from(m.addedNodes || []).some(node => node.nodeType === 1 &&
+            (node.closest('.cdk-overlay-container, .mat-mdc-menu-panel') || node.querySelector('.cdk-overlay-container, .mat-mdc-menu-panel')))) {
             modifyPlusMenu();
             modifyHeaderMenu();
             checkOpenMediaMenu();
@@ -2456,7 +2443,7 @@
         }
       });
       const overlayTarget = document.querySelector('.cdk-overlay-container') || document.body || document.documentElement;
-      overlayObserver.observe(overlayTarget, { childList: true, subtree: true });
+      if (!getPreviewControls()) overlayObserver.observe(overlayTarget, { childList: true, subtree: true });
     },
     updateStyles() {
       const on = isEnabled();
@@ -2468,9 +2455,14 @@
           el = document.createElement('link');
           el.id = 'sl-modern-web-chat-styles';
           el.rel = 'stylesheet';
-          el.href = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
-            ? chrome.runtime.getURL('modules/modern-web-chat.css')
-            : '';
+          try {
+            el.href = (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL)
+              ? chrome.runtime.getURL('modules/modern-web-chat.css')
+              : '';
+          } catch (error) {
+            if (window.StudioLab.handleExtensionError?.(error)) return;
+            throw error;
+          }
           el.onload = () => {
             try { performDOMUpdates(); } catch (e) { }
           };
