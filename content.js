@@ -1122,12 +1122,9 @@
       hide(modalEl);
       const pane = nativeSettings?.getHost()?.pane;
       if (pane && themePreview) themePreview.nativeHosted = true;
-      const wrapper = pane?.closest('.cdk-global-overlay-wrapper') || pane;
-      if (wrapper) {
-        hide(wrapper);
-        const previous = wrapper.previousElementSibling;
-        if (previous?.matches('.cdk-overlay-backdrop')) hide(previous);
-      }
+      const overlay = window.StudioLab.NativeSettings?.getOverlayParts(pane);
+      hide(overlay?.host);
+      hide(overlay?.backdrop);
       for (const node of document.body.children) {
         if (node === stage || node === modalEl || ['SCRIPT', 'STYLE', 'LINK'].includes(node.tagName)) continue;
         if (!inert.has(node)) inert.set(node, node.inert);

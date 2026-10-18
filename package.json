@@ -1,6 +1,6 @@
 {
   "name": "studio.lab",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "type": "commonjs",
   "description": "Google AI Studio enhancements extension",

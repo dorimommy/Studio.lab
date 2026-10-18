@@ -1,5 +1,11 @@
 # Studio.lab Changelog
 
+## v2.2.1
+
+**Fullscreen Settings Hotfix**
+
+* **Fixed:** Fullscreen Settings removes its own native GAIS backdrop from the DOM, including backdrops mounted late or inside CDK popovers. This prevents the blurred screen on mobile and in desktop mode without new CSS overrides. A stationary Settings shell also parks its original empty host; unrelated menus keep their backdrops, and a still-open native dialog regains its original backdrop on adapter disposal.
+
 ## v2.2
 
 **Fast Chat Opening, Unified Settings, Accounts & Market**
@@ -35,7 +41,7 @@
 * **Changed:** Themes work only with Modern Web Chat and use all 14 actual native/MWC tokens: 13 editable colors, one transparent border and six opacity controls. Settings, native settings menus, Account and Market keep their neutral native light/dark appearance. Preview is an independent packaged document with sanitized native GAIS component markup, fixed public sample bubbles/code/composer, and the production Modern Web Chat stylesheet and header/dropdown renderers. It never loads saved chats or navigates or recolors the live workspace. Back/Escape restores the connected editor without writing preview changes to storage. Theme creation/editing is computer-only regardless of desktop window width; prompts remain available on mobile.
 * **Changed:** Save draft and Publish are choices in the same editor. Description and tags stay visible; sign-in retains a new draft. Token cards put color and opacity in one compact row with 4px gaps.
 * **Fixed:** Light/Dark switches untouched token values to the matching defaults while preserving edited colors and opacity. Native selected navigation and actions retain filled backgrounds; the composer uses the same raised token as message bubbles. Desktop Thinking Level uses its existing header dropdown with a native fallback when that control is unavailable. Preview has a compact 44px toolbar and displays its public sample immediately without opening a user chat. UI captions cannot be drag-selected; fields and copyable content remain selectable.
-* **Added:** Safe nicknames and unique @tags assigned automatically on verified sign-in, optional edits in Account, public profiles, following, independent likes and private cloud bookmarks. Public IDs differ from Auth IDs; Google identity is never copied into a public profile. Existing profile edits survive initialization. Social writes are idempotent, bounded and account-guarded.
+* **Added:** Safe nicknames and unique profile tags assigned automatically on verified sign-in, optional edits in Account, public profiles, following, independent likes and private cloud bookmarks. Public IDs differ from Auth IDs; Google identity is never copied into a public profile. Existing profile edits survive initialization. Social writes are idempotent, bounded and account-guarded.
 * **Security:** Three owner-RLS social tables and nine authenticated RPCs, three anonymously readable, with revoked direct table/helper access, Google-provider authorization, serialized quotas, profile revisions and account-deletion cascades.
 
 `Settings Design & Interaction` (`content.js`, `sl-panel.css`, `modules/native-settings.js`, `modules/settings-select.*`, `modules/default-profile.js`, `account/`).

@@ -66,6 +66,7 @@
     const semanticAttributes = new Map();
     const semanticClasses = new Map();
     const popupClasses = new Map();
+    let detachedBackdrop = null;
     const chipActiveClasses = new WeakMap();
     const chipPressedStates = new WeakMap();
     const semanticIdPrefix = 'sl-native-setting-' + (++adapterSequence) + '-';
@@ -386,6 +387,7 @@
         }
       }
       commitAttachment();
+      detachNativeBackdrop();
       for (const waiter of [...waiters]) waiter.check();
       enhanceSemantics();
       announce();
@@ -524,20 +526,28 @@
       parent.insertBefore(node, before);
     }
 
+    function detachNativeBackdrop() {
+      if (closing || !hostConnected() || !shell?.contains(host.component)) return;
+      const backdrop = getOverlayParts(host.pane).backdrop;
+      if (!backdrop?.parentNode) return;
+      // Fullscreen Settings covers the page; its native blur layer is redundant.
+      // Keep the original node and listeners so disposal can return a live native dialog.
+      // A replacement supersedes the old CDK backdrop; never restore a stale node.
+      detachedBackdrop = { node: backdrop, parent: backdrop.parentNode, next: backdrop.nextSibling };
+      backdrop.remove();
+    }
+
     function parkNativeHost() {
       // Reparenting reloads private iframes on pre-133 Chromium; hide only this dialog's empty host and focus anchors.
       // Angular retains its view, and separately mounted select portals stay live.
-      addSemanticClass(host.pane, 'sl-native-settings-parked');
-      setSemanticAttribute(host.pane, 'hidden', '');
-      setSemanticAttribute(host.pane, 'inert', '');
-      const wrapper = host.pane.closest('.cdk-global-overlay-wrapper') || host.pane;
-      const siblings = [...(wrapper.parentElement?.children || [])];
-      const backdrop = siblings[siblings.indexOf(wrapper) - 1];
-      // CDK's backdrop precedes its wrapper or pane; leave other dialog and select backdrops alone.
-      if (backdrop?.matches('.cdk-overlay-backdrop')) {
-        addSemanticClass(backdrop, 'sl-native-settings-parked');
-        setSemanticAttribute(backdrop, 'hidden', '');
-        setSemanticAttribute(backdrop, 'inert', '');
+      const overlay = getOverlayParts(host.pane);
+      // New CDK hosts live in the browser's top layer and contain their own
+      // backdrop. Parking only the pane leaves that backdrop above Settings.
+      for (const node of new Set([host.pane, overlay.host])) {
+        if (!node) continue;
+        addSemanticClass(node, 'sl-native-settings-parked');
+        setSemanticAttribute(node, 'hidden', '');
+        setSemanticAttribute(node, 'inert', '');
       }
     }
 
@@ -643,6 +653,14 @@
         if (containerAttributes) restoreAttributes(host.container, containerAttributes);
         if (shell?.parentNode === host.surface) shell.remove();
       }
+      if (detachedBackdrop) {
+        const { node, parent, next } = detachedBackdrop;
+        // Closing CDK owns removal. Do not revive a closed overlay or reclaim a reparented node.
+        if (!node.parentNode && !closing && !closedReported && hostConnected() && parent.isConnected) {
+          parent.insertBefore(node, next?.parentNode === parent ? next : null);
+        }
+      }
+      detachedBackdrop = null;
       for (const [dialog, attributes] of shellDialogAttributes) restoreAttributes(dialog, attributes);
       shellDialogAttributes.clear();
       for (const [element, attributes] of semanticAttributes) {
@@ -681,5 +699,20 @@
     });
   }
 
-  window.StudioLab.NativeSettings = Object.freeze({ createAdapter, isSettingsTrigger });
+  // Resolve one overlay's owner without touching neighboring dialogs or select portals.
+  function getOverlayParts(pane) {
+    const host = pane?.closest('.cdk-overlay-popover') ||
+      pane?.closest('.cdk-global-overlay-wrapper') || pane;
+    let backdrop = null;
+    for (let node = pane; node; node = node.parentElement) {
+      // A popover owns its internal backdrop; its previous sibling belongs to another overlay.
+      if (node === host && host.matches('.cdk-overlay-popover')) break;
+      const previous = node.previousElementSibling;
+      if (previous?.matches('.cdk-overlay-backdrop')) { backdrop = previous; break; }
+      if (node === host) break;
+    }
+    return { host, backdrop };
+  }
+
+  window.StudioLab.NativeSettings = Object.freeze({ createAdapter, isSettingsTrigger, getOverlayParts });
 })();
