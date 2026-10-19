@@ -12,6 +12,7 @@
 !/background.js
 !/content.js
 !/interceptor.js
+!/rpc-transport.js
 !/sl-panel.css
 !/build/
 !/build/build.mjs
