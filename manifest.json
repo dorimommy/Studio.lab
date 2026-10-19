@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "minimum_chrome_version": "116",
   "name": "Studio.lab",
-  "version": "2.2.1",
-  "version_name": "2.2.1",
+  "version": "2.2.2",
+  "version_name": "2.2.2",
   "description": "Unofficial progressive chat loading, response recovery, and workspace extension for Google AI Studio.",
   "permissions": [
     "storage",
@@ -48,6 +48,7 @@
         "https://aistudio.google.com/*"
       ],
       "js": [
+        "dist/core.js",
         "modules/initial-chat-render.js",
         "modules/progressive-chat-render.js",
         "modules/early-chat-visibility.js",
@@ -61,6 +62,7 @@
         "https://aistudio.google.com/*"
       ],
       "js": [
+        "dist/core.js",
         "modules/registry.js",
         "account/catalog-schema.js",
         "modules/settings-select.js",

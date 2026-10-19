@@ -1,11 +1,12 @@
 (function () {
   'use strict';
+  const { $$, debounce } = window.StudioLabCore;
 
   // The preview registers only the production MWC module; it loads no main
   // extension registry, storage, network or GAIS application code.
   let modernChat = null;
   let themePreview = null;
-  let feedbackTimer = null;
+  const hideFeedback = debounce(() => { document.getElementById('preview-feedback').hidden = true; }, 1800);
   const parameters = new URLSearchParams(location.hash.slice(1));
   const requestId = parameters.get('request') || '';
   const validRequest = /^[a-zA-Z0-9_-]{1,120}$/.test(requestId);
@@ -41,8 +42,7 @@
     const node = document.getElementById('preview-feedback');
     node.textContent = message;
     node.hidden = false;
-    clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => { node.hidden = true; }, 1800);
+    hideFeedback();
   }
   const controls = Object.freeze({
     getModel: () => model,
@@ -100,9 +100,9 @@
       controls.onSettingsToggle(false);
       const standaloneMode = !embedded && new URLSearchParams(location.search).get('appearance') === 'light' ? 'light' : 'dark';
       applyTheme(window.StudioLabCatalogSchema.DEFAULT_THEMES[standaloneMode]);
-      document.querySelectorAll('[aria-label="Open navigation menu"], [aria-label="Collapse navigation menu"]').forEach(button => button.addEventListener('click', toggleNavigation));
+      $$('[aria-label="Open navigation menu"], [aria-label="Collapse navigation menu"]').forEach(button => button.addEventListener('click', toggleNavigation));
       document.querySelector('[data-preview-thinking]').addEventListener('click', () => document.querySelector('.sl-header-thinking-btn')?.click());
-      document.querySelectorAll('mat-slide-toggle button').forEach(button => button.addEventListener('click', () => {
+      $$('mat-slide-toggle button').forEach(button => button.addEventListener('click', () => {
         const on = button.getAttribute('aria-checked') !== 'true';
         button.setAttribute('aria-checked', String(on));
         button.closest('mat-slide-toggle').classList.toggle('mat-mdc-slide-toggle-checked', on);
@@ -113,7 +113,7 @@
       const runButton = document.querySelector('ms-run-button button');
       runButton.disabled = true;
       runButton.setAttribute('aria-disabled', 'true');
-      document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
+      $$('[data-copy]').forEach(button => button.addEventListener('click', async () => {
         const selectors = { 'sample-prompt': '.chat-turn-container.user .user-chunk', 'sample-code': 'ms-code-block code', 'sample-response': '.chat-turn-container.model ms-text-chunk' };
         const text = document.querySelector(selectors[button.dataset.copy])?.innerText || '';
         try { await navigator.clipboard.writeText(text); feedback('Copied'); }
@@ -135,7 +135,6 @@
   }, { once: true });
 
   window.addEventListener('pagehide', () => {
-    clearTimeout(feedbackTimer);
     themePreview?.endPreview();
     modernChat?.dispose();
   }, { once: true });

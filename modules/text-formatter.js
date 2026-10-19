@@ -3,8 +3,13 @@
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
+  // SDK: window.StudioLabCore is bundled before this file.
+  const { $, $$, el, scope } = window.StudioLabCore;
+
   let ctxRef = null;
-  let watcherInterval = null;
+  let watching = false;
+  const watcherScope = scope();
+  let taScope = null;
   let activeTextarea = null;
   let floatingToolbarEl = null;
   let inlineToolbarEl = null;
@@ -339,8 +344,7 @@
 
   function injectCSS() {
     if (document.getElementById('sl-text-formatter-css')) return;
-    styleEl = document.createElement('style');
-    styleEl.id = 'sl-text-formatter-css';
+    styleEl = el('<style id="sl-text-formatter-css"></style>');
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
   }
@@ -355,16 +359,16 @@
   }
 
   function startWatcher() {
-    if (watcherInterval) return;
-    watcherInterval = setInterval(attachToPromptBox, 600);
+    if (watching) return;
+    watching = true;
+    watcherScope.every(600, attachToPromptBox);
     attachToPromptBox();
   }
 
   function stopWatcher() {
-    if (watcherInterval) {
-      clearInterval(watcherInterval);
-      watcherInterval = null;
-    }
+    if (!watching) return;
+    watching = false;
+    watcherScope.dispose();
   }
 
   function cleanupDOM() {
@@ -381,13 +385,11 @@
     inlineToolbarEl = null;
     toggleBtnEl = null;
 
-    if (activeTextarea) {
-      activeTextarea.removeEventListener('keydown', handleKeyDown);
-      activeTextarea.removeEventListener('mouseup', handleMouseUp);
-      activeTextarea.removeEventListener('keyup', handleKeyUp);
-      activeTextarea.removeEventListener('blur', handleBlur);
-      activeTextarea = null;
+    if (taScope) {
+      taScope.dispose();
+      taScope = null;
     }
+    activeTextarea = null;
   }
 
   function findPromptTextarea() {
@@ -399,8 +401,8 @@
       'textarea'
     ];
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && el.offsetParent !== null) return el;
+      const candidate = $(sel);
+      if (candidate && candidate.offsetParent !== null) return candidate;
     }
     return null;
   }
@@ -410,92 +412,58 @@
     if (!textarea) return;
 
     if (activeTextarea !== textarea) {
-      if (activeTextarea) {
-        activeTextarea.removeEventListener('keydown', handleKeyDown);
-        activeTextarea.removeEventListener('mouseup', handleMouseUp);
-        activeTextarea.removeEventListener('keyup', handleKeyUp);
-        activeTextarea.removeEventListener('blur', handleBlur);
-      }
+      if (taScope) taScope.dispose();
       activeTextarea = textarea;
-      activeTextarea.addEventListener('keydown', handleKeyDown);
-      activeTextarea.addEventListener('mouseup', handleMouseUp);
-      activeTextarea.addEventListener('keyup', handleKeyUp);
-      activeTextarea.addEventListener('blur', handleBlur);
+      taScope = scope();
+      taScope.on(activeTextarea, 'keydown', handleKeyDown);
+      taScope.on(activeTextarea, 'mouseup', handleMouseUp);
+      taScope.on(activeTextarea, 'keyup', handleKeyUp);
+      taScope.on(activeTextarea, 'blur', handleBlur);
     }
 
     ensureToolbars(textarea);
   }
 
   function createToolbarNode(className, buttons) {
-    const tb = document.createElement('div');
-    tb.className = `sl-fmt-toolbar ${className}`;
-    tb.setAttribute('role', 'toolbar');
-    tb.setAttribute('aria-label', 'Text formatting options');
+    const tb = el(`<div class="sl-fmt-toolbar ${className}" role="toolbar" aria-label="Text formatting options"></div>`);
 
     let headingDropdownAdded = false;
 
     buttons.forEach(btn => {
       if (btn.type === 'separator') {
-        const sep = document.createElement('div');
-        sep.className = 'sl-fmt-sep';
-        tb.appendChild(sep);
+        tb.append(el('<div class="sl-fmt-sep"></div>'));
         return;
       }
 
       if (btn.action === 'h1' && !headingDropdownAdded) {
         headingDropdownAdded = true;
-        const hDrop = document.createElement('div');
-        hDrop.className = 'sl-fmt-heading-dropdown';
-
-        const hBtn = document.createElement('button');
-        hBtn.type = 'button';
-        hBtn.className = 'sl-fmt-btn sl-fmt-heading-btn';
-        hBtn.title = 'Headings';
-        hBtn.setAttribute('aria-label', 'Headings');
-        hBtn.innerHTML = '<span class="sl-fmt-btn-text">H ▾</span>';
-
-        const hMenu = document.createElement('div');
-        hMenu.className = 'sl-fmt-heading-menu';
+        const hDrop = el(`<div class="sl-fmt-heading-dropdown">
+          <button type="button" class="sl-fmt-btn sl-fmt-heading-btn" title="Headings" aria-label="Headings"><span class="sl-fmt-btn-text">H ▾</span></button>
+          <div class="sl-fmt-heading-menu"></div>
+        </div>`);
+        const hMenu = $('.sl-fmt-heading-menu', hDrop);
 
         ['h1', 'h2', 'h3'].forEach((hAct, i) => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.className = 'sl-fmt-heading-item';
-          item.textContent = `H${i + 1}`;
+          const item = el(`<button type="button" class="sl-fmt-heading-item">H${i + 1}</button>`);
           item.addEventListener('mousedown', (e) => {
             e.preventDefault();
             applyFormatting(activeTextarea, hAct);
             hDrop.classList.remove('sl-open');
           });
-          hMenu.appendChild(item);
+          hMenu.append(item);
         });
 
-        hBtn.addEventListener('mousedown', (e) => {
+        $('.sl-fmt-heading-btn', hDrop).addEventListener('mousedown', (e) => {
           e.preventDefault();
           e.stopPropagation();
           hDrop.classList.toggle('sl-open');
         });
 
-        hDrop.appendChild(hBtn);
-        hDrop.appendChild(hMenu);
-        tb.appendChild(hDrop);
+        tb.append(hDrop);
       }
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'sl-fmt-btn';
-      if (btn.action) button.setAttribute('data-action', btn.action);
-      button.title = btn.title;
-      button.setAttribute('aria-label', btn.title);
-
-      if (btn.icon) {
-        button.innerHTML = btn.icon;
-      } else if (btn.text) {
-        const span = document.createElement('span');
-        span.className = 'sl-fmt-btn-text';
-        span.textContent = btn.text;
-        button.appendChild(span);
-      }
+      const label = btn.icon || (btn.text ? `<span class="sl-fmt-btn-text">${btn.text}</span>` : '');
+      const button = el(`<button type="button" class="sl-fmt-btn"${btn.action ? ` data-action="${btn.action}"` : ''} title="${btn.title}" aria-label="${btn.title}">${label}</button>`);
 
       button.addEventListener('mousedown', (e) => {
         e.preventDefault(); // Keep focus in textarea
@@ -506,7 +474,7 @@
         }
       });
 
-      tb.appendChild(button);
+      tb.append(button);
     });
 
     return tb;
@@ -533,12 +501,7 @@
       const buttonWrapper = promptBox.querySelector('.button-wrapper');
       const footerRow = buttonsRow || buttonWrapper;
       if (footerRow) {
-        toggleBtnEl = document.createElement('button');
-        toggleBtnEl.type = 'button';
-        toggleBtnEl.className = 'sl-fmt-toggle';
-        toggleBtnEl.title = 'Format Text';
-        toggleBtnEl.setAttribute('aria-label', 'Toggle formatting toolbar');
-        toggleBtnEl.innerHTML = SVG_ICONS.format;
+        toggleBtnEl = el(`<button type="button" class="sl-fmt-toggle" title="Format Text" aria-label="Toggle formatting toolbar">${SVG_ICONS.format}</button>`);
 
         toggleBtnEl.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -651,7 +614,7 @@
 
   function openCustomLinkModal(textarea) {
     if (!textarea) return;
-    const existing = document.querySelector('.sl-link-modal-overlay');
+    const existing = $('.sl-link-modal-overlay');
     if (existing) existing.remove();
 
     hideFloatingToolbar();
@@ -660,34 +623,31 @@
     const end = textarea.selectionEnd;
     const selectedText = textarea.value.substring(start, end);
 
-    const overlay = document.createElement('div');
-    overlay.className = 'sl-overlay sl-fmt-modal-overlay';
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-
-    overlay.innerHTML = `
+    const overlay = el(`
+      <div class="sl-overlay sl-fmt-modal-overlay" role="dialog" aria-modal="true">
       <div class="sl-fmt-modal">
         <h2>Insert Link</h2>
         <label for="sl-link-url">URL</label>
         <input type="url" id="sl-link-url" placeholder="https://example.com" value="https://" autocomplete="off">
-        
+
         <label for="sl-link-text">Display Text (optional)</label>
         <input type="text" id="sl-link-text" placeholder="Link text" value="${escapeHtml(selectedText)}" autocomplete="off">
-        
+
         <div class="sl-fmt-modal-actions">
           <button type="button" class="sl-fmt-btn-cancel sl-cancel-btn">Cancel</button>
           <button type="button" class="sl-fmt-btn-submit sl-submit-btn">Insert Link</button>
         </div>
       </div>
-    `;
+      </div>
+    `);
 
     document.body.appendChild(overlay);
 
-    const urlInput = overlay.querySelector('#sl-link-url');
-    const textInput = overlay.querySelector('#sl-link-text');
-    const closeBtn = overlay.querySelector('.sl-close-btn');
-    const cancelBtn = overlay.querySelector('.sl-cancel-btn');
-    const submitBtn = overlay.querySelector('.sl-submit-btn');
+    const urlInput = $('#sl-link-url', overlay);
+    const textInput = $('#sl-link-text', overlay);
+    const closeBtn = $('.sl-close-btn', overlay);
+    const cancelBtn = $('.sl-cancel-btn', overlay);
+    const submitBtn = $('.sl-submit-btn', overlay);
 
     setTimeout(() => {
       urlInput.focus();
@@ -1056,7 +1016,7 @@
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.sl-fmt-heading-dropdown')) {
-      document.querySelectorAll('.sl-fmt-heading-dropdown.sl-open').forEach(d => d.classList.remove('sl-open'));
+      $$('.sl-fmt-heading-dropdown.sl-open').forEach(d => d.classList.remove('sl-open'));
     }
   });
 

@@ -3,6 +3,8 @@
 (function () {
   'use strict';
 
+  const { $, $$, el, observe, scope, store } = window.StudioLabCore;
+
   let manifest;
   try {
     if (!chrome.runtime?.id) return;
@@ -205,6 +207,7 @@
   let feedbackHideTimer = null;
   const moduleErrors = new Map();
   const recentErrors = [];
+  const shellScope = scope();
 
   function extensionActive() {
     return !contextStopped && moduleApi.isExtensionActive();
@@ -220,10 +223,7 @@
     closeUpdatePopup?.();
     closeModal();
     for (const module of [...modules].reverse()) callModule(module, 'dispose');
-    document.removeEventListener('click', handleSettingsEntry, true);
-    window.removeEventListener('__sl_openSettings', handleOpenSettings);
-    try { chrome.storage.onChanged.removeListener(handleStorageChange); } catch (_) {}
-    try { chrome.runtime.onMessage.removeListener(handleContentMessage); } catch (_) {}
+    shellScope.dispose();
   }
 
   moduleApi.onExtensionInvalidated(stopInvalidatedContext);
@@ -260,21 +260,28 @@
   waitForSidebar();
   startRouteWatcher();
 
-  try { chrome.storage.local.get([STORAGE_KEY], (data) => {
+  function finishInitialLoad() {
     if (!extensionActive()) return;
-    const error = chrome.runtime.lastError;
-    if (error && moduleApi.handleExtensionError(error)) return;
-    if (data && data[STORAGE_KEY]) {
-      Object.assign(state, migrateStoredState(data[STORAGE_KEY]));
-      normalizeState();
-      if (Object.prototype.hasOwnProperty.call(data[STORAGE_KEY], 'bypassEnabled')) saveState();
-    }
-
     initialized = true;
     initModules();
     refreshLiveStats();
     checkUpdates();
-  }); } catch (error) {
+  }
+  try {
+    store.get([STORAGE_KEY]).then(data => {
+      if (!extensionActive()) return;
+      if (data && data[STORAGE_KEY]) {
+        Object.assign(state, migrateStoredState(data[STORAGE_KEY]));
+        normalizeState();
+        if (Object.prototype.hasOwnProperty.call(data[STORAGE_KEY], 'bypassEnabled')) saveState();
+      }
+      finishInitialLoad();
+    }, error => {
+      if (!extensionActive()) return;
+      if (moduleApi.handleExtensionError(error)) return;
+      finishInitialLoad();
+    });
+  } catch (error) {
     if (!moduleApi.handleExtensionError(error)) recordError('settings', error, 'load');
   }
 
@@ -297,7 +304,7 @@
     updateModalState();
   }
   if (!extensionActive()) return;
-  chrome.storage.onChanged.addListener(handleStorageChange);
+  shellScope.add(store.onChange(handleStorageChange));
 
   let applyingCatalogPrompt = false;
   function handleContentMessage(msg, sender, reply) {
@@ -310,7 +317,7 @@
       reply({ ok: false, error: 'The system prompt request was invalid.' }); return;
     }
     if (applyingCatalogPrompt) { reply({ ok: false, error: 'Another system prompt is being applied. Try again.' }); return; }
-    if (!document.querySelector('ms-prompt-box, ms-system-instructions-panel, textarea[aria-label="System instructions"]')) {
+    if (!$('ms-prompt-box, ms-system-instructions-panel, textarea[aria-label="System instructions"]')) {
       reply({ ok: false, error: 'Open a chat in Google AI Studio before applying this prompt.' }); return;
     }
     applyingCatalogPrompt = true;
@@ -340,8 +347,9 @@
     return true;
   }
   chrome.runtime.onMessage.addListener(handleContentMessage);
+  shellScope.add(() => chrome.runtime.onMessage.removeListener(handleContentMessage));
   function handleOpenSettings() { if (extensionActive()) openModal(); }
-  window.addEventListener('__sl_openSettings', handleOpenSettings);
+  shellScope.on(window, '__sl_openSettings', handleOpenSettings);
 
   function buildInitialState() {
     const initial = Object.assign({}, DEFAULT_STATE);
@@ -402,7 +410,7 @@
       if (!extensionActive()) return;
       const sequence = ++saveSequence;
       lastLocalSave = JSON.stringify(state);
-      Promise.resolve(chrome.storage.local.set({ [STORAGE_KEY]: state })).then(() => {
+      store.set({ [STORAGE_KEY]: state }).then(() => {
         if (extensionActive() && sequence === saveSequence) announceSettings('Settings saved in this browser.');
       }).catch(error => {
         if (moduleApi.handleExtensionError(error)) return;
@@ -476,10 +484,10 @@
   }
 
   function waitForSidebar() {
-    document.querySelectorAll('.sl-sidebar-btn, .sl-user-settings-item').forEach(button => button.remove());
+    $$('.sl-sidebar-btn, .sl-user-settings-item').forEach(button => button.remove());
     if (settingsEntryBound) return;
     settingsEntryBound = true;
-    document.addEventListener('click', handleSettingsEntry, true);
+    shellScope.on(document, 'click', handleSettingsEntry, true);
   }
 
   function handleSettingsEntry(event) {
@@ -496,14 +504,13 @@
   }
 
   function showHealthCheckWarning() {
-    if (document.querySelector('.sl-health-check-toast')) return;
-    const toast = document.createElement('div');
-    toast.className = 'sl-health-check-toast';
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:sans-serif;font-size:14px;display:flex;align-items:center;gap:12px;';
-    toast.innerHTML = `
-      <span>⚠️ Можливо, Google оновив інтерфейс. Деякі функції Studio.lab можуть не працювати.</span>
-      <button style="background:none;border:none;color:#fff;cursor:pointer;padding:4px;" aria-label="Close">✕</button>
-    `;
+    if ($('.sl-health-check-toast')) return;
+    const toast = el(`
+      <div class="sl-health-check-toast" style="position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:sans-serif;font-size:14px;display:flex;align-items:center;gap:12px;">
+        <span>⚠️ Можливо, Google оновив інтерфейс. Деякі функції Studio.lab можуть не працювати.</span>
+        <button style="background:none;border:none;color:#fff;cursor:pointer;padding:4px;" aria-label="Close">✕</button>
+      </div>
+    `);
     toast.querySelector('button').addEventListener('click', () => toast.remove());
     document.body.appendChild(toast);
     setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 15000);
@@ -566,8 +573,7 @@
       // Studio.lab remains usable when Google changes or delays its native settings.
     }
 
-    modalEl = document.createElement('div');
-    modalEl.className = 'sl-overlay';
+    modalEl = el('<div class="sl-overlay"></div>');
     modalEl.addEventListener('click', (event) => {
       if (event.target === modalEl) closeModal();
     });
@@ -637,7 +643,7 @@
         if (!extensionActive()) return;
         updateStatus = result || { ok: false };
         if (!result?.updateAvailable || !result.latestVersion || !result.releaseUrl) return;
-        const stored = await chrome.storage.local.get(['slDismissedUpdateTag']);
+        const stored = await store.get(['slDismissedUpdateTag']);
         if (!extensionActive()) return;
         if (stored.slDismissedUpdateTag !== result.latestVersion) showUpdatePopup(result);
       })
@@ -648,28 +654,22 @@
   }
 
   function showUpdatePopup(release) {
-    if (!extensionActive() || modalEl || document.querySelector('.sl-update-overlay')) return;
-    const overlay = document.createElement('div');
-    overlay.className = 'sl-update-overlay';
-    const popup = document.createElement('div');
-    popup.className = 'sl-update-popup';
-    popup.style.setProperty('--sl-update-background', `url("${chrome.runtime.getURL('images/update-space.webp')}")`);
-    popup.setAttribute('role', 'dialog');
-    popup.setAttribute('aria-modal', 'true');
-    popup.setAttribute('aria-labelledby', 'sl-update-title');
-    popup.setAttribute('aria-describedby', 'sl-update-description');
-    popup.tabIndex = -1;
-    popup.innerHTML = `
-      <div class="sl-update-popup-content">
-        <span class="sl-update-popup-brand"><img src="${chrome.runtime.getURL('images/SL_logotype.svg')}" alt="" aria-hidden="true">Studio.lab</span>
-        <h2 id="sl-update-title">A new version <span>is here!</span></h2>
-        <p id="sl-update-description">Studio.lab <strong data-sl-latest-version></strong> is ready. See what's new before you update.</p>
-        <div class="sl-update-popup-actions">
-          <button type="button">Dismiss</button>
-          <a target="_blank" rel="noopener noreferrer">View release ${renderIcon('arrow_outward', 'detail')}</a>
+    if (!extensionActive() || modalEl || $('.sl-update-overlay')) return;
+    const overlay = el('<div class="sl-update-overlay"></div>');
+    const popup = el(`
+      <div class="sl-update-popup" role="dialog" aria-modal="true" aria-labelledby="sl-update-title" aria-describedby="sl-update-description" tabindex="-1">
+        <div class="sl-update-popup-content">
+          <span class="sl-update-popup-brand"><img src="${chrome.runtime.getURL('images/SL_logotype.svg')}" alt="" aria-hidden="true">Studio.lab</span>
+          <h2 id="sl-update-title">A new version <span>is here!</span></h2>
+          <p id="sl-update-description">Studio.lab <strong data-sl-latest-version></strong> is ready. See what's new before you update.</p>
+          <div class="sl-update-popup-actions">
+            <button type="button">Dismiss</button>
+            <a target="_blank" rel="noopener noreferrer">View release ${renderIcon('arrow_outward', 'detail')}</a>
+          </div>
         </div>
       </div>
-      `;
+    `);
+    popup.style.setProperty('--sl-update-background', `url("${chrome.runtime.getURL('images/update-space.webp')}")`);
     popup.querySelector('[data-sl-latest-version]').textContent = `v${String(release.latestVersion).replace(/^v/i, '')}`;
     const releaseLink = popup.querySelector('.sl-update-popup-actions a');
     releaseLink.href = release.releaseUrl;
@@ -677,7 +677,7 @@
     const closePopup = (rememberDismissal = false) => {
       if (rememberDismissal && extensionActive()) {
         Promise.resolve().then(() => {
-          if (extensionActive()) return chrome.storage.local.set({ slDismissedUpdateTag: release.latestVersion });
+          if (extensionActive()) return store.set({ slDismissedUpdateTag: release.latestVersion });
         }).catch(error => { moduleApi.handleExtensionError(error); });
       }
       document.removeEventListener('keydown', onKeyDown, true);
@@ -736,7 +736,7 @@
     searchResultsSignature = '';
     document.removeEventListener('keydown', escHandler);
     const focusTarget = returnFocus?.isConnected && returnFocus !== document.body ? returnFocus
-      : document.querySelector('ms-settings-menu button[data-test-id="settings-menu"], ms-settings-menu button[aria-label="Settings"]');
+      : $('ms-settings-menu button[data-test-id="settings-menu"], ms-settings-menu button[aria-label="Settings"]');
     focusTarget?.focus({ preventScroll: true });
     returnFocus = null;
   }
@@ -819,8 +819,8 @@
     };
     disableSiblings();
     if (modalScope && !backgroundInertObserver) {
-      backgroundInertObserver = new MutationObserver(disableSiblings);
-      modalScope.observe(backgroundInertObserver, document.body, { childList: true });
+      backgroundInertObserver = observe(document.body, { childList: true }, disableSiblings);
+      modalScope.add(backgroundInertObserver);
     }
   }
 
@@ -889,8 +889,8 @@
   }
 
   function readVisibleGaisProfile() {
-    const account = document.querySelector('ms-account-switcher .account-switcher-button') ||
-      document.querySelector('button[aria-label^="Google Account:"]');
+    const account = $('ms-account-switcher .account-switcher-button') ||
+      $('button[aria-label^="Google Account:"]');
     const image = account?.querySelector('img');
     const name = image?.getAttribute('alt')?.trim().slice(0, 80) || '';
     let source = '';
@@ -1094,21 +1094,9 @@
     }
     closeSettingsMenu(false);
     // The preview uses production MWC controls with public sample messages and leaves the live chat untouched.
-    const stage = document.createElement('section');
-    stage.className = 'sl-theme-preview-stage';
-    stage.setAttribute('role', 'dialog');
-    stage.setAttribute('aria-modal', 'true');
-    stage.setAttribute('aria-label', 'Modern Web Chat theme preview');
-    const bar = document.createElement('section');
-    bar.className = 'sl-theme-preview-bar';
-    bar.setAttribute('role', 'region');
-    bar.setAttribute('aria-label', 'Google AI Studio theme preview');
-    bar.innerHTML = `<div class="sl-theme-preview-copy"><strong>Theme preview</strong></div><div class="sl-theme-preview-actions"><button type="button" data-sl-preview-back>Back to Market</button></div>`;
-    const previewFrame = document.createElement('iframe');
-    previewFrame.className = 'sl-theme-preview-frame';
-    previewFrame.title = 'Modern Web Chat with your theme';
-    previewFrame.setAttribute('aria-busy', 'true');
-    previewFrame.referrerPolicy = 'no-referrer';
+    const stage = el('<section class="sl-theme-preview-stage" role="dialog" aria-modal="true" aria-label="Modern Web Chat theme preview"></section>');
+    const bar = el('<section class="sl-theme-preview-bar" role="region" aria-label="Google AI Studio theme preview"><div class="sl-theme-preview-copy"><strong>Theme preview</strong></div><div class="sl-theme-preview-actions"><button type="button" data-sl-preview-back>Back to Market</button></div></section>');
+    const previewFrame = el('<iframe class="sl-theme-preview-frame" title="Modern Web Chat with your theme" aria-busy="true" referrerpolicy="no-referrer"></iframe>');
     previewFrame.src = chrome.runtime.getURL('account/theme-preview.html') + '#request=' + encodeURIComponent(requestId) +
       '&parent=' + encodeURIComponent(location.origin);
     stage.append(bar, previewFrame);
@@ -1131,7 +1119,6 @@
         node.inert = true;
       }
     }
-    const observer = new MutationObserver(park);
     function onPreviewMessage(event) {
       if (!event.isTrusted || event.origin !== origin || event.source !== previewFrame.contentWindow ||
           event.data?.requestId !== requestId || themePreview?.stage !== stage) return;
@@ -1143,7 +1130,7 @@
       } else if (event.data.type === 'sl-theme-preview-close') finishThemePreview('return');
       else if (event.data.type === 'sl-theme-preview-error') finishThemePreview('error');
     }
-    themePreview = { frame, requestId, bar, stage, previewFrame, parked, inert, park, reply, observer, onPreviewMessage,
+    themePreview = { frame, requestId, bar, stage, previewFrame, parked, inert, park, reply, onPreviewMessage,
       nativeHosted: !!nativeSettings?.getHost() };
     try {
       nativeSettings?.setPreviewActive?.(true);
@@ -1158,7 +1145,7 @@
       themePreview.readyTimeout = setTimeout(() => {
         if (themePreview?.stage === stage) finishThemePreview('error');
       }, 15000);
-      observer.observe(document.body, { childList: true, subtree: true });
+      themePreview.observer = observe(document.body, { childList: true, subtree: true }, park);
       bar.querySelector('[data-sl-preview-back]').addEventListener('click', () => finishThemePreview('return'));
       bar.querySelector('[data-sl-preview-back]').focus({ preventScroll: true });
     } catch (_) { finishThemePreview('error'); }
@@ -1169,7 +1156,7 @@
     if (!current) return;
     themePreview = null;
     clearTimeout(current.readyTimeout);
-    current.observer.disconnect();
+    current.observer?.();
     window.removeEventListener('message', current.onPreviewMessage);
     current.stage.remove();
     for (const [node, existed] of current.parked) if (!existed) node.classList.remove('sl-theme-preview-hidden');
@@ -1426,8 +1413,7 @@
         }
       });
       catalogFrames.forEach(frame => modalScope.listen(frame, 'load', sendCatalogViewport));
-      const observer = new MutationObserver(updateAccountFrame);
-      modalScope.observe(observer, document.body, { attributes: true, attributeFilter: ['class'] });
+      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
       modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendCatalogViewport, { passive: true });
       modalScope.listen(window, 'resize', sendCatalogViewport);
     }
@@ -1463,8 +1449,7 @@
           focusable[(index + step + focusable.length) % focusable.length]?.focus();
         }
       });
-      const themeObserver = new MutationObserver(updateAccountFrame);
-      modalScope.observe(themeObserver, document.body, { attributes: true, attributeFilter: ['class'] });
+      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
       modalScope.listen(accountFrame, 'load', sendAccountViewport);
       modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendAccountViewport, { passive: true });
       modalScope.listen(window, 'resize', () => {
@@ -1703,10 +1688,9 @@
     const focusedKey = document.activeElement?.dataset?.slSearchResult;
     list.replaceChildren();
     for (const entry of entries) {
-      const li = document.createElement('li'), button = document.createElement('button');
+      const li = el('<li></li>');
+      const button = el('<button type="button" class="sl-settings-result"></button>');
       const page = TABS.find(tab => tab.id === entry.tab)?.label || 'Studio.lab';
-      button.type = 'button';
-      button.className = 'sl-settings-result';
       button.dataset.slSearchResult = entry.key;
       button.dataset.slSearchDestination = entry.tab;
       button.innerHTML = `<span class="sl-setting-copy"><span class="sl-setting-result-page">${html(page)}</span><span class="sl-setting-label">${html(entry.title)}</span>${entry.help ? `<span class="sl-setting-help">${html(entry.help)}</span>` : ''}</span>${renderIcon('arrow_outward', 'plain')}`;
@@ -1765,12 +1749,12 @@
     const sel = (window.StudioLab && window.StudioLab.SELECTORS) 
       ? window.StudioLab.SELECTORS.CHAT_TURN 
       : 'ms-chat-turn';
-    return Array.from(document.querySelectorAll(sel)).filter(turn => !turn.hasAttribute('data-sl-buffered-turn')).length;
+    return $$(sel).filter(turn => !turn.hasAttribute('data-sl-buffered-turn')).length;
   }
 
   function getDiagnostics() {
-    const ngVersion = document.querySelector('[ng-version]')?.getAttribute('ng-version') || 
-                      document.querySelector('app-root')?.getAttribute('ng-version') || 
+    const ngVersion = $('[ng-version]')?.getAttribute('ng-version') ||
+                      $('app-root')?.getAttribute('ng-version') ||
                       'Not detected';
 
     const criticalSelectors = {
@@ -1788,7 +1772,7 @@
     const domCheck = {};
     let missingCount = 0;
     for (const [name, sel] of Object.entries(criticalSelectors)) {
-      const foundNodes = document.querySelectorAll(sel);
+      const foundNodes = $$(sel);
       domCheck[name] = {
         selector: sel,
         found: foundNodes.length > 0,
@@ -1891,7 +1875,7 @@
     if (handleSettingsMenuKey(event)) return;
     // A native popup or a second CDK dialog owns its own Escape and focus trap.
     const nativeHost = nativeSettings?.getHost()?.container;
-    const nativePopup = [...document.querySelectorAll('.cdk-overlay-container [role="listbox"], .cdk-overlay-container [role="menu"], .cdk-overlay-container [role="dialog"], .sl-update-popup')]
+    const nativePopup = $$('.cdk-overlay-container [role="listbox"], .cdk-overlay-container [role="menu"], .cdk-overlay-container [role="dialog"], .sl-update-popup')
       .some(node => node !== nativeHost && !modalEl?.contains(node) && node.getClientRects().length);
     if (nativePopup) return;
     if (event.key === 'Escape') closeModal();

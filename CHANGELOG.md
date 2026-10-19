@@ -1,5 +1,13 @@
 # Studio.lab Changelog
 
+## v2.2.2
+
+**SDK Testing — internal @studiolab/core migration**
+
+* **Added:** `@studiolab/core` (`packages/core/`, built to `dist/core.js` via esbuild) — a zero-dependency internal SDK that removes content-script boilerplate: `$`/`$$` queries, `el()` element creation, `waitFor()` polling, `debounce()`, `observe()`/`onAdded()` mutation observers with single-disposer cleanup, `scope()` listener lifecycle, and a promise-based `store` wrapper for `chrome.storage`. Loaded as a plain script (`window.StudioLabCore`) first in every context: MAIN/ISOLATED content scripts, account pages; service-worker safe by design.
+* **Changed:** All content modules (`modules/`), `content.js`, `interceptor.js`, and `account/` pages migrated onto the SDK. Behavior preserved 1:1 — same module metadata, storage keys, selectors, event names, timings, and user-visible strings. Hand-rolled storage wrappers, poll/retry loops, scattered `MutationObserver` disconnects, and listener bookkeeping replaced with SDK calls; duplicated wrappers deduplicated.
+* **Note:** Testing pre-release from the `sdk-testing` branch. Not merged to `main`.
+
 ## v2.2.1
 
 **Fullscreen Settings Hotfix**

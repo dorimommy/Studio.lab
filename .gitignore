@@ -8,10 +8,20 @@
 !/CODE_OF_CONDUCT.md
 !/LICENSE
 !/manifest.json
+!/package.json
 !/background.js
 !/content.js
 !/interceptor.js
 !/sl-panel.css
+!/build/
+!/build/build.mjs
+!/dist/
+!/dist/core.js
+!/packages/
+!/packages/core/
+!/packages/core/package.json
+!/packages/core/src/
+!/packages/core/src/index.js
 
 !/modules/
 !/modules/registry.js

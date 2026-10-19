@@ -4,10 +4,15 @@
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
+  // window.StudioLabCore (packages/core) is bundled before this module.
+  // `el` is intentionally not destructured: this file already binds `el`
+  // locally (updateStyles, dispatchPointerClick, cleanup callbacks).
+  const { $, $$, waitFor, observe } = window.StudioLabCore;
+
   let ctxRef = null;
   let styleEl = null;
-  let mainObserver = null;
-  let overlayObserver = null;
+  let mainObserver = null; // SDK observe() disposer (was MutationObserver)
+  let overlayObserver = null; // SDK observe() disposer (was MutationObserver)
   let updateScheduled = false;
   let globalHandlersAttached = false;
   const hiddenNativeButtons = new Map();
@@ -63,7 +68,7 @@
   }
 
   function getNativeRunSettingsToggle() {
-    return Array.from(document.querySelectorAll('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"], button[aria-label="Run Settings"], button[aria-label*="run settings" i]'))
+    return $$('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"], button[aria-label="Run Settings"], button[aria-label*="run settings" i]')
       .find(button => !button.closest('.sl-header-btn, [data-sl-modern-created]')) || null;
   }
 
@@ -107,7 +112,7 @@
 
   function getToolControl(toolName) {
     const name = toolName.toLowerCase();
-    const row = Array.from(document.querySelectorAll('ms-run-settings .settings-item.settings-tool, ms-prompt-run-settings .settings-item.settings-tool'))
+    const row = $$('ms-run-settings .settings-item.settings-tool, ms-prompt-run-settings .settings-item.settings-tool')
       .find(item => item.querySelector('h3')?.textContent.trim().toLowerCase() === name);
     const toggle = row?.querySelector('mat-slide-toggle');
     return toggle ? { toggle, button: toggle.querySelector('button'), input: toggle.querySelector('input') } : null;
@@ -119,7 +124,7 @@
       return control.toggle.classList.contains('mat-mdc-slide-toggle-checked') ||
         control.button?.getAttribute('aria-checked') === 'true' || !!control.input?.checked;
     }
-    return Array.from(document.querySelectorAll('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool'))
+    return $$('.enabled-tool-container .enabled-tool, ms-horizontal-scroll .enabled-tool')
       .some(chip => (chip.textContent || '').toLowerCase().includes(toolName.toLowerCase()));
   }
 
@@ -146,10 +151,10 @@
     if (!isEnabled()) return false;
     if (getToolControl(toolName)) return true;
     if (await waitForModelValue(() => getToolControl(toolName), 250)) return true;
-    const panel = document.querySelector('ms-run-settings');
-    const openBtn = document.querySelector('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
+    const panel = $('ms-run-settings');
+    const openBtn = $('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
     if ((!panel || !panel.classList.contains('expanded')) && openBtn) openBtn.click();
-    const toolsGroup = Array.from(document.querySelectorAll('ms-prompt-run-settings .field-group, ms-run-settings .field-group'))
+    const toolsGroup = $$('ms-prompt-run-settings .field-group, ms-run-settings .field-group')
       .find(group => /\bTools\b/i.test(group.textContent || ''));
     if (toolsGroup && !toolsGroup.querySelector('mat-slide-toggle')) {
       toolsGroup.querySelector('button[aria-label*="xpand" i], button.expand-icon, .group-header')?.click();
@@ -224,7 +229,7 @@
   }
 
   function modifyPlusMenu() {
-    const contents = document.querySelectorAll('.mat-mdc-menu-content:not([data-sl-injected])');
+    const contents = $$('.mat-mdc-menu-content:not([data-sl-injected])');
     if (contents.length > 0) {
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found ' + contents.length + ' uninjected menu contents', 'info');
     }
@@ -335,7 +340,7 @@
       content.appendChild(divider);
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
 
-      const nativeTools = document.querySelector('ms-prompt-box-tools button') || document.querySelector('.prompt-box-tools button');
+      const nativeTools = $('ms-prompt-box-tools button') || $('.prompt-box-tools button');
       if (nativeTools) {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Tools button, adding flyout submenu to menu.', 'info');
         const toolsWrapper = document.createElement('div');
@@ -450,7 +455,7 @@
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Native Tools button NOT FOUND in DOM.', 'warn');
       }
 
-      const nativeKey = document.querySelector('ms-paid-api-key-button button') || document.querySelector('.paid-api-key-button');
+      const nativeKey = $('ms-paid-api-key-button button') || $('.paid-api-key-button');
       if (nativeKey) {
         if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Found native Paid API Key button, adding proxy to menu.', 'info');
         const keyBtn = document.createElement('button');
@@ -490,14 +495,14 @@
   }
 
   function modifyHeaderMenu() {
-    const menuContent = document.querySelector('.toolbar-overflow-menu .mat-mdc-menu-content:not([data-sl-header-injected])');
+    const menuContent = $('.toolbar-overflow-menu .mat-mdc-menu-content:not([data-sl-header-injected])');
     if (!menuContent) return;
 
     menuContent.dataset.slHeaderInjected = 'true';
     modifiedMenuContents.add(menuContent);
 
-    const hasTurns = !!document.querySelector('ms-chat-turn');
-    const promptValue = document.querySelector('ms-prompt-box textarea')?.value?.trim();
+    const hasTurns = !!$('ms-chat-turn');
+    const promptValue = $('ms-prompt-box textarea')?.value?.trim();
     const isEmptyChat = !hasTurns && !promptValue;
 
     if (isEmptyChat) {
@@ -548,7 +553,7 @@
       }
     ];
 
-    if (window.innerWidth > 768 && document.querySelector('button.compare-button, button[aria-label*="Compare"]')) {
+    if (window.innerWidth > 768 && $('button.compare-button, button[aria-label*="Compare"]')) {
       proxyItems.push({
         icon: 'compare_arrows',
         label: 'Compare mode',
@@ -590,13 +595,13 @@
         e.stopPropagation();
 
         // Dismiss only this menu's backdrop so newly opened dialogs stay intact.
-        const menuBackdrop = document.querySelector('.mat-mdc-menu-backdrop');
+        const menuBackdrop = $('.mat-mdc-menu-backdrop');
         if (menuBackdrop) {
           menuBackdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         }
 
         if (item.label === 'Edit title') {
-          const target = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+          const target = $('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
           if (target) {
             try {
               target.click();
@@ -609,7 +614,7 @@
           return;
         }
 
-        const target = item.targetSelector ? document.querySelector(item.targetSelector) : null;
+        const target = item.targetSelector ? $(item.targetSelector) : null;
         if (target) {
           try {
             target.click();
@@ -662,12 +667,12 @@
   const thinkingSelectSelector = 'mat-select[aria-label="Thinking Level"], ms-thinking-level-setting mat-select, ms-run-settings mat-select[aria-label*="hinking"], ms-run-settings .thinking-level mat-select';
 
   function getThinkingSelect() {
-    return document.querySelector(thinkingSelectSelector);
+    return $(thinkingSelectSelector);
   }
 
   function getThinkingPanel(select) {
     const panelId = select?.getAttribute('aria-controls') || select?.getAttribute('aria-owns') || (select?.id ? select.id + '-panel' : null);
-    return panelId ? document.getElementById(panelId) : document.querySelector('.mat-mdc-select-panel');
+    return panelId ? document.getElementById(panelId) : $('.mat-mdc-select-panel');
   }
 
   function getAvailableThinkingLevels(panel) {
@@ -698,8 +703,8 @@
     syncModelRoute();
     // The native card and URL are authoritative. A previous custom-menu label
     // must never mask a model selected in AI Studio itself.
-    const nativeModel = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
-    const nativeName = document.querySelector('ms-model-selector .title')?.textContent.trim();
+    const nativeModel = $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
+    const nativeName = $('ms-model-selector .title')?.textContent.trim();
     if (nativeModel && nativeName) {
       rememberModel(nativeModel, nativeName);
       return cachedModelName;
@@ -723,12 +728,12 @@
       }
     } catch (_) {}
 
-    const titleEl = document.querySelector('ms-run-settings ms-model-selector .title, ms-run-settings ms-model-selector .model-title, ms-run-settings .model-card .title, ms-model-selector .title, ms-model-selector h3');
+    const titleEl = $('ms-run-settings ms-model-selector .title, ms-run-settings ms-model-selector .model-title, ms-run-settings .model-card .title, ms-model-selector .title, ms-model-selector h3');
     if (titleEl && titleEl.textContent.trim()) {
       rememberModel('', titleEl.textContent.trim());
       return cachedModelName;
     }
-    const nativeModelTag = document.querySelector('ms-model-selector span[data-test-id="model-name"], ms-model-selector .model-name, ms-model-selector .subtitle');
+    const nativeModelTag = $('ms-model-selector span[data-test-id="model-name"], ms-model-selector .model-name, ms-model-selector .subtitle');
     if (nativeModelTag && nativeModelTag.textContent.trim()) {
       rememberModel(nativeModelTag.textContent.trim(), formatModelSlug(nativeModelTag.textContent.trim()));
       return cachedModelName;
@@ -750,11 +755,11 @@
 
   function updateEmptyChatState() {
     if (getPreviewControls()) {
-      document.body.classList.toggle('sl-empty-chat', !document.querySelector('ms-chat-turn'));
+      document.body.classList.toggle('sl-empty-chat', !$('ms-chat-turn'));
       return;
     }
     const isNew = window.location.pathname.includes('/prompts/new_chat');
-    const turns = document.querySelectorAll('ms-chat-turn');
+    const turns = $$('ms-chat-turn');
     const isEmpty = isNew || turns.length === 0;
     if (isEmpty) {
       document.body.classList.add('sl-empty-chat');
@@ -765,7 +770,7 @@
 
   function closeCustomDropdowns(restoreFocus = false) {
     dropdownGeneration++;
-    document.querySelectorAll('.sl-custom-dropdown').forEach(dropdown => {
+    $$('.sl-custom-dropdown').forEach(dropdown => {
       const owner = dropdown.slOwner;
       owner?.setAttribute('aria-expanded', 'false');
       owner?.removeAttribute('aria-controls');
@@ -806,32 +811,29 @@
   }
 
   async function ensureRunSettingsMounted() {
-    if (getPreviewControls()) return document.querySelector('ms-model-selector button');
+    if (getPreviewControls()) return $('ms-model-selector button');
     if (!isEnabled()) return null;
-    let nativeTrigger = document.querySelector('ms-model-selector button.model-selector-card, ms-model-selector button');
+    const triggerSelector = 'ms-model-selector button.model-selector-card, ms-model-selector button';
+    const nativeTrigger = $(triggerSelector);
     if (nativeTrigger) return nativeTrigger;
 
     const toggleBtn = getNativeRunSettingsToggle();
     if (toggleBtn) {
       toggleBtn.click();
-      const t0 = performance.now();
-      while (performance.now() - t0 < 800) {
-        nativeTrigger = document.querySelector('ms-model-selector button.model-selector-card, ms-model-selector button');
-        if (nativeTrigger) return nativeTrigger;
-        await new Promise(r => requestAnimationFrame(r));
-      }
+      // Was a hand-rolled requestAnimationFrame poll for up to 800 ms.
+      return await waitFor(() => $(triggerSelector), { timeout: 800, interval: 16 });
     }
-    return document.querySelector('ms-model-selector button.model-selector-card, ms-model-selector button');
+    return $(triggerSelector);
   }
 
   function toggleSettingsDrawer(forceOpen) {
-    const hasPanel = !!document.querySelector('ms-run-settings');
+    const hasPanel = !!$('ms-run-settings');
     const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sl-settings-open');
 
     if (getPreviewControls()) {
       closeCustomDropdowns();
       document.body.classList.toggle('sl-settings-open', shouldOpen);
-      document.querySelector('.sl-header-settings-btn')?.setAttribute('aria-expanded', String(shouldOpen));
+      $('.sl-header-settings-btn')?.setAttribute('aria-expanded', String(shouldOpen));
       getPreviewControls().onSettingsToggle?.(shouldOpen);
       return;
     }
@@ -839,11 +841,11 @@
     if (shouldOpen) {
       // On narrow screens the drawers overlap; on desktop they can coexist.
       if (window.innerWidth <= 768) {
-        const leftNavOverlay = document.querySelector('.sidebar-overlay');
+        const leftNavOverlay = $('.sidebar-overlay');
         if (leftNavOverlay) {
           leftNavOverlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         }
-        const leftNavClose = document.querySelector('.v3-left-nav.expanded button[aria-label*="close" i], button[aria-label="Close navigation menu"]');
+        const leftNavClose = $('.v3-left-nav.expanded button[aria-label*="close" i], button[aria-label="Close navigation menu"]');
         if (leftNavClose) leftNavClose.click();
       }
 
@@ -923,7 +925,7 @@
   }
 
   function findModelDialog() {
-    return Array.from(document.querySelectorAll('mat-dialog-container, .mat-mdc-dialog-container'))
+    return $$('mat-dialog-container, .mat-mdc-dialog-container')
       .find(dialog => Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
         .some(button => button.textContent.trim() === 'Featured')) || null;
   }
@@ -977,14 +979,23 @@
     return true;
   }
 
+  // Polls until read() is truthy. Thin wrapper over the SDK waitFor that keeps
+  // the original semantics: stops early when the module is disabled, resolves
+  // falsy on timeout, and lets read() exceptions propagate immediately.
   async function waitForModelValue(read, timeout = 2500) {
-    const until = performance.now() + timeout;
-    let value = read();
-    while (!value && isEnabled() && performance.now() < until) {
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      value = read();
-    }
-    return value;
+    const ABORTED = Symbol('waitForModelValue.aborted');
+    let failure = null;
+    const result = await waitFor(() => {
+      if (!isEnabled()) return ABORTED;
+      try {
+        return read() || null;
+      } catch (error) {
+        failure = error;
+        return ABORTED;
+      }
+    }, { timeout, interval: 16 });
+    if (failure) throw failure;
+    return result === ABORTED ? null : result;
   }
 
   async function refreshFeaturedModels() {
@@ -992,7 +1003,7 @@
     featuredSyncPromise = (async () => {
       let dialog = findModelDialog();
       const openedByUs = !dialog;
-      const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
+      const hadNativeSelector = !!$('ms-model-selector button.model-selector-card');
       const wasSyncing = document.body.classList.contains('sl-syncing-model-picker');
       document.body.classList.add('sl-syncing-model-picker');
       try {
@@ -1010,7 +1021,7 @@
         if (openedByUs) {
           dialog?.querySelector('button[aria-label="Close panel"]')?.click();
           await waitForModelValue(() => !findModelDialog(), 2000);
-          if (!hadNativeSelector) document.querySelector('button[aria-label="Close run settings panel"]')?.click();
+          if (!hadNativeSelector) $('button[aria-label="Close run settings panel"]')?.click();
         }
         if (!wasSyncing) document.body.classList.remove('sl-syncing-model-picker');
       }
@@ -1046,16 +1057,16 @@
         window.dispatchEvent(new CustomEvent('__sl_trySetModel', { detail: { modelId, requestId } }));
       });
       if (directResult && await waitForModelValue(() =>
-        document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() === modelId, 1000)) {
+        $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() === modelId, 1000)) {
         rememberModel(modelId, modelName);
-        const label = document.querySelector('.sl-header-model-btn .model-label');
+        const label = $('.sl-header-model-btn .model-label');
         if (label) label.textContent = modelName;
         return true;
       }
     }
 
     // The native picker completes URL and capability updates for these models.
-    const hadNativeSelector = !!document.querySelector('ms-model-selector button.model-selector-card');
+    const hadNativeSelector = !!$('ms-model-selector button.model-selector-card');
     let selected = false;
     document.body.classList.add('sl-syncing-model-picker');
     try {
@@ -1073,20 +1084,20 @@
       window.dispatchEvent(new CustomEvent('__sl_clearModelOverride'));
       row.click();
       selected = !!(await waitForModelValue(() => {
-        const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
+        const nativeId = $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim();
         const urlId = new URLSearchParams(window.location.search).get('model');
         return nativeId === modelId &&
           (window.location.pathname !== '/prompts/new_chat' || urlId === modelId);
       }));
       if (!selected) return false;
       rememberModel(modelId, modelName);
-      const label = document.querySelector('.sl-header-model-btn .model-label');
+      const label = $('.sl-header-model-btn .model-label');
       if (label) label.textContent = modelName;
       return true;
     } finally {
       if (selected) {
         await waitForModelValue(() => !findModelDialog(), 2000);
-        if (!hadNativeSelector) document.querySelector('button[aria-label="Close run settings panel"]')?.click();
+        if (!hadNativeSelector) $('button[aria-label="Close run settings panel"]')?.click();
       }
       document.body.classList.remove('sl-syncing-model-picker');
     }
@@ -1095,7 +1106,7 @@
   function onModelChanged(e) {
     if (e.detail?.modelId || e.detail?.modelName) {
       rememberModel(e.detail.modelId || '', e.detail.modelName || formatModelSlug(e.detail.modelId));
-      const lbl = document.querySelector('.sl-header-model-btn .model-label');
+      const lbl = $('.sl-header-model-btn .model-label');
       if (lbl && cachedModelName) {
         lbl.textContent = cachedModelName;
       }
@@ -1126,7 +1137,7 @@
       target.click();
       const applied = !!(await waitForModelValue(() => getSelectedThinkingLevel().toLowerCase() === level.toLowerCase(), 800));
       if (applied) {
-        const label = document.querySelector('.sl-header-thinking-btn .thinking-label');
+        const label = $('.sl-header-thinking-btn .thinking-label');
         if (label) label.textContent = getSelectedThinkingLevel();
       }
       return applied;
@@ -1155,7 +1166,7 @@
   }
 
   async function openModelDropdown(button) {
-    const existing = document.querySelector('.sl-model-dropdown');
+    const existing = $('.sl-model-dropdown');
     if (existing) {
       closeCustomDropdowns(true);
       return;
@@ -1176,7 +1187,7 @@
     if (!isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
 
     const currentName = getModelDisplayName();
-    const nativeId = document.querySelector('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '');
+    const nativeId = $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '');
     const urlId = new URLSearchParams(window.location.search).get('model')?.replace(/^models\//, '');
     const currentId = getPreviewControls()?.getModel().id || (window.location.pathname === '/prompts/new_chat'
       ? (urlId || nativeId || cachedModelId)
@@ -1268,7 +1279,7 @@
   }
 
   async function openThinkingDropdown(button) {
-    const existing = document.querySelector('.sl-thinking-dropdown');
+    const existing = $('.sl-thinking-dropdown');
     if (existing) {
       closeCustomDropdowns(true);
       return;
@@ -1340,8 +1351,8 @@
   }
 
   function reorganizeHeader() {
-    const toolbarLeft = document.querySelector('.toolbar-left');
-    const toolbarRight = document.querySelector('.toolbar-right');
+    const toolbarLeft = $('.toolbar-left');
+    const toolbarRight = $('.toolbar-right');
     if (!toolbarLeft || !toolbarRight) return;
 
     updateEmptyChatState();
@@ -1394,7 +1405,7 @@
       const label = modelBtn.querySelector('.model-label');
       if (label) {
         const currentTitle = getModelDisplayName();
-        if (currentTitle && label.textContent !== currentTitle && !document.querySelector('.sl-model-dropdown')) {
+        if (currentTitle && label.textContent !== currentTitle && !$('.sl-model-dropdown')) {
           label.textContent = currentTitle;
         }
       }
@@ -1431,7 +1442,7 @@
       const label = thinkingBtn.querySelector('.thinking-label');
       if (label) {
         const currentThinking = getSelectedThinkingLevel();
-        if (currentThinking && label.textContent !== currentThinking && !document.querySelector('.sl-thinking-dropdown')) {
+        if (currentThinking && label.textContent !== currentThinking && !$('.sl-thinking-dropdown')) {
           label.textContent = currentThinking;
         }
       }
@@ -1546,7 +1557,7 @@
     const isNonChatPage = path === '/prompts' || path === '/prompts/' || path.startsWith('/library') || path.startsWith('/tune') || path.startsWith('/apikey') || path === '/' || path === '';
     if (isNonChatPage) return false;
     const isPromptPage = /^\/prompts\/[a-zA-Z0-9_\-]+/.test(path) || path.includes('/prompt/');
-    const hasPromptUI = !!document.querySelector('ms-prompt-box, ms-chunk-editor, ms-prompt-renderer');
+    const hasPromptUI = !!$('ms-prompt-box, ms-chunk-editor, ms-prompt-renderer');
     return isPromptPage && hasPromptUI;
   }
 
@@ -1555,10 +1566,10 @@
     const path = window.location.pathname;
     if (path.includes('/new_chat') || path === '/prompts/new_chat') return false;
 
-    const turns = document.querySelectorAll('ms-chat-turn');
+    const turns = $$('ms-chat-turn');
     if (turns.length === 0) return false;
 
-    const tokenSpan = document.querySelector('ms-token-count .v3-token-count-value');
+    const tokenSpan = $('ms-token-count .v3-token-count-value');
     const currentText = tokenSpan ? tokenSpan.textContent?.trim().replace(/\s+/g, ' ') : '';
     if (!currentText || currentText === '0' || currentText === '0 tokens') return false;
 
@@ -1566,23 +1577,23 @@
   }
 
   function updateSidebarTokens() {
-    const mainNav = document.querySelector('ms-nav-items-main-v2');
+    const mainNav = $('ms-nav-items-main-v2');
     if (!mainNav) return;
 
     if (!shouldShowSidebarTokens()) {
-      const header = document.querySelector('.sl-token-section-header');
+      const header = $('.sl-token-section-header');
       if (header) header.remove();
-      const card = document.querySelector('.sl-tokens-card');
+      const card = $('.sl-tokens-card');
       if (card) card.remove();
       lastTokenCountText = '';
       return;
     }
 
-    const tokenSpan = document.querySelector('ms-token-count .v3-token-count-value');
+    const tokenSpan = $('ms-token-count .v3-token-count-value');
     const currentText = tokenSpan ? tokenSpan.textContent?.trim().replace(/\s+/g, ' ') : '';
 
-    let header = document.querySelector('.sl-token-section-header');
-    let card = document.querySelector('.sl-tokens-card');
+    let header = $('.sl-token-section-header');
+    let card = $('.sl-tokens-card');
 
     if (!header || header.parentElement !== mainNav || !card || card.parentElement !== mainNav) {
       if (header) header.remove();
@@ -1615,7 +1626,7 @@
           tokenExtractionTimeout = null;
           if (!isEnabled()) { isExtractingTokens = false; return; }
           try {
-            const tooltip = document.querySelector('.token-count-tooltip');
+            const tooltip = $('.token-count-tooltip');
             if (tooltip) {
               const rows = Array.from(tooltip.querySelectorAll('.tooltip-row'));
               rows.forEach(r => {
@@ -1634,7 +1645,7 @@
             getOverlayBackdrop(tooltip)?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           } catch (err) {}
           if (!cachedTokenBreakdown.usageStr) cachedTokenBreakdown.usageStr = currentText;
-          const currentCard = document.querySelector('.sl-tokens-card');
+          const currentCard = $('.sl-tokens-card');
           if (currentCard) renderTokensCard(currentCard, cachedTokenBreakdown);
           isExtractingTokens = false;
         }, 50);
@@ -1650,7 +1661,7 @@
 
 
   function injectViewerElements() {
-    const dialog = document.querySelector('ms-view-media-dialog');
+    const dialog = $('ms-view-media-dialog');
     if (!dialog) return;
 
     const pane = dialog.closest('.cdk-overlay-pane');
@@ -1677,7 +1688,7 @@
 
   function getOrCreateSavingPill() {
     if (savingPillEl && savingPillEl.isConnected) return savingPillEl;
-    const existing = document.querySelector('.sl-saving-pill');
+    const existing = $('.sl-saving-pill');
     if (existing) {
       savingPillEl = existing;
       return savingPillEl;
@@ -1714,14 +1725,14 @@
   function hideSavingIndicator(delay = 600) {
     if (savingHideTimeout) clearTimeout(savingHideTimeout);
     savingHideTimeout = setTimeout(() => {
-      const pill = document.querySelector('.sl-saving-pill');
+      const pill = $('.sl-saving-pill');
       if (pill) pill.classList.remove('sl-visible');
       savingHideTimeout = null;
     }, delay);
   }
 
   function checkNativeSavingState() {
-    const indicators = Array.from(document.querySelectorAll('.toolbar-saving-indicator, ms-drive-save-indicator, .saving-status.visible'));
+    const indicators = $$('.toolbar-saving-indicator, ms-drive-save-indicator, .saving-status.visible');
     const isActivelySaving = indicators.some(el => {
       // Menu checkmarks such as Saved to Drive are not live save status.
       if (el.closest('.mat-mdc-menu-panel, .toolbar-overflow-menu, .mat-mdc-menu-content')) return false;
@@ -1850,7 +1861,7 @@
 
   function finishTurnJump(controlsId, nBtn, wasDeferred) {
     const nativeButton = nBtn?.isConnected && nBtn.getAttribute('aria-controls') === controlsId ? nBtn
-      : Array.from(document.querySelectorAll('ms-items-scrollbar .items-scrollbar-item button'))
+      : $$('ms-items-scrollbar .items-scrollbar-item button')
         .find(button => button.getAttribute('aria-controls') === controlsId);
     // The native button updates Angular's active-turn state after its target exists.
     if (nativeButton) {
@@ -1859,7 +1870,7 @@
     const target = document.getElementById(controlsId);
     if (!target || isBufferedTurnHidden(target)) return;
 
-    const scroller = document.querySelector('ms-autoscroll-container');
+    const scroller = $('ms-autoscroll-container');
     if (!scroller) return;
 
     const scrollerRect = scroller.getBoundingClientRect();
@@ -1906,7 +1917,7 @@
   }
 
   function updateTurnNavigator() {
-    const tocEl = document.querySelector('.sl-chatgpt-toc');
+    const tocEl = $('.sl-chatgpt-toc');
 
     if (!isEnabled()) return;
     if (!tocResizeHandler) {
@@ -1926,7 +1937,7 @@
       return;
     }
 
-    const chatSession = document.querySelector('ms-chat-session');
+    const chatSession = $('ms-chat-session');
     if (!chatSession) {
       detachTocScrollListener();
       if (tocEl) tocEl.remove();
@@ -1935,7 +1946,7 @@
       return;
     }
 
-    const nativeBtns = Array.from(document.querySelectorAll('ms-items-scrollbar .items-scrollbar-item button'));
+    const nativeBtns = $$('ms-items-scrollbar .items-scrollbar-item button');
     if (nativeBtns.length <= 1) {
       detachTocScrollListener();
       if (tocEl) tocEl.remove();
@@ -1944,9 +1955,9 @@
       return;
     }
 
-    const scroller = document.querySelector('ms-autoscroll-container');
+    const scroller = $('ms-autoscroll-container');
 
-    let existingToc = document.querySelector('.sl-chatgpt-toc');
+    let existingToc = $('.sl-chatgpt-toc');
     const titles = nativeBtns.map(button => button.getAttribute('aria-label') || '').join('\n');
     const needsRebuild = !existingToc || existingToc.parentElement !== chatSession ||
       nativeBtns.length !== lastTocButtonCount || titles !== lastTocTitles ||
@@ -2068,13 +2079,13 @@
   }
 
   function syncTocActiveState() {
-    const existingToc = document.querySelector('.sl-chatgpt-toc');
+    const existingToc = $('.sl-chatgpt-toc');
     if (!existingToc || existingToc.style.display === 'none') return;
 
-    const nativeBtns = Array.from(document.querySelectorAll('ms-items-scrollbar .items-scrollbar-item button'));
+    const nativeBtns = $$('ms-items-scrollbar .items-scrollbar-item button');
     if (!nativeBtns.length) return;
 
-    const scroller = document.querySelector('ms-autoscroll-container');
+    const scroller = $('ms-autoscroll-container');
     const activeIndex = getActiveTurnIndex(nativeBtns, scroller);
 
     if (activeIndex !== lastActiveTocIndex) {
@@ -2145,7 +2156,7 @@
     if (!chunk) { pendingMediaMenu = null; return; }
     pendingMediaMenu = {
       trigger, chunk, at: Date.now(),
-      existingPanels: new Set(document.querySelectorAll('.cdk-overlay-container .mat-mdc-menu-panel'))
+      existingPanels: new Set($$('.cdk-overlay-container .mat-mdc-menu-panel'))
     };
   }
 
@@ -2178,7 +2189,7 @@
       if (!isEnabled() || !chunk.isConnected) return;
       const pane = panel.closest('.cdk-overlay-pane');
       const backdrop = pane?.previousElementSibling?.classList.contains('cdk-overlay-backdrop')
-        ? pane.previousElementSibling : document.querySelector('.mat-mdc-menu-backdrop');
+        ? pane.previousElementSibling : $('.mat-mdc-menu-backdrop');
       if (backdrop) backdrop.click();
 
       if (chunk.matches('ms-image-chunk')) {
@@ -2212,13 +2223,13 @@
       return;
     }
     const controls = pending.trigger.getAttribute('aria-controls');
-    const panel = Array.from(document.querySelectorAll('.cdk-overlay-container .mat-mdc-menu-panel'))
+    const panel = $$('.cdk-overlay-container .mat-mdc-menu-panel')
       .find(candidate => controls ? candidate.id === controls : !pending.existingPanels.has(candidate));
     if (panel && handleMediaMenuPanel(panel, pending.chunk)) pendingMediaMenu = null;
   }
 
   function syncTurnTimestampsAndStatus() {
-    const turns = document.querySelectorAll('ms-chat-turn:not([data-sl-buffered-turn])');
+    const turns = $$('ms-chat-turn:not([data-sl-buffered-turn])');
     turns.forEach(turn => {
       const container = turn.querySelector('.chat-turn-container');
       const isModel = container && container.classList.contains('model');
@@ -2273,8 +2284,8 @@
     tokenExtractionTimeout = null;
     isExtractingTokens = false;
     lastTokenCountText = '';
-    if (overlayObserver) { overlayObserver.disconnect(); overlayObserver = null; }
-    if (mainObserver) { mainObserver.disconnect(); mainObserver = null; }
+    if (overlayObserver) { overlayObserver(); overlayObserver = null; }
+    if (mainObserver) { mainObserver(); mainObserver = null; }
     for (const root of injectedRoots) root.remove();
     injectedRoots.clear();
     for (const content of modifiedMenuContents) {
@@ -2300,34 +2311,34 @@
       clearTimeout(savingHideTimeout);
       savingHideTimeout = null;
     }
-    const savingPill = document.querySelector('.sl-saving-pill');
+    const savingPill = $('.sl-saving-pill');
     if (savingPill) savingPill.remove();
     savingPillEl = null;
 
-    const otherBtn = document.querySelector('.sl-other-uploads');
+    const otherBtn = $('.sl-other-uploads');
     if (otherBtn) otherBtn.remove();
-    const divider = document.querySelector('.sl-divider');
+    const divider = $('.sl-divider');
     if (divider) divider.remove();
-    document.querySelectorAll('.sl-injected-header-item, .sl-header-menu-divider, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, .sl-custom-dropdown, .sl-drawer-backdrop').forEach(el => el.remove());
+    $$('.sl-injected-header-item, .sl-header-menu-divider, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, .sl-custom-dropdown, .sl-drawer-backdrop').forEach(el => el.remove());
     document.body?.classList.remove('sl-settings-open', 'sl-empty-chat', 'sl-reading-thinking-options', 'sl-switching-model', 'sl-syncing-model-picker');
-    document.querySelectorAll('.sl-backdrop-tint').forEach(node => node.classList.remove('sl-backdrop-tint'));
-    const tokenHeader = document.querySelector('.sl-token-section-header');
+    $$('.sl-backdrop-tint').forEach(node => node.classList.remove('sl-backdrop-tint'));
+    const tokenHeader = $('.sl-token-section-header');
     if (tokenHeader) tokenHeader.remove();
-    const tokenCard = document.querySelector('.sl-tokens-card');
+    const tokenCard = $('.sl-tokens-card');
     if (tokenCard) tokenCard.remove();
-    const tokenTooltips = document.querySelectorAll('.token-count-tooltip');
+    const tokenTooltips = $$('.token-count-tooltip');
     tokenTooltips.forEach(t => {
       getOverlayBackdrop(t)?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    const toc = document.querySelector('.sl-chatgpt-toc');
+    const toc = $('.sl-chatgpt-toc');
     if (toc) toc.remove();
-    document.querySelectorAll('.sl-card-delete-btn, .sl-user-copy-btn, .sl-model-copy-btn, .sl-turn-status-badge, .sl-model-edited-badge, .sl-media-download-item').forEach(el => el.remove());
+    $$('.sl-card-delete-btn, .sl-user-copy-btn, .sl-model-copy-btn, .sl-turn-status-badge, .sl-model-edited-badge, .sl-media-download-item').forEach(el => el.remove());
     if (overlayObserver) {
-      overlayObserver.disconnect();
+      overlayObserver();
       overlayObserver = null;
     }
     if (mainObserver) {
-      mainObserver.disconnect();
+      mainObserver();
       mainObserver = null;
     }
     lastTocButtonCount = 0;
@@ -2398,11 +2409,12 @@
     },
     setupObservers() {
       if (!isEnabled()) return;
-      if (mainObserver) mainObserver.disconnect();
+      if (mainObserver) mainObserver();
       if (domUpdateTimeout !== null) clearTimeout(domUpdateTimeout);
       domUpdateTimeout = null;
       let chatOnlyUpdate = true;
-      mainObserver = new MutationObserver(mutations => {
+      const mainObserverOpts = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected', 'data-sl-buffered-turn'] };
+      const onMainMutations = mutations => {
         if (pendingTurnJump && mutations.some(mutation => mutation.addedNodes?.length)) schedulePendingTurnJump();
         chatOnlyUpdate = chatOnlyUpdate && mutations.every(mutation => {
           const element = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
@@ -2414,7 +2426,7 @@
           if (!isEnabled()) return;
           const updateChatOnly = chatOnlyUpdate;
           chatOnlyUpdate = true;
-          if (mainObserver) mainObserver.disconnect();
+          if (mainObserver) mainObserver();
           try {
             if (updateChatOnly) {
               updateTurnNavigator();
@@ -2422,15 +2434,18 @@
             } else performDOMUpdates();
           } catch (e) { }
           if (mainObserver && isEnabled()) {
-            mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected', 'data-sl-buffered-turn'] });
+            mainObserver = observe(document.body || document.documentElement, mainObserverOpts, onMainMutations);
           }
         }, 120);
-      });
-      mainObserver.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-checked', 'aria-disabled', 'disabled', 'aria-selected', 'data-sl-buffered-turn'] });
+      };
+      mainObserver = observe(document.body || document.documentElement, mainObserverOpts, onMainMutations);
 
       // Decorate new overlay panels synchronously to avoid an unstyled + menu flash.
-      if (overlayObserver) overlayObserver.disconnect();
-      overlayObserver = new MutationObserver((mutations) => {
+      if (overlayObserver) overlayObserver();
+      const overlayTarget = $('.cdk-overlay-container') || document.body || document.documentElement;
+      // A null root creates a non-observing instance, like the original which
+      // always constructed the observer but only observed outside previews.
+      overlayObserver = observe(getPreviewControls() ? null : overlayTarget, { childList: true, subtree: true }, (mutations) => {
         if (!isEnabled()) return;
         for (const m of mutations) {
           if (Array.from(m.addedNodes || []).some(node => node.nodeType === 1 &&
@@ -2442,8 +2457,6 @@
           }
         }
       });
-      const overlayTarget = document.querySelector('.cdk-overlay-container') || document.body || document.documentElement;
-      if (!getPreviewControls()) overlayObserver.observe(overlayTarget, { childList: true, subtree: true });
     },
     updateStyles() {
       const on = isEnabled();

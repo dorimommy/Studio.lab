@@ -3,6 +3,7 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, $$, el, scope } = window.StudioLabCore;
 
   const AUTO_KEEP = 15;
 
@@ -77,19 +78,18 @@
       `;
     },
     bindControls(root, ctx) {
-      const panel = root.querySelector('[data-sl-controls-for="optimizer-hard"]');
+      const panel = $('[data-sl-controls-for="optimizer-hard"]', root);
       if (!panel) return;
 
-      const autoToggle = panel.querySelector('[data-sl-auto-keep]');
-      const slider = panel.querySelector('[data-sl-keep-slider]');
-      const number = panel.querySelector('[data-sl-keep-number]');
-      const error = panel.querySelector('[data-sl-keep-error]');
-      const applyButton = panel.querySelector('[data-sl-apply-hard]');
-      const removers = [];
+      const autoToggle = $('[data-sl-auto-keep]', panel);
+      const slider = $('[data-sl-keep-slider]', panel);
+      const number = $('[data-sl-keep-number]', panel);
+      const error = $('[data-sl-keep-error]', panel);
+      const applyButton = $('[data-sl-apply-hard]', panel);
+      const io = scope();
       function listen(element, type, callback) {
         if (!element) return;
-        element.addEventListener(type, callback);
-        removers.push(() => element.removeEventListener(type, callback));
+        io.on(element, type, callback);
       }
 
       if (autoToggle) {
@@ -140,23 +140,23 @@
           ctx.announceSettings?.(removed ? 'Removed ' + removed + ' older rendered turns.' : 'No older turns needed cleanup.');
         });
       }
-      return () => removers.forEach(remove => remove());
+      return () => io.dispose();
     },
     updateControls(root, ctx) {
-      const panel = root.querySelector('[data-sl-controls-for="optimizer-hard"]');
+      const panel = $('[data-sl-controls-for="optimizer-hard"]', root);
       if (!panel) return;
 
       panel.hidden = false;
-      const cleanupRow = panel.querySelector('[data-sl-hard-cleanup-row]');
+      const cleanupRow = $('[data-sl-hard-cleanup-row]', panel);
       if (cleanupRow) cleanupRow.hidden = ctx.state.optimizerMode !== 'hard';
-      const summary = panel.querySelector('[data-sl-keep-summary-text]');
+      const summary = $('[data-sl-keep-summary-text]', panel);
       const summaryText = turnLimitSummary(ctx.state);
       if (summary && summary.textContent !== summaryText) summary.textContent = summaryText;
 
-      const autoToggle = panel.querySelector('[data-sl-auto-keep]');
-      const slider = panel.querySelector('[data-sl-keep-slider]');
-      const number = panel.querySelector('[data-sl-keep-number]');
-      const applyButton = panel.querySelector('[data-sl-apply-hard]');
+      const autoToggle = $('[data-sl-auto-keep]', panel);
+      const slider = $('[data-sl-keep-slider]', panel);
+      const number = $('[data-sl-keep-number]', panel);
+      const applyButton = $('[data-sl-apply-hard]', panel);
       const keepValue = String(ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast);
       const disabled = !!ctx.state.autoKeep || !ctx.state.optimizerEnabled;
 
@@ -172,7 +172,7 @@
         number.disabled = disabled;
         if (disabled) {
           number.removeAttribute('aria-invalid');
-          const error = panel.querySelector('[data-sl-keep-error]');
+          const error = $('[data-sl-keep-error]', panel);
           if (error) { error.textContent = ''; error.hidden = true; }
         }
         // Live turn statistics refresh every two seconds. Preserve an unfinished
@@ -198,10 +198,9 @@
   }
 
   function start() {
-    let style = document.getElementById('sl-fast-render-style');
+    let style = $('#sl-fast-render-style');
     if (!style) {
-      style = document.createElement('style');
-      style.id = 'sl-fast-render-style';
+      style = el('<style id="sl-fast-render-style"></style>');
       style.textContent = `
         ms-chat-turn {
           content-visibility: auto;
@@ -213,13 +212,13 @@
   }
 
   function stop() {
-    const style = document.getElementById('sl-fast-render-style');
+    const style = $('#sl-fast-render-style');
     if (style) style.remove();
   }
 
   function applyHardCleanup(ctx) {
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const turns = Array.from(document.querySelectorAll(turnSel));
+    const turns = $$(turnSel);
     if (!turns.length) return;
 
     const keep = ctx.state.autoKeep

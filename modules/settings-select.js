@@ -1,6 +1,7 @@
 /** Accessible select-only comboboxes for Studio.lab's own HTML selects. */
 (function () {
   'use strict';
+  const { $$, scope } = window.StudioLabCore;
   const instances = new WeakMap();
   let sequence = 0;
 
@@ -43,17 +44,16 @@
     select.parentNode.insertBefore(wrapper, select);
     wrapper.append(select, button, popup); select.hidden = true;
     let disposed = false, opened = false, rows = [], active = null, typed = '', typeTimer = null, positionedClip = null;
-    const removers = [];
+    const io = scope();
     function listen(target, type, listener, options) {
-      target.addEventListener(type, listener, options);
-      removers.push(() => target.removeEventListener(type, listener, options));
+      io.on(target, type, listener, options);
     }
     function blocked() {
       return select.matches(':disabled') || select.getAttribute('aria-disabled') === 'true' ||
         !!wrapper.closest('[inert], [aria-busy="true"]');
     }
     function selectedOption() {
-      const options = Array.from(select.options || select.querySelectorAll('option'));
+      const options = Array.from(select.options || $$('option', select));
       if (Number.isInteger(select.selectedIndex)) return options[select.selectedIndex] || null;
       return options.find(option => option.selected) ||
         options.find(option => option.value === select.value) || null;
@@ -135,7 +135,7 @@
       const current = selectedOption(); value.textContent = current ? labelText(current) : 'Choose an option';
       const wasActive = active;
       popup.replaceChildren(); rows = [];
-      for (const option of Array.from(select.options || select.querySelectorAll('option'))) {
+      for (const option of Array.from(select.options || $$('option', select))) {
         if (option.hidden || option.parentElement?.tagName === 'OPTGROUP' && option.parentElement.hidden) continue;
         const node = doc.createElement('div'); node.id = prefix + '-option-' + rows.length;
         node.className = 'sl-select-option'; node.setAttribute('role', 'option');
@@ -164,7 +164,7 @@
     }
     function choose(row) {
       if (!opened || blocked() || !row || !select.contains(row.option) || optionDisabled(row.option)) return;
-      const index = Array.from(select.options || select.querySelectorAll('option')).indexOf(row.option);
+      const index = Array.from(select.options || $$('option', select)).indexOf(row.option);
       if (index < 0) return;
       select.selectedIndex = index;
       close(); refresh();
@@ -214,6 +214,7 @@
     if (view.visualViewport) { listen(view.visualViewport, 'resize', close); listen(view.visualViewport, 'scroll', close); }
     listen(select, 'change', refresh); listen(select, 'input', refresh);
     listen(popup, 'toggle', event => { if (event.newState === 'closed' && opened) close(); });
+    // view.MutationObserver навмисно: селект може жити в чужому document (settings frame).
     const observer = new view.MutationObserver(refresh);
     observer.observe(select, { subtree: true, childList: true, characterData: true, attributes: true,
       attributeFilter: ['disabled', 'label', 'selected', 'value', 'hidden', 'aria-disabled', 'aria-describedby',
@@ -221,9 +222,10 @@
     for (let parent = wrapper.parentElement; parent; parent = parent.parentElement) {
       observer.observe(parent, { attributes: true, attributeFilter: ['disabled', 'aria-busy', 'hidden', 'inert'] });
     }
+    io.add(() => observer.disconnect());
     const api = { button, popup, refresh, dispose() {
       if (disposed) return;
-      close(); disposed = true; clearTypeahead(); observer.disconnect(); removers.forEach(remove => remove());
+      close(); disposed = true; clearTypeahead(); io.dispose();
       for (const item of labels) {
         if (item.label.getAttribute('for') === button.id) {
           if (item.forValue === null) item.label.removeAttribute('for'); else item.label.setAttribute('for', item.forValue);

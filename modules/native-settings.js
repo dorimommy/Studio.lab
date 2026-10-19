@@ -4,6 +4,8 @@
 
   if (!window.StudioLab) return;
 
+  const { $, $$, observe } = window.StudioLabCore;
+
   const SETTINGS_BUTTON = 'ms-settings-menu button[data-test-id="settings-menu"], ms-settings-menu button[aria-label="Settings"]';
   const USER_SETTINGS_ITEM = '[data-test-id="user-settings-menu"]';
   const OPEN_TIMEOUT = 3000;
@@ -105,7 +107,7 @@
       if (existing) return existing;
       let id;
       do { id = semanticIdPrefix + (++semanticIdSequence); }
-      while (document.getElementById(id));
+      while ($('#' + id));
       setSemanticAttribute(element, 'id', id);
       return id;
     }
@@ -120,7 +122,7 @@
     function enhanceLayout(section, label, description) {
       if (label) addSemanticClass(label, 'sl-native-setting-label');
       if (description) addSemanticClass(description, 'sl-native-setting-help');
-      const candidates = [...section.querySelectorAll('.button-group, .native-options, mat-select, mat-slide-toggle, mat-checkbox, mat-form-field, select, input, textarea, button, [role="combobox"], [role="switch"]')]
+      const candidates = $$('.button-group, .native-options, mat-select, mat-slide-toggle, mat-checkbox, mat-form-field, select, input, textarea, button, [role="combobox"], [role="switch"]', section)
         .filter(control => !label?.contains(control) && !description?.contains(control));
       const controls = candidates.filter(control => !candidates.some(parent => parent !== control && parent.contains(control)));
       // Classify existing branches without adding wrappers to Angular's view.
@@ -153,7 +155,7 @@
         }
       }
       if (controlBranches.size > 1) addSemanticClass(layout, 'sl-native-setting-multiple-controls');
-      for (const group of section.querySelectorAll('.button-group, .native-options')) {
+      for (const group of $$('.button-group, .native-options', section)) {
         addSemanticClass(group, 'sl-native-setting-choice-group');
       }
     }
@@ -178,7 +180,7 @@
 
     function enhanceSelectPanels() {
       const targets = new Map();
-      const controls = [...host.component.querySelectorAll('mat-select, [role="combobox"], select')];
+      const controls = $$('mat-select, [role="combobox"], select', host.component);
       const expanded = new Set(controls.filter(control => control.getAttribute('aria-expanded') === 'true')
         .map(control => control.closest('mat-select') || control));
       const panels = new Set();
@@ -190,20 +192,20 @@
         if (field && host.component.contains(field)) {
           // Mark Material's skin separately so CSS can remove its outline while retaining container handlers.
           addSemanticClass(field, 'sl-native-setting-select-field');
-          for (const skin of field.querySelectorAll('.mat-mdc-text-field-wrapper, .mat-form-field-wrapper')) {
+          for (const skin of $$('.mat-mdc-text-field-wrapper, .mat-form-field-wrapper', field)) {
             addSemanticClass(skin, 'sl-native-setting-select-skin');
           }
-          for (const layout of field.querySelectorAll('.mat-mdc-form-field-flex, .mat-form-field-flex')) {
+          for (const layout of $$('.mat-mdc-form-field-flex, .mat-form-field-flex', field)) {
             addSemanticClass(layout, 'sl-native-setting-select-layout');
           }
-          for (const content of field.querySelectorAll('.mat-mdc-form-field-infix, .mat-form-field-infix')) {
+          for (const content of $$('.mat-mdc-form-field-infix, .mat-form-field-infix', field)) {
             addSemanticClass(content, 'sl-native-setting-select-content');
           }
-          for (const decoration of field.querySelectorAll('.mdc-notched-outline, .mdc-line-ripple, .mat-form-field-underline, .mat-form-field-ripple, .mat-mdc-form-field-focus-overlay')) {
+          for (const decoration of $$('.mdc-notched-outline, .mdc-line-ripple, .mat-form-field-underline, .mat-form-field-ripple, .mat-mdc-form-field-focus-overlay', field)) {
             addSemanticClass(decoration, 'sl-native-setting-select-decoration');
           }
         }
-        for (const trigger of control.querySelectorAll('.mat-mdc-select-trigger, .mat-select-trigger')) {
+        for (const trigger of $$('.mat-mdc-select-trigger, .mat-select-trigger', control)) {
           addSemanticClass(trigger, 'sl-native-setting-select-trigger');
         }
         const ids = ((control.getAttribute('aria-controls') || '') + ' ' +
@@ -212,13 +214,13 @@
         if (id && id.length <= 256 && control.matches('mat-select, .mat-mdc-select, .mat-select')) ids.push(id + '-panel');
         for (const panelId of ids) {
           if (panelId.length > 256) continue;
-          const panel = document.getElementById(panelId);
+          const panel = $('#' + panelId);
           if (knownPanel(panel)) panels.add(panel);
         }
       }
       // aria-controls can arrive after the portal; fall back only for one owned select and one Material portal.
       if (!panels.size && expanded.size === 1) {
-        const visiblePanels = [...document.querySelectorAll('.mat-mdc-select-panel, .mat-select-panel')].filter(knownPanel);
+        const visiblePanels = $$('.mat-mdc-select-panel, .mat-select-panel').filter(knownPanel);
         if (visiblePanels.length === 1) panels.add(visiblePanels[0]);
       }
       function mark(element, name) {
@@ -230,7 +232,7 @@
         mark(panel, 'sl-native-settings-select-panel');
         const pane = panel.closest('.cdk-overlay-pane');
         if (pane !== host.pane) mark(pane, 'sl-native-settings-select-overlay');
-        for (const option of panel.querySelectorAll('mat-option, [role="option"]')) {
+        for (const option of $$('mat-option, [role="option"]', panel)) {
           mark(option, 'sl-native-settings-select-option');
         }
       }
@@ -242,7 +244,7 @@
         updatePopupClasses(new Map());
         return;
       }
-      for (const content of host.component.querySelectorAll('mat-dialog-content')) {
+      for (const content of $$('mat-dialog-content', host.component)) {
         addSemanticClass(content, 'sl-native-settings-list');
         addSemanticClass(content, 'sl-settings-rows');
         if (content.getAttribute('role') === 'dialog') setSemanticAttribute(content, 'role', null);
@@ -253,8 +255,8 @@
       for (const section of sections()) {
         addSemanticClass(section, 'sl-native-setting-row');
         addSemanticClass(section, 'sl-setting-row');
-        const label = section.querySelector('.setting-label') || section.querySelector('.title') || section.querySelector('label');
-        const description = section.querySelector('.setting-description');
+        const label = $('.setting-label', section) || $('.title', section) || $('label', section);
+        const description = $('.setting-description', section);
         enhanceLayout(section, label, description);
         const labelId = text(label) ? semanticId(label) : null;
         const descriptionId = text(description) ? semanticId(description) : null;
@@ -271,8 +273,8 @@
           addSemanticClass(description, 'sl-setting-help');
           describeControl(section, descriptionId);
         }
-        for (const group of section.querySelectorAll('.button-group, .native-options')) addSemanticClass(group, 'sl-setting-control');
-        for (const button of section.querySelectorAll('.button-group button, .native-options button')) {
+        for (const group of $$('.button-group, .native-options', section)) addSemanticClass(group, 'sl-setting-control');
+        for (const button of $$('.button-group button, .native-options button', section)) {
           const role = button.getAttribute('role');
           if (role && role !== 'button' || button.hasAttribute('aria-haspopup')) continue;
           // Project Angular's selection into button semantics without adding selection handlers.
@@ -306,7 +308,7 @@
           chipPressedStates.set(button, String(pressed));
           describeControl(button, descriptionId);
         }
-        for (const control of section.querySelectorAll('[role="combobox"]')) {
+        for (const control of $$('[role="combobox"]', section)) {
           addSemanticClass(control, 'sl-setting-control');
           if (labelId && !control.getAttribute('aria-label') && !control.getAttribute('aria-labelledby')) {
             setSemanticAttribute(control, 'aria-labelledby', labelId);
@@ -324,7 +326,7 @@
     }
 
     function findHost() {
-      const component = document.querySelector('ms-user-settings-dialog');
+      const component = $('ms-user-settings-dialog');
       const surface = component?.closest('.mat-mdc-dialog-surface');
       const container = surface?.closest('mat-dialog-container');
       const pane = container?.closest('.cdk-overlay-pane');
@@ -341,7 +343,7 @@
 
     function sections() {
       if (!host) return [];
-      return [...host.component.querySelectorAll('.setting-section')];
+      return $$('.setting-section', host.component);
     }
 
     function snapshot() {
@@ -350,13 +352,13 @@
         available: true,
         attached: !!(shell?.isConnected && shell.contains(host.component)),
         sections: sections().map((section, index) => {
-          const label = text(section.querySelector('.setting-label') ||
-            section.querySelector('.title') || section.querySelector('label'));
+          const label = text($('.setting-label', section) ||
+            $('.title', section) || $('label', section));
           return {
             id: section.getAttribute('data-test-id') ||
               label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section-' + index,
             label,
-            description: text(section.querySelector('.setting-description'))
+            description: text($('.setting-description', section))
           };
         })
       };
@@ -396,7 +398,10 @@
     function startObserver() {
       if (observerStarted || disposed) return;
       observerStarted = true;
-      const observer = new MutationObserver(records => {
+      scope.add(observe(document.documentElement, {
+        childList: true, subtree: true, characterData: true, attributes: true,
+        attributeFilter: ['aria-selected', 'aria-pressed', 'aria-expanded', 'aria-controls', 'aria-owns', 'aria-disabled', 'disabled', 'class', 'id']
+      }, records => {
         if (records.every(record => record.type === 'attributes' && record.attributeName === 'class' &&
             !record.target.matches('.button-group button, .native-options button'))) return;
         if (notificationQueued || disposed) return;
@@ -405,11 +410,7 @@
           notificationQueued = false;
           reconcile();
         });
-      });
-      scope.observe(observer, document.documentElement, {
-        childList: true, subtree: true, characterData: true, attributes: true,
-        attributeFilter: ['aria-selected', 'aria-pressed', 'aria-expanded', 'aria-controls', 'aria-owns', 'aria-disabled', 'disabled', 'class', 'id']
-      });
+      }));
       reconcile();
     }
 
@@ -438,8 +439,8 @@
     }
 
     function menuItem() {
-      return [...document.querySelectorAll('.mat-mdc-menu-panel ' + USER_SETTINGS_ITEM +
-        ', .mat-mdc-menu-panel button, .mat-mdc-menu-panel a, .mat-mdc-menu-panel [role="menuitem"]')]
+      return $$('.mat-mdc-menu-panel ' + USER_SETTINGS_ITEM +
+        ', .mat-mdc-menu-panel button, .mat-mdc-menu-panel a, .mat-mdc-menu-panel [role="menuitem"]')
         .find(element => isUserSettingsItem(element) && visible(element) && !disabled(element)) || null;
     }
 
@@ -452,7 +453,7 @@
       if (trigger && !provided) return false;
       let item = isUserSettingsItem(provided) ? provided : menuItem();
       if (!item) {
-        const opener = provided || [...document.querySelectorAll(SETTINGS_BUTTON)]
+        const opener = provided || $$(SETTINGS_BUTTON)
           .find(element => visible(element) && !disabled(element) && !element.closest('.sl-overlay'));
         if (!visible(opener) || disabled(opener)) return false;
         opener.click();
@@ -478,7 +479,7 @@
     }
 
     function preserveFocus(nextShell, focused) {
-      const initial = nextShell.querySelector('[cdkFocusInitial]');
+      const initial = $('[cdkFocusInitial]', nextShell);
       if (!focused || focused === initial || !nextShell.contains(focused) || typeof focused.focus !== 'function') return;
       let cancelled = false;
       const cleanups = [];
@@ -578,7 +579,7 @@
       borrowedSlot = slot;
       // CDK can hide the foreground shell as a body sibling while opening its dialog.
       setSemanticAttribute(nextShell, 'aria-hidden', null);
-      const shellDialog = nextShell.querySelector('.sl-dialog');
+      const shellDialog = $('.sl-dialog', nextShell);
       if (!stationaryShell && shellDialog) {
         if (!containerAttributes) containerAttributes = readAttributes(host.container, ['aria-label', 'aria-labelledby']);
         host.container.setAttribute('aria-label', 'Google AI Studio and Studio.lab Settings');

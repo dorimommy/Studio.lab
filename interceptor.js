@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  // SDK: window.StudioLabCore is bundled before this file (MAIN world, no chrome.* here).
+  const { $, $$, el, waitFor } = window.StudioLabCore;
+
   // Capture Angular's internal LView map before bootstrap.
   const _candidateLViewMaps = new Set();
   const _origMapSet = Map.prototype.set;
@@ -117,7 +120,7 @@
         return window.__NG_LVIEW_MAP__;
       }
       // A live DOM context identifies Angular's registry among candidate maps.
-      const probeEls = document.querySelectorAll('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
+      const probeEls = $$('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
       for (const el of probeEls) {
         const ctxId = el.__ngContext__;
         if (typeof ctxId === 'number') {
@@ -146,7 +149,7 @@
       const map = this._getMap();
       if (!map) return null;
 
-      const rs = document.querySelector('ms-run-settings, ms-prompt-run-settings');
+      const rs = $('ms-run-settings, ms-prompt-run-settings');
       if (rs && typeof rs.__ngContext__ === 'number' && map.has(rs.__ngContext__)) {
         const lview = map.get(rs.__ngContext__);
         if (Array.isArray(lview)) {
@@ -182,7 +185,7 @@
         if (typeof val === 'string') return val.replace(/^models\//, '');
         if (val && typeof val === 'object' && val.name) return String(val.name).replace(/^models\//, '');
       }
-      const modelSelect = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
+      const modelSelect = $('ms-model-selector span[data-test-id="model-name"]');
       if (modelSelect) return modelSelect.textContent.trim();
       return '';
     },
@@ -224,7 +227,7 @@
         const val = rs.temperature();
         if (typeof val === 'number') return val;
       }
-      const tempInput = document.querySelector('ms-temperature-slider input');
+      const tempInput = $('ms-temperature-slider input');
       if (tempInput) return parseFloat(tempInput.value);
       return 1.0;
     },
@@ -237,7 +240,7 @@
         rs.temperature.set(val);
         return true;
       }
-      const tempInput = document.querySelector('ms-temperature-slider input');
+      const tempInput = $('ms-temperature-slider input');
       if (tempInput) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(tempInput, val);
@@ -261,29 +264,31 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
         return guard() && input.value === text;
       };
-      let textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+      let textarea = $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
       if (textarea) {
         if (callback) callback(apply(textarea));
         else apply(textarea);
         return;
       }
-      const btn = document.querySelector('ms-system-instructions-panel button');
+      const btn = $('ms-system-instructions-panel button');
       if (!btn || !guard()) {
         if (callback) callback(false);
         return;
       }
       btn.click();
-      let attempts = 0;
-      const waitForPanel = () => {
-        if (!guard()) { if (callback) callback(false); return; }
-        textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
-        if (!textarea && ++attempts < 30) { setTimeout(waitForPanel, 50); return; }
+      // Was: hand-rolled waitForPanel with an attempts counter (30 × 50 ms).
+      // waitFor keeps the same timing; a failed guard resolves null → callback(false),
+      // exactly like the original guard-fail and timeout paths (apply(null) === false).
+      setTimeout(async () => {
+        textarea = await waitFor(() => {
+          if (!guard()) return null;
+          return $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+        }, { timeout: 1500, interval: 50 });
         const applied = apply(textarea);
-        const closeBtn = document.querySelector('button[aria-label="Close panel"]');
+        const closeBtn = $('button[aria-label="Close panel"]');
         if (textarea && guard() && closeBtn) closeBtn.click();
         if (callback) callback(applied);
-      };
-      setTimeout(waitForPanel, 50);
+      }, 50);
     },
 
     getTools() {
@@ -309,7 +314,7 @@
     },
 
     openEditPromptTitleDialog() {
-      const btn = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+      const btn = $('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
       if (btn) {
         try {
           btn.click();
@@ -317,7 +322,7 @@
         } catch (_) {}
       }
       const map = this._getMap();
-      const header = document.querySelector('ms-header');
+      const header = $('ms-header');
       if (map && header && typeof header.__ngContext__ === 'number' && map.has(header.__ngContext__)) {
         const lview = map.get(header.__ngContext__);
         const comp = lview ? lview[8] : null;
@@ -326,7 +331,7 @@
           comp.Ffa.set(true);
           document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           setTimeout(() => {
-            const b = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+            const b = $('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
             b?.click();
           }, 30);
           return true;
@@ -396,7 +401,7 @@
     if (signalTools.length > 0) {
       profile.tools = signalTools;
     } else {
-      const toolToggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+      const toolToggles = $$('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
       const toolsState = [];
       toolToggles.forEach(t => {
          const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
@@ -409,11 +414,11 @@
       profile.tools = toolsState;
     }
 
-    const inlineTextarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+    const inlineTextarea = $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
     if (inlineTextarea && inlineTextarea.value) {
       profile.systemInstructions = inlineTextarea.value;
     } else {
-      const panel = document.querySelector('ms-system-instructions-panel');
+      const panel = $('ms-system-instructions-panel');
       const subtitle = panel?.querySelector('.subtitle')?.textContent?.trim();
       if (subtitle && !subtitle.includes('Optional tone and style')) {
         profile.systemInstructions = subtitle;
@@ -480,7 +485,7 @@
       return next();
     }
 
-    const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+    const toggles = $$('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
     let i = 0;
     function nextToggle() {
       if (i >= toggles.length) return next();
@@ -1214,7 +1219,7 @@
   window.addEventListener('__sl_download_media', (e) => {
     const detail = e.detail || {};
     const filename = detail.filename || 'download';
-    const target = document.querySelector('[data-sl-dl-target="true"]');
+    const target = $('[data-sl-dl-target="true"]');
     if (!target) return;
     target.removeAttribute('data-sl-dl-target');
 
@@ -1227,10 +1232,9 @@
 
     const img = target.querySelector('img');
     if (img && img.src) {
-      const a = document.createElement('a');
+      const a = el('<a target="_blank"></a>');
       a.href = img.src;
       a.download = filename.includes('.') ? filename : `${filename}.png`;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => a.remove(), 1000);
@@ -1334,7 +1338,7 @@
   function emitBuildInfo() {
     try {
       const toggles = window._F_toggles_default_MakerSuite || null;
-      const scripts = document.querySelectorAll('script[src*="boq-makersuite"]');
+      const scripts = $$('script[src*="boq-makersuite"]');
       let buildId = null;
       if (scripts.length > 0) {
         const src = scripts[0].src;
