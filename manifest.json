@@ -48,7 +48,7 @@
         "https://aistudio.google.com/*"
       ],
       "js": [
-        "dist/core.js",
+        "dist/core-main.js",
         "modules/initial-chat-render.js",
         "modules/progressive-chat-render.js",
         "modules/early-chat-visibility.js",

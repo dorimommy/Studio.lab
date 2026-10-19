@@ -17,6 +17,7 @@
 !/build/build.mjs
 !/dist/
 !/dist/core.js
+!/dist/core-main.js
 !/packages/
 !/packages/core/
 !/packages/core/package.json

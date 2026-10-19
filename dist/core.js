@@ -77,25 +77,85 @@ var StudioLabCore = (() => {
     });
   }
   function scope() {
-    const fns = [];
+    const cleanups = /* @__PURE__ */ new Set();
+    let disposed = false;
+    function add(cleanup) {
+      let active = true;
+      const cancel = () => {
+        if (!active) return;
+        active = false;
+        cleanups.delete(cancel);
+        try {
+          cleanup();
+        } catch (_) {
+        }
+      };
+      if (disposed) cancel();
+      else cleanups.add(cancel);
+      return cancel;
+    }
+    function listen(target, type, handler, options) {
+      if (disposed) return () => {
+      };
+      target.addEventListener(type, handler, options);
+      return add(() => target.removeEventListener(type, handler, options));
+    }
+    function observeInstance(observer, target, options) {
+      if (disposed) {
+        observer.disconnect();
+        return observer;
+      }
+      observer.observe(target, options);
+      add(() => observer.disconnect());
+      return observer;
+    }
+    function timeout(fn, delay) {
+      if (disposed) return () => {
+      };
+      const id = setTimeout(() => {
+        cancel();
+        if (!disposed) fn();
+      }, delay);
+      const cancel = add(() => clearTimeout(id));
+      return cancel;
+    }
+    function interval(fn, delay) {
+      if (disposed) return () => {
+      };
+      const id = setInterval(() => {
+        if (!disposed) fn();
+      }, delay);
+      return add(() => clearInterval(id));
+    }
+    function frame(fn) {
+      if (disposed) return () => {
+      };
+      const id = requestAnimationFrame((time) => {
+        cancel();
+        if (!disposed) fn(time);
+      });
+      const cancel = add(() => cancelAnimationFrame(id));
+      return cancel;
+    }
     return {
-      add(fn) {
-        fns.push(fn);
-        return fn;
+      get disposed() {
+        return disposed;
       },
-      on(target, evt, handler, opts) {
-        target.addEventListener(evt, handler, opts);
-        fns.push(() => target.removeEventListener(evt, handler, opts));
-      },
-      every(ms, fn) {
-        const id = setInterval(fn, ms);
-        fns.push(() => clearInterval(id));
-      },
+      add,
+      listen,
+      on: listen,
+      observe: observeInstance,
+      timeout,
+      interval,
+      every: (ms, fn) => interval(fn, ms),
+      frame,
       dispose() {
-        while (fns.length) {
+        if (disposed) return;
+        disposed = true;
+        for (const cleanup of [...cleanups].reverse()) {
           try {
-            fns.pop()();
-          } catch {
+            cleanup();
+          } catch (_) {
           }
         }
       }

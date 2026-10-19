@@ -66,22 +66,77 @@ export function onAdded(root, selector, cb) {
 }
 
 /**
- * Скоуп для cleanup: всі підписки/таймери/обсервери в одному місці,
- * один виклик dispose() відписує все. Лікує витоки пам'яті в довгих сесіях.
+ * Lifecycle scope — the single source of truth for resource cleanup.
+ * (Unifies the former StudioLab.createScope from registry.js: same rich
+ * semantics — disposed flag, idempotent cancels, reverse-order disposal —
+ * plus the short SDK aliases `on` (= listen) and `every` (= interval).)
+ *
+ * Collects event listeners, observers, timers and custom cleanups;
+ * dispose() releases everything exactly once. All methods are safe to call
+ * after dispose (they become no-ops).
  */
 export function scope() {
-  const fns = [];
+  const cleanups = new Set();
+  let disposed = false;
+  function add(cleanup) {
+    let active = true;
+    const cancel = () => {
+      if (!active) return;
+      active = false;
+      cleanups.delete(cancel);
+      try { cleanup(); } catch (_) {}
+    };
+    if (disposed) cancel();
+    else cleanups.add(cancel);
+    return cancel;
+  }
+  function listen(target, type, handler, options) {
+    if (disposed) return () => {};
+    target.addEventListener(type, handler, options);
+    return add(() => target.removeEventListener(type, handler, options));
+  }
+  // Attach an already-constructed observer (registry-style API).
+  // NOTE: different signature from the standalone observe(root, opts, cb).
+  function observeInstance(observer, target, options) {
+    if (disposed) { observer.disconnect(); return observer; }
+    observer.observe(target, options);
+    add(() => observer.disconnect());
+    return observer;
+  }
+  function timeout(fn, delay) {
+    if (disposed) return () => {};
+    const id = setTimeout(() => { cancel(); if (!disposed) fn(); }, delay);
+    const cancel = add(() => clearTimeout(id));
+    return cancel;
+  }
+  function interval(fn, delay) {
+    if (disposed) return () => {};
+    const id = setInterval(() => { if (!disposed) fn(); }, delay);
+    return add(() => clearInterval(id));
+  }
+  function frame(fn) {
+    if (disposed) return () => {};
+    const id = requestAnimationFrame(time => { cancel(); if (!disposed) fn(time); });
+    const cancel = add(() => cancelAnimationFrame(id));
+    return cancel;
+  }
   return {
-    add(fn) { fns.push(fn); return fn; },
-    on(target, evt, handler, opts) {
-      target.addEventListener(evt, handler, opts);
-      fns.push(() => target.removeEventListener(evt, handler, opts));
+    get disposed() { return disposed; },
+    add,
+    listen,
+    on: listen,
+    observe: observeInstance,
+    timeout,
+    interval,
+    every: (ms, fn) => interval(fn, ms),
+    frame,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const cleanup of [...cleanups].reverse()) {
+        try { cleanup(); } catch (_) {}
+      }
     },
-    every(ms, fn) {
-      const id = setInterval(fn, ms);
-      fns.push(() => clearInterval(id));
-    },
-    dispose() { while (fns.length) { try { fns.pop()(); } catch { /* ignore */ } } },
   };
 }
 
