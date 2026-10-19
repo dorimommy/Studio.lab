@@ -643,7 +643,7 @@
 
   window.StudioLab.registerModule({
     id: 'chat-export',
-    group: 'modules',
+    group: 'export',
     order: 5,
     title: 'Chat Export',
     subtitle: 'Export full chat history to Markdown, Text or JSON.',

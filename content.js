@@ -96,6 +96,12 @@
       description: 'Configure your chat tools and the information kept in this browser.'
     },
     {
+      id: 'export',
+      tabId: 'modules',
+      title: 'Export',
+      description: 'Download full conversations in Markdown, Text or JSON.'
+    },
+    {
       id: 'privacy', tabId: 'modules', title: 'Privacy',
       description: 'Choose which usage requests AI Studio can send.'
     }
