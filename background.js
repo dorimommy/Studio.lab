@@ -44,8 +44,47 @@ syncTelemetryRules();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.slState) syncTelemetryRules();
+  if (area === 'local' && changes.sl_export_backup) void syncBackupAlarm();
   accountService?.onLocalChange(changes, area);
 });
+
+// --- Scheduled library backups (chat-export) --------------------------------
+// The schedule lives in storage (set from the Export settings); this worker
+// owns the chrome.alarms entry and, when it fires, asks open AI Studio tabs
+// to run the incremental export — the RPC transport only exists there.
+const BACKUP_ALARM = 'sl_export_backup';
+async function syncBackupAlarm() {
+  try {
+    const data = await chrome.storage.local.get(['sl_export_backup']);
+    const schedule = data.sl_export_backup?.schedule;
+    await chrome.alarms.clear(BACKUP_ALARM);
+    if (schedule === 'daily' || schedule === 'weekly') {
+      chrome.alarms.create(BACKUP_ALARM, {
+        delayInMinutes: 60,
+        periodInMinutes: schedule === 'daily' ? 24 * 60 : 7 * 24 * 60
+      });
+    }
+  } catch (_) { /* alarms unavailable in the local test harness */ }
+}
+if (typeof chrome !== 'undefined' && chrome.alarms) {
+  void syncBackupAlarm();
+  chrome.alarms.onAlarm.addListener(alarm => {
+    if (alarm.name !== BACKUP_ALARM) return;
+    // No url filter: the extension holds no tabs/host permission for
+    // aistudio.google.com, so a filtered query matches nothing. Only AI
+    // Studio tabs run our content script, so offering the message to every
+    // tab and letting the others refuse is the reliable route (same pattern
+    // as the action-click handler above).
+    chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          const res = await chrome.tabs.sendMessage(tab.id, { action: 'slRunBackup' });
+          if (res?.started) return; // one tab running it is enough
+        } catch (_) { /* tab without our content script; try the next */ }
+      }
+    }).catch(() => {});
+  });
+}
 
 const RELEASES_URL = 'https://api.github.com/repos/dorimommy/Studio.lab/releases?per_page=20';
 const RELEASE_CACHE_KEY = 'slReleaseCheck';
@@ -138,6 +177,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   }
   if (message?.action === 'checkForUpdates') {
     checkForUpdates(message.force === true).then(reply).catch(() => reply({ ok: false }));
+    return true;
+  }
+  if (message?.action === 'slSyncBackupAlarm') {
+    syncBackupAlarm().then(() => reply({ ok: true })).catch(() => reply({ ok: false }));
     return true;
   }
   if (message?.action !== 'getTelemetryStatus') return;

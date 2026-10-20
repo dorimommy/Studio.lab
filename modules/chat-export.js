@@ -273,6 +273,11 @@
   // __sl_result_<eventId> channel.
   // ---------------------------------------------------------------------------
 
+  // Prompt payloads can be enormous (image chats inline generated images as
+  // base64 — 77 MB / 80 s observed), so fetches get a far longer leash than
+  // the small control calls the 20 s default was sized for.
+  const FETCH_TIMEOUT_MS = 120000;
+
   function callMainWorld(eventName, payload, timeoutMs = 20000) {
     return new Promise((resolve) => {
       const s = scope();
@@ -309,7 +314,7 @@
   const WIRE = {
     PROMPT: { NAME: 0, RUN_SETTINGS: 3, METADATA: 4, SYSTEM: 12, CHUNKED: 13 },
     RUN_SETTINGS: { TEMPERATURE: 0, MODEL: 2, TOP_P: 4, TOP_K: 5, MAX_TOKENS: 6 },
-    METADATA: { TITLE: 0, MODIFIED: 4 },
+    METADATA: { TITLE: 0, MODIFIED: 4, KEY_VALUES: 11 },
     TURN: { TEXT: 0, DRIVE_REF: 3, ROLE: 8, ANSWER_FLAG: 16, TOKEN_COUNT: 18,
             INLINE_FILE: 23, PARTS: 29, TIMESTAMP: 32 },
     PART: { TEXT: 1, THOUGHT: 12 },
@@ -860,10 +865,10 @@
   }
 
   function formatCsv(conv) {
-    const rows = [['role', 'is_thought', 'timestamp', 'token_count', 'text', 'attachments']];
+    const rows = [['conversation', 'role', 'is_thought', 'timestamp', 'token_count', 'text', 'attachments']];
     for (const t of conv.turns) {
       rows.push([
-        t.role, t.isThought ? 'true' : 'false',
+        t.conversation || conv.title || '', t.role, t.isThought ? 'true' : 'false',
         t.timestamp ? new Date(t.timestamp).toISOString() : '',
         t.tokenCount ?? '', t.text,
         t.parts.map(p => p.fileName || p.name || p.type).join('; '),
@@ -874,6 +879,7 @@
 
   function formatJsonl(conv) {
     return conv.turns.map(t => JSON.stringify({
+      conversation: t.conversation || conv.title || '',
       role: t.role,
       isThought: t.isThought,
       timestamp: t.timestamp ? new Date(t.timestamp).toISOString() : null,
@@ -928,7 +934,7 @@
     let apiError = null;
     if (driveId) {
       try {
-        const res = await callMainWorld('__sl_fetchPrompt', { driveId });
+        const res = await callMainWorld('__sl_fetchPrompt', { driveId }, FETCH_TIMEOUT_MS);
         if (res?.ok && res.data) {
           const conv = decodeConversation(res.data);
           if (conv.turns.length) return { conv, apiError };
@@ -951,6 +957,211 @@
       }
     }
     return { conv: null, apiError };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Library export + scheduled backups (phase 4).
+  //
+  // Library: ListPrompts pages the whole account library; each conversation
+  // is fetched, formatted and filed under its own folder in one zip, with an
+  // index.md and a manifest.json that names every failure (the run continues
+  // past them on purpose). CSV/JSONL produce one combined dataset instead.
+  //
+  // Backups: background.js owns a chrome.alarms schedule and pings open AI
+  // Studio tabs; the export itself runs here, incrementally — only prompts
+  // whose modifiedAt changed since the last successful run are fetched.
+  // ---------------------------------------------------------------------------
+
+  function decodePromptList(data) {
+    const items = arrOf(at(data, 0)).map(entry => {
+      const meta = at(entry, WIRE.PROMPT.METADATA);
+      const kv = {};
+      for (const pair of arrOf(at(meta, WIRE.METADATA.KEY_VALUES))) {
+        if (Array.isArray(pair)) kv[pair[0]] = pair[1];
+      }
+      return {
+        id: str(at(entry, WIRE.PROMPT.NAME)).replace(/^prompts\//, ''),
+        title: str(at(meta, WIRE.METADATA.TITLE)) || 'Untitled Conversation',
+        modifiedAt: epochMs(at(arrOf(at(meta, WIRE.METADATA.MODIFIED)), 0)),
+        promptType: kv.promptType || null,
+        hasImages: kv.hasImages === 'true',
+      };
+    }).filter(item => item.id);
+    return { items, nextPageToken: str(at(data, 1)) || null };
+  }
+
+  async function listAllPrompts() {
+    const all = [];
+    let token = null;
+    for (let page = 0; page < 200; page++) { // 200 pages bounds a runaway token loop
+      const res = await callMainWorld('__sl_listPrompts', { pageSize: 100, pageToken: token });
+      if (!res?.ok) throw new Error(res?.error || 'Could not list the library.');
+      const decoded = decodePromptList(res.data);
+      all.push(...decoded.items);
+      token = decoded.nextPageToken;
+      if (!token || !decoded.items.length) break;
+    }
+    return all;
+  }
+
+  function uniqueFolder(title, used) {
+    let base = (title || 'Untitled Conversation')
+      .replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 80) || 'Untitled Conversation';
+    let candidate = base;
+    let n = 2;
+    while (used.has(candidate)) candidate = base + ' (' + n++ + ')';
+    used.add(candidate);
+    return candidate;
+  }
+
+  async function exportLibrary({ fmt, opts, incremental, onProgress }) {
+    const allItems = await listAllPrompts();
+    const state = incremental ? (await store.get('sl_export_state', null)) : null;
+    const known = state?.knownModified || {};
+    const targets = incremental
+      ? allItems.filter(i => !(i.id in known) || known[i.id] !== i.modifiedAt)
+      : allItems;
+
+    // Flat dataset formats: one file for the whole library, no folders/zip.
+    if (fmt === FORMATTERS.csv || fmt === FORMATTERS.jsonl) {
+      const combined = { turns: [] };
+      const failures = [];
+      let done = 0;
+      for (const item of targets) {
+        done++;
+        onProgress?.(done, targets.length, item.title);
+        try {
+          const res = await callMainWorld('__sl_fetchPrompt', { driveId: item.id }, FETCH_TIMEOUT_MS);
+          if (!res?.ok) throw new Error(res?.error || 'fetch failed');
+          const conv = applyOpts(decodeConversation(res.data), opts);
+          for (const t of conv.turns) {
+            combined.turns.push(Object.assign({ conversation: item.title }, t));
+          }
+        } catch (err) {
+          failures.push({ id: item.id, title: item.title, error: (err && err.message) || String(err) });
+        }
+      }
+      const failedIds = new Set(failures.map(f => f.id));
+      return { flat: fmt.fn(combined, opts), count: targets.length - failures.length,
+        failures, allItems, changedOnly: incremental,
+        exportedIds: targets.filter(t => !failedIds.has(t.id)).map(t => t.id) };
+    }
+
+    const entries = [];
+    const manifestItems = [];
+    const failures = [];
+    const usedFolders = new Set();
+    let done = 0;
+    for (const item of targets) {
+      done++;
+      onProgress?.(done, targets.length, item.title);
+      try {
+        const res = await callMainWorld('__sl_fetchPrompt', { driveId: item.id }, FETCH_TIMEOUT_MS);
+        if (!res?.ok) throw new Error(res?.error || 'fetch failed');
+        const conv = applyOpts(decodeConversation(res.data), opts);
+        let attached = 0;
+        if (opts.attachments && fmt.zip) attached = await fetchAttachments(conv);
+        const folder = uniqueFolder(item.title, usedFolders);
+        entries.push({ name: folder + '/conversation.' + fmt.ext, data: textToBytes(fmt.fn(conv, opts)) });
+        for (const t of conv.turns) {
+          for (const p of t.parts) {
+            if (p.fileName && p.dataBase64) {
+              entries.push({ name: folder + '/attachments/' + p.fileName, data: base64ToBytes(p.dataBase64) });
+            }
+          }
+        }
+        manifestItems.push({ id: item.id, title: item.title, folder,
+          modifiedAt: item.modifiedAt, turns: conv.stats.turnCount, attachments: attached, ok: true });
+      } catch (err) {
+        const message = (err && err.message) || String(err);
+        failures.push({ id: item.id, title: item.title, error: message });
+        manifestItems.push({ id: item.id, title: item.title, ok: false, error: message });
+      }
+    }
+
+    const indexLines = ['# AI Studio library', '',
+      'Exported: ' + fmtDate(Date.now()) + (incremental ? ' · incremental (changed conversations only)' : ''),
+      'Conversations: ' + manifestItems.filter(i => i.ok).length +
+        (failures.length ? ' · Failed: ' + failures.length : ''), ''];
+    for (const item of manifestItems) {
+      if (item.ok) {
+        indexLines.push('- [' + item.title + '](' +
+          (item.folder + '/conversation.' + fmt.ext).replace(/ /g, '%20') + ')' +
+          (item.modifiedAt ? ' — ' + fmtDate(item.modifiedAt) : ''));
+      } else {
+        indexLines.push('- ' + item.title + ' — FAILED: ' + item.error);
+      }
+    }
+    const manifest = {
+      exportedAt: new Date().toISOString(),
+      incremental: !!incremental,
+      format: fmt.ext,
+      total: allItems.length,
+      exported: manifestItems.filter(i => i.ok).length,
+      failed: failures.length,
+      items: manifestItems,
+    };
+    entries.unshift(
+      { name: 'index.md', data: textToBytes(indexLines.join('\n')) },
+      { name: 'manifest.json', data: textToBytes(JSON.stringify(manifest, null, 2)) }
+    );
+    return { blob: makeZip(entries), count: manifest.exported, failures, allItems,
+      changedOnly: incremental,
+      exportedIds: manifestItems.filter(i => i.ok).map(i => i.id) };
+  }
+
+  const BACKUP_KEY = 'sl_export_backup'; // { schedule: 'off'|'daily'|'weekly', format }
+  const BACKUP_STATE_KEY = 'sl_export_state'; // { lastRunAt, lastOkAt, lastCount, knownModified, runningAt }
+
+  async function runScheduledBackup() {
+    const backup = await store.get(BACKUP_KEY, null);
+    if (!backup || !backup.schedule || backup.schedule === 'off') return { started: false };
+    // Claim the run so two open tabs do not both export.
+    const prev = await store.get(BACKUP_STATE_KEY, null);
+    if (prev?.runningAt && Date.now() - prev.runningAt < 30 * 60 * 1000) return { started: false };
+    await store.set({ [BACKUP_STATE_KEY]: Object.assign({}, prev, { runningAt: Date.now() }) });
+    try {
+      const opts = await loadOpts();
+      const fmt = FORMATTERS[backup.format] || FORMATTERS.md;
+      const result = await exportLibrary({ fmt, opts, incremental: true, onProgress: null });
+      if (result.flat) {
+        downloadFile(result.flat, 'ai-studio-library-backup.' + fmt.ext, fmt.mime);
+      } else if (result.count > 0) {
+        downloadBlob(result.blob, 'ai-studio-library-backup - ' +
+          new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.zip');
+      }
+      const exportedIds = new Set(result.exportedIds || []);
+      const prevKnown = prev?.knownModified || {};
+      const knownModified = {};
+      for (const item of result.allItems) {
+        if (exportedIds.has(item.id)) {
+          knownModified[item.id] = item.modifiedAt;
+        } else if (prevKnown[item.id] != null) {
+          knownModified[item.id] = prevKnown[item.id];
+        }
+        // A conversation that failed and was never exported stays unknown
+        // on purpose: the next backup retries it instead of believing it
+        // is safely stored.
+      }
+      await store.set({ [BACKUP_STATE_KEY]: {
+        lastRunAt: Date.now(), lastOkAt: Date.now(),
+        lastCount: result.count, knownModified, runningAt: 0,
+      } });
+      window.StudioLab?.log?.('📦 Library backup done: ' + result.count + ' conversations.', 'info');
+      return { started: true, count: result.count };
+    } catch (err) {
+      const prev2 = await store.get(BACKUP_STATE_KEY, null);
+      await store.set({ [BACKUP_STATE_KEY]: Object.assign({}, prev2, { runningAt: 0, lastRunAt: Date.now() }) });
+      return { started: true, error: (err && err.message) || String(err) };
+    }
+  }
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message?.action !== 'slRunBackup') return;
+      runScheduledBackup().then(sendResponse).catch(() => sendResponse({ started: false }));
+      return true;
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -998,6 +1209,10 @@
           <button type="button" class="sl-settings-button" id="sl-export-csv" aria-describedby="sl-export-help">CSV</button>
           <button type="button" class="sl-settings-button" id="sl-export-jsonl" aria-describedby="sl-export-help">JSONL</button>
         </div>
+        <div class="sl-setting-actions">
+          <select class="sl-setting-input" id="sl-export-lib-format" aria-label="Library export format"></select>
+          <button type="button" class="sl-settings-button" id="sl-export-library" aria-describedby="sl-export-help">Export library</button>
+        </div>
         <details class="sl-setting-advanced">
           <summary><span class="sl-setting-label">Export options</span><svg class="sl-setting-disclosure-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
           <div class="sl-setting-disclosure-content">
@@ -1015,6 +1230,15 @@
             ${checkboxRow('sl-export-system', 'System instruction', 'Include the system instruction.', true)}
             ${checkboxRow('sl-export-config', 'Model settings', 'Include model, temperature, top-P/K and limits.', true)}
             ${checkboxRow('sl-export-attachments', 'Attachments', 'Download attached files at full quality into a zip.', true)}
+            <div class="sl-setting-row">
+              <div class="sl-setting-copy">
+                <label class="sl-setting-label" for="sl-export-backup">Scheduled backups</label>
+                <p class="sl-setting-help" id="sl-export-backup-help">Incremental library backup. Runs while an AI Studio tab is open.</p>
+              </div>
+              <div class="sl-setting-control">
+                <select class="sl-setting-input" id="sl-export-backup" aria-describedby="sl-export-backup-help"></select>
+              </div>
+            </div>
           </div>
         </details>
         <p class="sl-setting-help" id="sl-export-help">Downloads the full conversation. API first, live capture as fallback.</p>
@@ -1116,6 +1340,72 @@
         const btn = $('#sl-export-' + kind, modalEl);
         if (btn) s.on(btn, 'click', (event) => { event.stopPropagation(); runExport(kind); });
       }
+
+      // Library export + backup schedule.
+      const libFormatSel = $('#sl-export-lib-format', modalEl);
+      const libBtn = $('#sl-export-library', modalEl);
+      const backupSel = $('#sl-export-backup', modalEl);
+      const backupHelp = $('#sl-export-backup-help', modalEl);
+      if (libFormatSel) {
+        libFormatSel.innerHTML = Object.entries(FORMATTERS)
+          .map(([k, f]) => '<option value="' + k + '">' + f.label + '</option>').join('');
+        libFormatSel.value = 'md';
+      }
+      const paintBackup = async () => {
+        const backup = await store.get(BACKUP_KEY, null);
+        const state = await store.get(BACKUP_STATE_KEY, null);
+        if (backupSel) {
+          backupSel.innerHTML = [['off', 'Off'], ['daily', 'Daily'], ['weekly', 'Weekly']]
+            .map(([v, l]) => '<option value="' + v + '"' +
+              ((backup?.schedule || 'off') === v ? ' selected' : '') + '>' + l + '</option>').join('');
+        }
+        if (libFormatSel && backup?.format) libFormatSel.value = backup.format;
+        if (backupHelp && state?.lastOkAt) {
+          backupHelp.textContent = 'Incremental library backup. Last backup: ' +
+            fmtDate(state.lastOkAt) + ' (' + (state.lastCount || 0) + ' conversations). ' +
+            'Runs while an AI Studio tab is open.';
+        }
+      };
+      paintBackup();
+      const saveBackupPrefs = () => {
+        const prefs = { schedule: backupSel ? backupSel.value : 'off',
+          format: libFormatSel ? libFormatSel.value : 'md' };
+        store.set({ [BACKUP_KEY]: prefs }).catch(() => {});
+        try { chrome.runtime.sendMessage({ action: 'slSyncBackupAlarm' }).catch(() => {}); } catch (_) {}
+      };
+      if (backupSel) s.on(backupSel, 'change', saveBackupPrefs);
+      if (libFormatSel) s.on(libFormatSel, 'change', saveBackupPrefs);
+
+      let libBusy = false;
+      async function runLibrary() {
+        if (libBusy || busy) return;
+        libBusy = true;
+        try {
+          const current = readUi();
+          const fmt = FORMATTERS[libFormatSel ? libFormatSel.value : 'md'] || FORMATTERS.md;
+          say('Listing library…');
+          const result = await exportLibrary({
+            fmt, opts: current, incremental: false,
+            onProgress: (done, total, title) =>
+              say('Exporting library… ' + done + '/' + total + ' — ' + title),
+          });
+          const failNote = result.failures.length
+            ? ', ' + result.failures.length + ' failed (see manifest)' : '';
+          if (result.flat) {
+            downloadFile(result.flat, 'ai-studio-library.' + fmt.ext, fmt.mime);
+            say('Library ' + fmt.label + ' started — ' + result.count + ' conversations' + failNote + '.');
+          } else {
+            downloadBlob(result.blob, 'ai-studio-library - ' +
+              new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.zip');
+            say('Library zip started — ' + result.count + ' conversations' + failNote + '.');
+          }
+        } catch (err) {
+          say('Library export failed: ' + ((err && err.message) || err), true);
+        } finally {
+          libBusy = false;
+        }
+      }
+      if (libBtn) s.on(libBtn, 'click', (event) => { event.stopPropagation(); runLibrary(); });
       return () => s.dispose();
     }
   });
