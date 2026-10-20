@@ -317,9 +317,9 @@
     PROMPT: { NAME: 0, RUN_SETTINGS: 3, METADATA: 4, SYSTEM: 12, CHUNKED: 13 },
     RUN_SETTINGS: { TEMPERATURE: 0, MODEL: 2, TOP_P: 4, TOP_K: 5, MAX_TOKENS: 6 },
     METADATA: { TITLE: 0, MODIFIED: 4, KEY_VALUES: 11 },
-    TURN: { TEXT: 0, DRIVE_REF: 3, ROLE: 8, ANSWER_FLAG: 16, TOKEN_COUNT: 18,
+    TURN: { TEXT: 0, DRIVE_REF: 3, ROLE: 8, INLINE_IMAGE: 12, ANSWER_FLAG: 16, TOKEN_COUNT: 18,
             INLINE_FILE: 23, PARTS: 29, TIMESTAMP: 32 },
-    PART: { TEXT: 1, THOUGHT: 12 },
+    PART: { TEXT: 1, INLINE_IMAGE: 2, THOUGHT: 12 },
   };
 
   const at = (arr, i) => (Array.isArray(arr) ? arr[i] : undefined);
@@ -346,19 +346,49 @@
     };
   }
 
+  // Generated images arrive as a [mimeType, base64] pair — at turn level
+  // (TURN.INLINE_IMAGE) and mirrored inside the part (PART.INLINE_IMAGE).
+  // Neither is TURN.INLINE_FILE; without reading them, image chats export
+  // as empty text and their pictures are lost.
+  function inlineImagePart(pair) {
+    if (!Array.isArray(pair)) return null;
+    const mime = str(pair[0]);
+    const b64 = pair[1];
+    if (!mime.includes('/') || /\s/.test(mime)) return null;
+    if (typeof b64 !== 'string' || b64.length < 100) return null;
+    if (!/^[A-Za-z0-9+/]/.test(b64)) return null;
+    return {
+      type: mime.startsWith('image/') ? 'image' : 'file',
+      name: null, mimeType: mime, driveId: null, dataBase64: b64,
+    };
+  }
+
   function decodeParts(rawTurn) {
     const parts = [];
+    const seenBytes = new Set();
+    const push = (part) => {
+      if (!part) return;
+      if (part.dataBase64) {
+        if (seenBytes.has(part.dataBase64)) return; // turn/part mirrors
+        seenBytes.add(part.dataBase64);
+      }
+      parts.push(part);
+    };
     const inline = at(rawTurn, WIRE.TURN.INLINE_FILE);
     if (Array.isArray(inline) && typeof inline[1] === 'string' && inline[1]) {
       const label = str(inline[0]);
       const mime = label.includes('/');
-      parts.push({
+      push({
         type: mime && label.startsWith('image/') ? 'image' : 'file',
         name: mime ? null : (label || null),
         mimeType: mime ? label : null,
         driveId: null,
         dataBase64: inline[1], // bytes inlined by the API; used by zip/html exports
       });
+    }
+    push(inlineImagePart(at(rawTurn, WIRE.TURN.INLINE_IMAGE)));
+    for (const rawPart of arrOf(at(rawTurn, WIRE.TURN.PARTS))) {
+      push(inlineImagePart(at(rawPart, WIRE.PART.INLINE_IMAGE)));
     }
     const ref = at(rawTurn, WIRE.TURN.DRIVE_REF);
     const driveId = Array.isArray(ref) ? str(ref[0]) : '';
