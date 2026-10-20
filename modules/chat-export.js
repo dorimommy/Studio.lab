@@ -274,9 +274,11 @@
   // ---------------------------------------------------------------------------
 
   // Prompt payloads can be enormous (image chats inline generated images as
-  // base64 — 77 MB / 80 s observed), so fetches get a far longer leash than
-  // the small control calls the 20 s default was sized for.
-  const FETCH_TIMEOUT_MS = 120000;
+  // base64 — 77 MB / 80 s observed, worst case 259 MB / 274 s), so fetches
+  // get a far longer leash than the small control calls the 20 s default
+  // was sized for. Normal chats answer in seconds; the leash only bites
+  // on payloads that would fail anyway.
+  const FETCH_TIMEOUT_MS = 360000;
 
   function callMainWorld(eventName, payload, timeoutMs = 20000) {
     return new Promise((resolve) => {
