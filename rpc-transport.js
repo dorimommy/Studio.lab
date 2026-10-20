@@ -24,7 +24,10 @@
 
   // Public web-client key shipped inside the AI Studio bundle. Page-discovered
   // keys are tried first so a rotation on Google's side can still recover.
-  var FALLBACK_API_KEY = 'AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs';
+  // SECURITY: never hardcode an API key here — GitHub secret scanning flags
+// AIza keys in public repos. The live key is discovered from the AI Studio
+// page itself (see API_KEY_PATTERN below); empty means discovery-only.
+var FALLBACK_API_KEY = '';
   var API_KEY_PATTERN = /["'](AIza[\w-]{35})["']/g;
 
   var keyCandidates = null;
@@ -48,7 +51,7 @@
     for (var j = 0; j < discovered.length; j++) {
       if (ordered.indexOf(discovered[j]) === -1) ordered.push(discovered[j]);
     }
-    if (ordered.indexOf(FALLBACK_API_KEY) === -1) ordered.push(FALLBACK_API_KEY);
+    if (FALLBACK_API_KEY && ordered.indexOf(FALLBACK_API_KEY) === -1) ordered.push(FALLBACK_API_KEY);
     keyCandidates = ordered;
     activeKeyIndex = 0;
     return keyCandidates;
@@ -56,7 +59,7 @@
 
   function currentApiKey() {
     var keys = collectApiKeys();
-    return keys[activeKeyIndex] || FALLBACK_API_KEY;
+    return keys[activeKeyIndex] || '';
   }
 
   function advanceApiKey() {
