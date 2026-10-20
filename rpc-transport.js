@@ -40,12 +40,9 @@
   };
   var NATIVE_FALLBACK = { mimeType: 'application/pdf', extension: 'pdf' };
 
-  // Public web-client key shipped inside the AI Studio bundle. Page-discovered
-  // keys are tried first so a rotation on Google's side can still recover.
-  // SECURITY: never hardcode an API key here — GitHub secret scanning flags
-// AIza keys in public repos. The live key is discovered from the AI Studio
-// page itself (see API_KEY_PATTERN below); empty means discovery-only.
-var FALLBACK_API_KEY = '';
+  // No hardcoded API key: GitHub secret scanning flags AIza keys in public
+  // repos, and none is needed — the working key is discovered from the AI
+  // Studio page itself at runtime (see collectApiKeys below).
   var API_KEY_PATTERN = /["'](AIza[\w-]{35})["']/g;
 
   var keyCandidates = null;
@@ -64,12 +61,11 @@ var FALLBACK_API_KEY = '';
           if (discovered.indexOf(match[1]) === -1) discovered.push(match[1]);
         }
       }
-    } catch (_) { /* page not ready yet; fall back to the constant */ }
+    } catch (_) { /* page not ready yet; no keys discovered this time */ }
     var ordered = [];
     for (var j = 0; j < discovered.length; j++) {
       if (ordered.indexOf(discovered[j]) === -1) ordered.push(discovered[j]);
     }
-    if (FALLBACK_API_KEY && ordered.indexOf(FALLBACK_API_KEY) === -1) ordered.push(FALLBACK_API_KEY);
     keyCandidates = ordered;
     activeKeyIndex = 0;
     return keyCandidates;
