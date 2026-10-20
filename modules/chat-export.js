@@ -307,7 +307,7 @@
   // (protobuf-JSON positional arrays). Verified against live responses; every
   // read below is tolerant, so a renumbered field degrades to null metadata.
   const WIRE = {
-    PROMPT: { NAME: 0, RUN_SETTINGS: 3, METADATA: 4, CHUNKED: 13 },
+    PROMPT: { NAME: 0, RUN_SETTINGS: 3, METADATA: 4, SYSTEM: 12, CHUNKED: 13 },
     RUN_SETTINGS: { TEMPERATURE: 0, MODEL: 2, TOP_P: 4, TOP_K: 5, MAX_TOKENS: 6 },
     METADATA: { TITLE: 0, MODIFIED: 4 },
     TURN: { TEXT: 0, DRIVE_REF: 3, ROLE: 8, ANSWER_FLAG: 16, TOKEN_COUNT: 18,
@@ -350,7 +350,7 @@
         name: mime ? null : (label || null),
         mimeType: mime ? label : null,
         driveId: null,
-        dataBase64: null, // not inlined into exports in phase 1
+        dataBase64: inline[1], // bytes inlined by the API; used by zip/html exports
       });
     }
     const ref = at(rawTurn, WIRE.TURN.DRIVE_REF);
@@ -407,10 +407,11 @@
       exportedAt: Date.now(),
       modifiedAt: epochMs(at(arrOf(at(metadata, WIRE.METADATA.MODIFIED)), 0)),
       config: decodeConfig(at(prompt, P.RUN_SETTINGS)),
-      systemInstruction: null,
+      systemInstruction: str(at(at(prompt, P.SYSTEM), 0)) || null,
       turns,
       stats: null,
     };
+    condenseAttachmentTurns(conv);
     conv.stats = computeStats(conv);
     return conv;
   }
@@ -435,7 +436,34 @@
       turns,
       stats: null,
     };
+    condenseAttachmentTurns(conv);
     conv.stats = computeStats(conv);
+    return conv;
+  }
+
+  // AI Studio files each attachment as its own turn, so a message with three
+  // images arrives as four turns. Fold each run of attachment-only turns into
+  // the same-role turn that follows it, so exports read like the chat.
+  function condenseAttachmentTurns(conv) {
+    const turns = conv.turns;
+    const out = [];
+    for (let i = 0; i < turns.length; i++) {
+      const turn = turns[i];
+      const attachmentOnly = !turn.text.trim() && turn.parts.length > 0;
+      const next = turns[i + 1];
+      if (!attachmentOnly || !next || next.role !== turn.role || next.isThought !== turn.isThought) {
+        out.push(turn);
+        continue;
+      }
+      next.parts = turn.parts.concat(next.parts);
+      if (typeof turn.tokenCount === 'number') {
+        next.tokenCount = (next.tokenCount || 0) + turn.tokenCount;
+      }
+      if (turn.timestamp && (!next.timestamp || turn.timestamp < next.timestamp)) {
+        next.timestamp = turn.timestamp;
+      }
+    }
+    conv.turns = out;
     return conv;
   }
 
@@ -468,6 +496,7 @@
     tokenCounts: false,
     systemInstruction: true,
     modelConfig: true,
+    attachments: true,
   };
 
   function loadOpts() {
@@ -477,7 +506,9 @@
 
   function applyOpts(conv, opts) {
     const out = Object.assign({}, conv, {
-      turns: conv.turns.map(t => Object.assign({}, t, { parts: t.parts.slice() })),
+      turns: conv.turns.map(t => Object.assign({}, t, {
+        parts: t.parts.map(p => Object.assign({}, p)),
+      })),
     });
     if (opts.reasoning === 'exclude') out.turns = out.turns.filter(t => !t.isThought);
     if (!opts.systemInstruction) out.systemInstruction = null;
@@ -535,12 +566,23 @@
       if (meta) lines.push('*' + meta + '*', '');
       if (opts.reasoning === 'inline' && t.isThought) lines.push('*Reasoning:*', '');
       lines.push(mdEscape(t.text));
-      for (const p of t.parts) {
-        lines.push('', '*[Attachment: ' + (p.name || p.driveId || p.type) + ']*');
-      }
+      for (const p of t.parts) lines.push('', mdAttachmentLine(p));
       lines.push('', '---', '');
     }
     return lines.join('\n');
+  }
+
+  // Link into the zip's attachments/ folder when the bytes were fetched;
+  // otherwise a plain note so the reader knows something was attached.
+  function mdAttachmentLine(p) {
+    if (p.fileName) {
+      const target = 'attachments/' + p.fileName
+        .replace(/ /g, '%20').replace(/\(/g, '%28').replace(/\)/g, '%29');
+      return p.type === 'image'
+        ? '![' + (p.name || 'image') + '](' + target + ')'
+        : '[' + (p.name || p.fileName) + '](' + target + ')';
+    }
+    return '*[Attachment: ' + (p.name || p.driveId || p.type) + ']*';
   }
 
   function formatText(conv, opts) {
@@ -550,21 +592,317 @@
       const meta = turnMetaLine(t);
       lines.push(who + (meta ? ' [' + meta + ']' : '') + ':');
       lines.push(t.text);
-      for (const p of t.parts) lines.push('[Attachment: ' + (p.name || p.driveId || p.type) + ']');
+      for (const p of t.parts) lines.push('[Attachment: ' + (p.fileName || p.name || p.driveId || p.type) + ']');
       lines.push('');
     }
     return lines.join('\n');
   }
 
   function formatJson(conv) {
-    return JSON.stringify(conv, null, 2);
+    // Attachment bytes travel as files in the zip, not as base64 in the JSON.
+    const clean = Object.assign({}, conv, {
+      turns: conv.turns.map(t => Object.assign({}, t, {
+        parts: t.parts.map(p => {
+          const copy = Object.assign({}, p);
+          delete copy.dataBase64;
+          return copy;
+        }),
+      })),
+    });
+    return JSON.stringify(clean, null, 2);
+  }
+
+  // --- Attachments (phase 3) -------------------------------------------------
+  // Parts that reference a Drive file are downloaded at full fidelity through
+  // the MAIN-world transport; inline parts already carry their bytes.
+
+  const MIME_EXT = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
+    'image/svg+xml': 'svg', 'application/pdf': 'pdf', 'text/plain': 'txt',
+    'text/markdown': 'md', 'text/csv': 'csv', 'application/json': 'json',
+    'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'video/mp4': 'mp4',
+  };
+
+  function attachmentFileName(part, used) {
+    let name = (part.name || ('attachment-' + (part.driveId || 'inline')))
+      .replace(/[\\/:*?"<>|]/g, '').trim() || 'attachment';
+    if (part.exportedExtension) {
+      name = name.replace(/\.[^.]+$/, '') + '.' + part.exportedExtension;
+    } else if (!/\.[A-Za-z0-9]{1,5}$/.test(name)) {
+      name += '.' + (MIME_EXT[part.mimeType] || 'bin');
+    }
+    let candidate = name;
+    let n = 2;
+    while (used.has(candidate)) {
+      candidate = name.replace(/(\.[^.]+)?$/, (m) => ' (' + n++ + ')' + (m || ''));
+    }
+    used.add(candidate);
+    return candidate;
+  }
+
+  async function fetchAttachments(conv) {
+    const used = new Set();
+    let fetched = 0;
+    for (const turn of conv.turns) {
+      for (const part of turn.parts) {
+        if (part.driveId && !part.dataBase64) {
+          try {
+            const res = await callMainWorld('__sl_driveDownload', { fileId: part.driveId }, 120000);
+            if (res?.ok && res.base64) {
+              part.dataBase64 = res.base64;
+              part.name = part.name || res.meta?.name || null;
+              part.mimeType = res.effectiveMimeType || part.mimeType;
+              part.exportedExtension = res.exportedExtension || null;
+            }
+          } catch (_) { /* leave as a placeholder part */ }
+        }
+        if (part.dataBase64) {
+          part.fileName = attachmentFileName(part, used);
+          fetched++;
+        }
+      }
+    }
+    return fetched;
+  }
+
+  // --- Minimal ZIP writer (STORE, no compression) ----------------------------
+  // Zero-dependency by design: ~60 lines instead of bundling JSZip. STORE is
+  // fine for exports; most attachments (images, PDFs) barely compress anyway.
+
+  const CRC_TABLE = (() => {
+    const t = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    let c = -1;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  }
+
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  const textToBytes = (s) => new TextEncoder().encode(s);
+
+  function makeZip(entries) { // entries: [{ name, data: Uint8Array }]
+    const now = new Date();
+    const dosTime = ((now.getHours() & 31) << 11) | ((now.getMinutes() & 63) << 5) | ((now.getSeconds() >> 1) & 31);
+    const dosDate = (((Math.max(now.getFullYear(), 1980) - 1980) & 127) << 9) |
+      (((now.getMonth() + 1) & 15) << 5) | (now.getDate() & 31);
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    for (const entry of entries) {
+      const nameBytes = textToBytes(entry.name);
+      const crc = crc32(entry.data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0x0800, true); // UTF-8 names
+      local.setUint16(8, 0, true);      // STORE
+      local.setUint16(10, dosTime, true);
+      local.setUint16(12, dosDate, true);
+      local.setUint32(14, crc, true);
+      local.setUint32(18, entry.data.length, true);
+      local.setUint32(22, entry.data.length, true);
+      local.setUint16(26, nameBytes.length, true);
+      chunks.push(new Uint8Array(local.buffer), nameBytes, entry.data);
+      const cen = new DataView(new ArrayBuffer(46));
+      cen.setUint32(0, 0x02014b50, true);
+      cen.setUint16(4, 20, true);
+      cen.setUint16(6, 20, true);
+      cen.setUint16(8, 0x0800, true);
+      cen.setUint16(10, 0, true);
+      cen.setUint16(12, dosTime, true);
+      cen.setUint16(14, dosDate, true);
+      cen.setUint32(16, crc, true);
+      cen.setUint32(20, entry.data.length, true);
+      cen.setUint32(24, entry.data.length, true);
+      cen.setUint16(28, nameBytes.length, true);
+      cen.setUint32(42, offset, true);
+      central.push(new Uint8Array(cen.buffer), nameBytes);
+      offset += 30 + nameBytes.length + entry.data.length;
+    }
+    const centralSize = central.reduce((n, c) => n + c.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, entries.length, true);
+    end.setUint16(10, entries.length, true);
+    end.setUint32(12, centralSize, true);
+    end.setUint32(16, offset, true);
+    return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+  }
+
+  // --- More formatters (phase 3) ----------------------------------------------
+
+  function htmlEscape(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Small Markdown→HTML renderer: fences, headings, lists, paragraphs, and
+  // inline code/bold/italic/links. Enough for a readable standalone page.
+  function mdToHtml(text) {
+    const out = [];
+    const lines = String(text).split('\n');
+    let inCode = false;
+    let para = [];
+    const flushPara = () => {
+      if (!para.length) return;
+      out.push('<p>' + para.map(inlineHtml).join('<br>') + '</p>');
+      para = [];
+    };
+    const inlineHtml = (line) => htmlEscape(line)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    for (const line of lines) {
+      if (/^```/.test(line)) {
+        if (inCode) { out.push('</code></pre>'); inCode = false; }
+        else { flushPara(); out.push('<pre><code>'); inCode = true; }
+        continue;
+      }
+      if (inCode) { out.push(htmlEscape(line)); continue; }
+      const h = /^(#{1,4})\s+(.*)$/.exec(line);
+      if (h) { flushPara(); out.push('<h' + (h[1].length + 1) + '>' + inlineHtml(h[2]) + '</h' + (h[1].length + 1) + '>'); continue; }
+      if (/^\s*[-*]\s+/.test(line)) { flushPara(); out.push('<div class="li">' + inlineHtml(line.replace(/^\s*[-*]\s+/, '• ')) + '</div>'); continue; }
+      if (!line.trim()) { flushPara(); continue; }
+      para.push(line);
+    }
+    if (inCode) out.push('</code></pre>');
+    flushPara();
+    return out.join('\n');
+  }
+
+  function formatHtml(conv) {
+    const body = [];
+    body.push('<h1>' + htmlEscape(conv.title) + '</h1>');
+    const meta = [];
+    if (conv.config?.model) meta.push('Model: ' + htmlEscape(conv.config.model));
+    if (conv.modifiedAt) meta.push('Last modified: ' + htmlEscape(fmtDate(conv.modifiedAt)));
+    meta.push('Exported: ' + htmlEscape(fmtDate(conv.exportedAt)));
+    body.push('<p class="meta">' + meta.join(' · ') + '</p>');
+    if (conv.systemInstruction) {
+      body.push('<h2>System instruction</h2>', mdToHtml(conv.systemInstruction));
+    }
+    for (const t of conv.turns) {
+      const cls = t.role === 'user' ? 'user' : (t.isThought ? 'thought' : 'model');
+      const label = t.role === 'user' ? 'User' : (t.isThought ? 'Model (reasoning)' : 'Model');
+      body.push('<section class="turn ' + cls + '"><h2>' + label + '</h2>');
+      const m = turnMetaLine(t);
+      if (m) body.push('<p class="meta">' + htmlEscape(m) + '</p>');
+      body.push(mdToHtml(t.text));
+      for (const p of t.parts) {
+        if (p.type === 'image' && p.dataBase64 && p.mimeType) {
+          body.push('<p><img alt="' + htmlEscape(p.name || 'image') + '" src="data:' +
+            p.mimeType + ';base64,' + p.dataBase64 + '"></p>');
+        } else {
+          body.push('<p class="meta">[Attachment: ' + htmlEscape(p.name || p.fileName || p.type) + ']</p>');
+        }
+      }
+      body.push('</section>');
+    }
+    return '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>' + htmlEscape(conv.title) + '</title><style>' +
+      'body{font-family:system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.55;color:#1b1b1f}' +
+      '.meta{color:#666;font-size:.85em}section.turn{border-top:1px solid #ddd;padding:1rem 0}' +
+      'section.user{background:#f6f8ff}section.thought{background:#fdf6ec;color:#554433}' +
+      'pre{background:#f4f4f4;padding:.75rem;overflow:auto;border-radius:8px}code{background:#f0f0f0;padding:0 .25em;border-radius:4px}' +
+      'pre code{background:none;padding:0}img{max-width:100%}.li{margin-left:1rem}</style></head><body>' +
+      body.join('\n') + '</body></html>';
+  }
+
+  function formatObsidian(conv, opts) {
+    const fm = ['---',
+      'title: ' + JSON.stringify(conv.title),
+      'date: ' + new Date(conv.exportedAt).toISOString(),
+      conv.config?.model ? 'model: ' + conv.config.model : null,
+      'source: ' + conv.url,
+      'tags: [ai-studio]',
+      '---', ''].filter(x => x !== null);
+    const lines = fm.slice();
+    if (conv.systemInstruction) {
+      lines.push('## System instruction', '', conv.systemInstruction, '');
+    }
+    for (const t of conv.turns) {
+      if (t.isThought) {
+        lines.push('> [!note]- Reasoning');
+        for (const l of t.text.split('\n')) lines.push('> ' + l);
+        lines.push('');
+      } else {
+        lines.push(t.role === 'user' ? '## User' : '## Model', '');
+        const meta = turnMetaLine(t);
+        if (meta) lines.push('*' + meta + '*', '');
+        lines.push(t.text, '');
+      }
+      for (const p of t.parts) {
+        lines.push(p.fileName ? '![[' + p.fileName + ']]'
+          : '*[Attachment: ' + (p.name || p.driveId || p.type) + ']*', '');
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function csvCell(v) {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function formatCsv(conv) {
+    const rows = [['role', 'is_thought', 'timestamp', 'token_count', 'text', 'attachments']];
+    for (const t of conv.turns) {
+      rows.push([
+        t.role, t.isThought ? 'true' : 'false',
+        t.timestamp ? new Date(t.timestamp).toISOString() : '',
+        t.tokenCount ?? '', t.text,
+        t.parts.map(p => p.fileName || p.name || p.type).join('; '),
+      ]);
+    }
+    return rows.map(r => r.map(csvCell).join(',')).join('\n');
+  }
+
+  function formatJsonl(conv) {
+    return conv.turns.map(t => JSON.stringify({
+      role: t.role,
+      isThought: t.isThought,
+      timestamp: t.timestamp ? new Date(t.timestamp).toISOString() : null,
+      tokenCount: t.tokenCount,
+      text: t.text,
+      attachments: t.parts.map(p => p.fileName || p.name || p.type),
+    })).join('\n');
   }
 
   const FORMATTERS = {
-    md: { ext: 'md', mime: 'text/markdown', fn: formatMarkdown, label: 'Markdown' },
-    txt: { ext: 'txt', mime: 'text/plain', fn: formatText, label: 'Text' },
-    json: { ext: 'json', mime: 'application/json', fn: formatJson, label: 'JSON' },
+    md: { ext: 'md', mime: 'text/markdown', fn: formatMarkdown, label: 'Markdown', zip: true },
+    txt: { ext: 'txt', mime: 'text/plain', fn: formatText, label: 'Text', zip: true },
+    json: { ext: 'json', mime: 'application/json', fn: formatJson, label: 'JSON', zip: true },
+    html: { ext: 'html', mime: 'text/html', fn: formatHtml, label: 'HTML' },
+    obsidian: { ext: 'md', mime: 'text/markdown', fn: formatObsidian, label: 'Obsidian', zip: true },
+    csv: { ext: 'csv', mime: 'text/csv', fn: formatCsv, label: 'CSV' },
+    jsonl: { ext: 'jsonl', mime: 'application/json', fn: formatJsonl, label: 'JSONL' },
   };
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = el('<a></a>');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
 
   function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
@@ -646,15 +984,19 @@
     group: 'export',
     order: 5,
     title: 'Chat Export',
-    subtitle: 'Export full chat history to Markdown, Text or JSON.',
+    subtitle: 'Export full chat history, with attachments, in seven formats.',
     alwaysSelected: true,
     onRouteChange() { currentCapture(); },
     renderControls: () => `
-      <div class="sl-setting-tool-fields" data-sl-search-item data-sl-search="Chat Export download markdown text json history">
+      <div class="sl-setting-tool-fields" data-sl-search-item data-sl-search="Chat Export download markdown text json html obsidian csv jsonl history attachments">
         <div class="sl-setting-actions">
           <button type="button" class="sl-settings-button" id="sl-export-md" aria-describedby="sl-export-help">Markdown</button>
           <button type="button" class="sl-settings-button" id="sl-export-txt" aria-describedby="sl-export-help">Text</button>
           <button type="button" class="sl-settings-button" id="sl-export-json" aria-describedby="sl-export-help">JSON</button>
+          <button type="button" class="sl-settings-button" id="sl-export-html" aria-describedby="sl-export-help">HTML</button>
+          <button type="button" class="sl-settings-button" id="sl-export-obsidian" aria-describedby="sl-export-help">Obsidian</button>
+          <button type="button" class="sl-settings-button" id="sl-export-csv" aria-describedby="sl-export-help">CSV</button>
+          <button type="button" class="sl-settings-button" id="sl-export-jsonl" aria-describedby="sl-export-help">JSONL</button>
         </div>
         <details class="sl-setting-advanced">
           <summary><span class="sl-setting-label">Export options</span><svg class="sl-setting-disclosure-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
@@ -672,6 +1014,7 @@
             ${checkboxRow('sl-export-tokens', 'Token counts', 'Show per-message token counts when available.', false)}
             ${checkboxRow('sl-export-system', 'System instruction', 'Include the system instruction.', true)}
             ${checkboxRow('sl-export-config', 'Model settings', 'Include model, temperature, top-P/K and limits.', true)}
+            ${checkboxRow('sl-export-attachments', 'Attachments', 'Download attached files at full quality into a zip.', true)}
           </div>
         </details>
         <p class="sl-setting-help" id="sl-export-help">Downloads the full conversation. API first, live capture as fallback.</p>
@@ -693,6 +1036,7 @@
         tokenCounts: $('#sl-export-tokens', modalEl),
         systemInstruction: $('#sl-export-system', modalEl),
         modelConfig: $('#sl-export-config', modalEl),
+        attachments: $('#sl-export-attachments', modalEl),
       };
       let opts = Object.assign({}, DEFAULT_OPTS);
       const readUi = () => ({
@@ -701,6 +1045,7 @@
         tokenCounts: optInputs.tokenCounts ? optInputs.tokenCounts.checked : opts.tokenCounts,
         systemInstruction: optInputs.systemInstruction ? optInputs.systemInstruction.checked : opts.systemInstruction,
         modelConfig: optInputs.modelConfig ? optInputs.modelConfig.checked : opts.modelConfig,
+        attachments: optInputs.attachments ? optInputs.attachments.checked : opts.attachments,
       });
       const paintUi = () => {
         if (reasoningSel) reasoningSel.innerHTML = reasoningOptions(opts.reasoning);
@@ -732,13 +1077,34 @@
               : 'No chat history captured yet. Send a message in this chat, then try again.', true);
             return;
           }
-          const final = applyOpts(conv, readUi());
+          const current = readUi();
+          const final = applyOpts(conv, current);
           const fmt = FORMATTERS[kind];
-          const content = fmt.fn(final, readUi());
-          downloadFile(content, safeFileName(final.title) + '.' + fmt.ext, fmt.mime);
+          let attached = 0;
+          if (current.attachments && (fmt.zip || kind === 'html')) {
+            say('Fetching attachments…');
+            attached = await fetchAttachments(final);
+          }
           const sourceNote = final.source === 'api' ? 'full history' :
             'live capture' + (apiError ? ' (' + apiError + ')' : '');
-          say(fmt.label + ' download started — ' + final.stats.turnCount + ' turns, ' + sourceNote + '.');
+          const hasFiles = attached > 0 &&
+            final.turns.some(t => t.parts.some(p => p.fileName));
+          if (fmt.zip && hasFiles) {
+            const entries = [{ name: 'conversation.' + fmt.ext, data: textToBytes(fmt.fn(final, current)) }];
+            for (const t of final.turns) {
+              for (const p of t.parts) {
+                if (p.fileName && p.dataBase64) {
+                  entries.push({ name: 'attachments/' + p.fileName, data: base64ToBytes(p.dataBase64) });
+                }
+              }
+            }
+            downloadBlob(makeZip(entries), safeFileName(final.title) + '.zip');
+            say(fmt.label + ' zip started — ' + final.stats.turnCount + ' turns, ' +
+              attached + ' attachments, ' + sourceNote + '.');
+          } else {
+            downloadFile(fmt.fn(final, current), safeFileName(final.title) + '.' + fmt.ext, fmt.mime);
+            say(fmt.label + ' download started — ' + final.stats.turnCount + ' turns, ' + sourceNote + '.');
+          }
         } catch (err) {
           say('The download could not start. Try again.', true);
         } finally {
@@ -746,8 +1112,8 @@
         }
       }
 
-      for (const [kind, btnId] of [['md', '#sl-export-md'], ['txt', '#sl-export-txt'], ['json', '#sl-export-json']]) {
-        const btn = $(btnId, modalEl);
+      for (const kind of Object.keys(FORMATTERS)) {
+        const btn = $('#sl-export-' + kind, modalEl);
         if (btn) s.on(btn, 'click', (event) => { event.stopPropagation(); runExport(kind); });
       }
       return () => s.dispose();
