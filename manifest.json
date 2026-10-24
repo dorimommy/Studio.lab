@@ -81,6 +81,7 @@
         "modules/ui-cleaner.js",
         "modules/default-profile.js",
         "modules/draft-saver.js",
+        "modules/limit-tracker.js",
         "modules/native-settings.js",
         "content.js"
       ],

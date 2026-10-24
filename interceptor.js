@@ -993,8 +993,9 @@
     const request = requestMeta();
     emitRequest(request, modifiedBody);
 
+    const genModel = overrideModelId || DynamicStudioAPI.getModel();
     window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
-      detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
+      detail: { url: this.__aisuUrl, model: genModel, ts: Date.now() }
     }));
 
     const xhr = this;
@@ -1006,6 +1007,25 @@
       if (finished) return;
       finished = true;
       activeGenerationXhrs.delete(xhr);
+      if (xhr.status === 429) {
+        // Ground-truth quota signal for the limit tracker: Google's own 429
+        // body names the exhausted quota; surface it, change nothing else.
+        try {
+          const raw = _nativeRT ? (_nativeRT.call(xhr) || '') : '';
+          const quotaMatch = /GenerateRequestsPerDayPerProjectPerModel[\w-]*/.exec(raw);
+          const limitMatch = /"quotaValue"\s*:\s*"?(\d+)"?/.exec(raw);
+          window.dispatchEvent(new CustomEvent('__sl_quotaExceeded', {
+            detail: {
+              version: 1,
+              requestId: request.requestId,
+              model: genModel || null,
+              quotaId: quotaMatch ? quotaMatch[0] : null,
+              limit: limitMatch ? parseInt(limitMatch[1], 10) : null,
+              ts: Date.now()
+            }
+          }));
+        } catch (_) {}
+      }
       try { emitResponse(request, xhr.responseText, ok); } catch (_) {}
       emitRequestFinished(request, ok);
     };
