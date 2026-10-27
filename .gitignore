@@ -12,7 +12,6 @@
 !/background.js
 !/content.js
 !/interceptor.js
-!/rpc-transport.js
 !/sl-panel.css
 !/build/
 !/build/build.mjs
@@ -27,9 +26,15 @@
 
 !/modules/
 !/modules/registry.js
+!/modules/i18n-system.js
 !/modules/settings-select.js
 !/modules/settings-select.css
 !/modules/custom-theme.js
+!/modules/theme-presets.js
+!/modules/theme-engine.js
+!/modules/theme-editor-ui.js
+!/modules/theme-editor.css
+!/modules/theme-i18n.js
 !/modules/initial-chat-render.js
 !/modules/initial-chat-render-settings.js
 !/modules/progressive-chat-render.js
@@ -37,6 +42,8 @@
 !/modules/response-recovery.js
 !/modules/optimizer-smart.js
 !/modules/optimizer-hard.js
+!/modules/chat-cleanup.js
+!/modules/response-history.js
 !/modules/chat-export.js
 !/modules/scroll-bottom.js
 !/modules/word-counter.js
@@ -47,7 +54,6 @@
 !/modules/ui-cleaner.js
 !/modules/default-profile.js
 !/modules/draft-saver.js
-!/modules/limit-tracker.js
 !/modules/native-settings.js
 
 !/account/
@@ -80,6 +86,14 @@
 !/images/SL_PFP_128.png
 !/images/SL_logotype.svg
 !/images/update-space.webp
+!/images/Architecture-banner.png
+!/images/Support_Banner.png
+
+!/stylelab/
+!/stylelab/index.json
+!/stylelab/cartoon-pixel.stylelab
+!/stylelab/winter-frost.stylelab
 
 !/rules/
 !/rules/telemetry-rules.json
+
