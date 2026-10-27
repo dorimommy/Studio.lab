@@ -1,0 +1,17 @@
+.sl-select { position: relative; min-width: 0; width: 100%; }
+.sl-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 12px; background: var(--sl-settings-page,var(--surface,#282a2c)); color: var(--sl-settings-text,var(--text,#e3e3e3)); font: inherit; text-align: left; cursor: pointer; }
+.sl-select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-select-chevron { flex: 0 0 auto; width: 20px; height: 20px; transition: transform .12s ease; }
+.sl-select-trigger[aria-expanded=true] .sl-select-chevron { transform: rotate(180deg); }
+.sl-select-trigger:hover:not(:disabled) { background: color-mix(in srgb,var(--sl-settings-text,var(--text,#e3e3e3)) 6%,var(--sl-settings-page,var(--surface,#282a2c))); }
+.sl-select-trigger:focus-visible { outline: none !important; background: color-mix(in srgb,var(--sl-settings-text,var(--text,#e3e3e3)) 6%,var(--sl-settings-page,var(--surface,#282a2c))); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.sl-select-trigger:disabled { opacity: .55; cursor: default; }
+.sl-select-popup { position: fixed; inset: auto; min-width: 0; margin: 0; padding: 6px; border: 0; border-radius: 16px; background: var(--sl-settings-hover,var(--hover,#303234)); color: var(--sl-settings-text,var(--text,#e3e3e3)); font: 14px/22px 'Segoe UI',Arial,sans-serif; overflow: auto; box-sizing: border-box; box-shadow: 0 8px 24px #0003; scrollbar-width: thin; }
+.sl-select-option { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 10px; overflow-wrap: anywhere; cursor: pointer; }
+.sl-select-option::after { content: ''; flex: 0 0 auto; width: 16px; margin-left: auto; }
+.sl-select-option[aria-selected=true]::after { content: '✓'; }
+.sl-select-option:is(:hover,[data-active=true]) { background: color-mix(in srgb,var(--sl-settings-text,var(--text,#e3e3e3)) 8%,var(--sl-settings-hover,var(--hover,#303234))); }
+.sl-select:has(> .sl-select-trigger:focus-visible) .sl-select-option[data-active=true] { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.sl-select-option[aria-disabled=true] { opacity: .55; cursor: default; }
+@media(prefers-reduced-motion:reduce) { .sl-select-chevron { transition: none; } }
+@media(forced-colors:active) { .sl-select-trigger,.sl-select-popup { background: ButtonFace; color: ButtonText; } .sl-select-option:is([data-active=true],[aria-selected=true]) { background: Highlight; color: HighlightText; } }

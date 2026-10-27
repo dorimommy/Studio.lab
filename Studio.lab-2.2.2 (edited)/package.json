@@ -1,0 +1,15 @@
+{
+  "name": "studio.lab",
+  "version": "2.2.2",
+  "private": true,
+  "type": "commonjs",
+  "description": "Google AI Studio enhancements extension",
+  "scripts": {
+    "test": "node tests/run.cjs",
+    "check": "node scripts/check-account.cjs",
+    "build": "node build/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

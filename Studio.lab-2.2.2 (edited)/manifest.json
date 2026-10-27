@@ -1,0 +1,112 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "116",
+  "name": "Studio.lab",
+  "version": "2.2.2",
+  "version_name": "2.2.2",
+  "description": "Unofficial progressive chat loading, response recovery, and workspace extension for Google AI Studio.",
+  "permissions": [
+    "storage",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "telemetry_blocker",
+        "enabled": true,
+        "path": "rules/telemetry-rules.json"
+      }
+    ]
+  },
+  "icons": {
+    "16": "images/SL_PFP_16.png",
+    "64": "images/SL_PFP_64.png",
+    "128": "images/SL_PFP_128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "images/SL_PFP_16.png",
+      "64": "images/SL_PFP_64.png",
+      "128": "images/SL_PFP_128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src https://api.github.com; base-uri 'none'; frame-ancestors 'self' https://aistudio.google.com; form-action 'none'"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "dist/core-main.js",
+        "modules/initial-chat-render.js",
+        "modules/progressive-chat-render.js",
+        "modules/early-chat-visibility.js",
+        "interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "dist/core.js",
+        "modules/registry.js",
+        "modules/i18n-system.js",
+        "modules/theme-i18n.js",
+        "modules/theme-presets.js",
+        "modules/theme-engine.js",
+        "modules/theme-editor-ui.js",
+        "modules/settings-select.js",
+        "modules/custom-theme.js",
+        "modules/initial-chat-render-settings.js",
+        "modules/response-recovery.js",
+        "modules/optimizer-smart.js",
+        "modules/optimizer-hard.js",
+        "modules/chat-cleanup.js",
+        "modules/response-history.js",
+        "modules/chat-export.js",
+        "modules/scroll-bottom.js",
+        "modules/word-counter.js",
+        "modules/text-formatter.js",
+        "modules/modern-web-chat.js",
+        "modules/telemetry-blocker.js",
+        "modules/ui-cleaner.js",
+        "modules/default-profile.js",
+        "modules/draft-saver.js",
+        "modules/native-settings.js",
+        "content.js"
+      ],
+      "css": [
+        "sl-panel.css",
+        "modules/settings-select.css",
+        "modules/theme-editor.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/SL_logotype.svg",
+        "images/SL_PFP_64.png",
+        "images/update-space.webp",
+        "modules/modern-web-chat.css",
+        "stylelab/*.stylelab",
+        "stylelab/index.json"
+      ],
+      "matches": [
+        "https://aistudio.google.com/*"
+      ]
+    }
+  ]
+}
