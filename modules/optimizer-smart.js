@@ -20,6 +20,7 @@
   let pinned = true;
   let userScrollIntent = false;
   let applying = false;
+  let bulkCleanupSuspended = false;
 
   window.StudioLab.registerModule({
     id: 'optimizer-smart',
@@ -32,7 +33,7 @@
     modeValue: 'smart',
     enabledKey: 'optimizerEnabled',
     defaults: {
-      optimizerEnabled: false,
+      optimizerEnabled: true,
       optimizerMode: 'smart',
       keepLast: 15,
       autoKeep: true
@@ -103,8 +104,8 @@
     banner = null;
     currentParent = null;
     parentRoute = null;
-    manualReveal = false;
-    pinned = true;
+    manualReveal = bulkCleanupSuspended;
+    pinned = !bulkCleanupSuspended;
     userScrollIntent = false;
   }
 
@@ -112,7 +113,7 @@
     const all = $$(turnSelector());
     const parent = all[all.length - 1]?.parentNode || null;
     if (parent !== currentParent || parentRoute !== currentRoute()) {
-      const revealBeforeMount = !currentParent && parentRoute === currentRoute() && manualReveal;
+      const revealBeforeMount = bulkCleanupSuspended || (!currentParent && parentRoute === currentRoute() && manualReveal);
       clearChat();
       currentParent = parent;
       parentRoute = currentRoute();
@@ -150,11 +151,14 @@
     applying = true;
     try {
       const turns = findCurrentTurns();
-      if (isSearchDialogOpen()) {
+      if (bulkCleanupSuspended || isSearchDialogOpen()) {
         manualReveal = true;
         pinned = false;
         userScrollIntent = false;
         for (const turn of turns) unmark(turn);
+        for (const turn of Array.from(bufferedTurns)) unmark(turn);
+        updateBanner(turns.length);
+        return;
       }
       const cutoff = Math.max(0, turns.length - getKeepCount());
       for (let index = 0; index < turns.length; index++) {
@@ -205,6 +209,7 @@
   }
 
   function resumeBuffering() {
+    if (bulkCleanupSuspended) return;
     manualReveal = false;
     pinned = true;
     userScrollIntent = false;
@@ -214,7 +219,7 @@
   function updateBanner(turnCount) {
     const count = bufferedTurns.size;
     const earlier = olderTurnCount();
-    if (!currentParent?.isConnected || (!count && !earlier && (!manualReveal || turnCount <= getKeepCount()))) {
+    if (!currentParent?.isConnected || bulkCleanupSuspended || (!count && !earlier && (!manualReveal || turnCount <= getKeepCount()))) {
       if (banner) banner.remove();
       banner = null;
       return;
@@ -223,7 +228,9 @@
       banner = el('<div class="sl-load-banner"></div>');
       currentParent.insertBefore(banner, currentParent.firstChild);
     }
-    const signature = `${count}:${earlier}:${manualReveal}`;
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const lang = window.StudioLab?.i18n?.getLanguage?.() || 'en';
+    const signature = `${count}:${earlier}:${manualReveal}:${lang}`;
     if (banner.getAttribute('data-buffered-state') === signature) return;
     banner.setAttribute('data-buffered-state', signature);
     banner.textContent = '';
@@ -238,18 +245,31 @@
       });
       banner.appendChild(button);
     };
-    const summary = earlier ? `${count ? count + ' hidden, ' : ''}${earlier} earlier` : `${count} hidden`;
-    if (count || earlier) addButton(`Restore Everything (${summary})`, () => {
+    const summary = earlier ? `${count ? count + ' ' + t('banner_hidden', 'hidden') + ', ' : ''}${earlier} ${t('banner_earlier', 'earlier')}` : `${count} ${t('banner_hidden', 'hidden')}`;
+    if (count || earlier) addButton(`${t('banner_restore_all', 'Restore Everything')} (${summary})`, () => {
       restoreBuffered();
       window.dispatchEvent(new CustomEvent('__sl_restoreAllTurns'));
     });
-    if (count || earlier) addButton(`${earlier ? 'Show earlier ' : 'Restore +'}${Math.min(20, count + earlier)}`, showEarlierTurns);
-    if (manualReveal) addButton('Show recent only', resumeBuffering);
+    if (count || earlier) addButton(`${earlier ? t('banner_show_earlier', 'Show earlier') + ' ' : t('banner_restore_more', 'Restore +')}${Math.min(20, count + earlier)}`, showEarlierTurns);
+    if (manualReveal) addButton(t('banner_show_recent', 'Show recent only'), resumeBuffering);
   }
 
   function setupWatchers() {
     watcherScope.listen(window, '__sl_chatRenderCommitted', applySmartOptimizer);
+    watcherScope.listen(window, '__sl_languageChanged', applySmartOptimizer);
     watcherScope.listen(window, '__sl_restoreAllTurns', () => restoreBuffered());
+    watcherScope.listen(window, '__sl_bulkCleanupStart', () => {
+      bulkCleanupSuspended = true;
+      restoreBuffered();
+      for (const turn of $$(turnSelector())) unmark(turn);
+    });
+    watcherScope.listen(window, '__sl_bulkCleanupEnd', () => {
+      bulkCleanupSuspended = false;
+      resumeBuffering();
+      requestAnimationFrame(() => {
+        if (!bulkCleanupSuspended) resumeBuffering();
+      });
+    });
 
     const recordScrollIntent = event => {
       if (event.isTrusted === false) return;

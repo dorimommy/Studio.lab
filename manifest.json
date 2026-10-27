@@ -7,13 +7,10 @@
   "description": "Unofficial progressive chat loading, response recovery, and workspace extension for Google AI Studio.",
   "permissions": [
     "storage",
-    "identity",
-    "alarms",
     "declarativeNetRequest"
   ],
   "host_permissions": [
-    "https://api.github.com/*",
-    "https://jkozjzitetlhbtacvuby.supabase.co/*"
+    "https://api.github.com/*"
   ],
   "declarative_net_request": {
     "rule_resources": [
@@ -40,7 +37,7 @@
     "service_worker": "background.js"
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src https://api.github.com https://jkozjzitetlhbtacvuby.supabase.co; base-uri 'none'; frame-ancestors 'self' https://aistudio.google.com; form-action 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; connect-src https://api.github.com; base-uri 'none'; frame-ancestors 'self' https://aistudio.google.com; form-action 'none'"
   },
   "content_scripts": [
     {
@@ -52,8 +49,7 @@
         "modules/initial-chat-render.js",
         "modules/progressive-chat-render.js",
         "modules/early-chat-visibility.js",
-        "interceptor.js",
-        "rpc-transport.js"
+        "interceptor.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -65,13 +61,19 @@
       "js": [
         "dist/core.js",
         "modules/registry.js",
-        "account/catalog-schema.js",
+        "modules/i18n-system.js",
+        "modules/theme-i18n.js",
+        "modules/theme-presets.js",
+        "modules/theme-engine.js",
+        "modules/theme-editor-ui.js",
         "modules/settings-select.js",
         "modules/custom-theme.js",
         "modules/initial-chat-render-settings.js",
         "modules/response-recovery.js",
         "modules/optimizer-smart.js",
         "modules/optimizer-hard.js",
+        "modules/chat-cleanup.js",
+        "modules/response-history.js",
         "modules/chat-export.js",
         "modules/scroll-bottom.js",
         "modules/word-counter.js",
@@ -81,13 +83,13 @@
         "modules/ui-cleaner.js",
         "modules/default-profile.js",
         "modules/draft-saver.js",
-        "modules/limit-tracker.js",
         "modules/native-settings.js",
         "content.js"
       ],
       "css": [
         "sl-panel.css",
-        "modules/settings-select.css"
+        "modules/settings-select.css",
+        "modules/theme-editor.css"
       ],
       "run_at": "document_start"
     }
@@ -98,17 +100,9 @@
         "images/SL_logotype.svg",
         "images/SL_PFP_64.png",
         "images/update-space.webp",
-        "modules/modern-web-chat.css"
-      ],
-      "matches": [
-        "https://aistudio.google.com/*"
-      ]
-    },
-    {
-      "resources": [
-        "account/account.html",
-        "account/catalog.html",
-        "account/theme-preview.html"
+        "modules/modern-web-chat.css",
+        "stylelab/*.stylelab",
+        "stylelab/index.json"
       ],
       "matches": [
         "https://aistudio.google.com/*"

@@ -1,16 +1,5 @@
 'use strict';
-// Account state and tokens stay in this extension-origin worker. Keeping this
-// guarded also permits the existing local feature test harness to run alone.
-let accountService = null;
-if (typeof importScripts === 'function') {
-  importScripts('account/config.js', 'account/schema.js', 'account/catalog-schema.js', 'account/social-schema.js', 'account/vault.js', 'account/service.js');
-  accountService = StudioLabAccount.createService({
-    chrome, fetch: (...args) => fetch(...args), crypto, config: StudioLabAccountConfig,
-    vault: StudioLabAccountVault.createVault(indexedDB)
-  });
-  chrome.alarms.onAlarm.addListener(alarm => { void accountService.onAlarm(alarm); });
-  void accountService.start();
-}
+
 chrome.action.onClicked.addListener(tab => {
   if (!Number.isInteger(tab?.id) || tab.id < 0) return;
   // Chrome omits tab.url without tabs/activeTab permission. Only our
@@ -44,47 +33,7 @@ syncTelemetryRules();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.slState) syncTelemetryRules();
-  if (area === 'local' && changes.sl_export_backup) void syncBackupAlarm();
-  accountService?.onLocalChange(changes, area);
 });
-
-// --- Scheduled library backups (chat-export) --------------------------------
-// The schedule lives in storage (set from the Export settings); this worker
-// owns the chrome.alarms entry and, when it fires, asks open AI Studio tabs
-// to run the incremental export — the RPC transport only exists there.
-const BACKUP_ALARM = 'sl_export_backup';
-async function syncBackupAlarm() {
-  try {
-    const data = await chrome.storage.local.get(['sl_export_backup']);
-    const schedule = data.sl_export_backup?.schedule;
-    await chrome.alarms.clear(BACKUP_ALARM);
-    if (schedule === 'daily' || schedule === 'weekly') {
-      chrome.alarms.create(BACKUP_ALARM, {
-        delayInMinutes: 60,
-        periodInMinutes: schedule === 'daily' ? 24 * 60 : 7 * 24 * 60
-      });
-    }
-  } catch (_) { /* alarms unavailable in the local test harness */ }
-}
-if (typeof chrome !== 'undefined' && chrome.alarms) {
-  void syncBackupAlarm();
-  chrome.alarms.onAlarm.addListener(alarm => {
-    if (alarm.name !== BACKUP_ALARM) return;
-    // No url filter: the extension holds no tabs/host permission for
-    // aistudio.google.com, so a filtered query matches nothing. Only AI
-    // Studio tabs run our content script, so offering the message to every
-    // tab and letting the others refuse is the reliable route (same pattern
-    // as the action-click handler above).
-    chrome.tabs.query({}).then(async tabs => {
-      for (const tab of tabs) {
-        try {
-          const res = await chrome.tabs.sendMessage(tab.id, { action: 'slRunBackup' });
-          if (res?.started) return; // one tab running it is enough
-        } catch (_) { /* tab without our content script; try the next */ }
-      }
-    }).catch(() => {});
-  });
-}
 
 const RELEASES_URL = 'https://api.github.com/repos/dorimommy/Studio.lab/releases?per_page=20';
 const RELEASE_CACHE_KEY = 'slReleaseCheck';
@@ -168,19 +117,8 @@ async function checkForUpdates(force = false) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  if (message?.action === 'slAccount') {
-    if (!accountService) { reply({ ok: false, code: 'unavailable', error: 'Reload the extension to enable accounts.' }); return; }
-    accountService.handle(message, sender).then(reply).catch(() => {
-      reply({ ok: false, code: 'unavailable', error: 'The account service is unavailable. Reload the extension and retry.' });
-    });
-    return true;
-  }
   if (message?.action === 'checkForUpdates') {
     checkForUpdates(message.force === true).then(reply).catch(() => reply({ ok: false }));
-    return true;
-  }
-  if (message?.action === 'slSyncBackupAlarm') {
-    syncBackupAlarm().then(() => reply({ ok: true })).catch(() => reply({ ok: false }));
     return true;
   }
   if (message?.action !== 'getTelemetryStatus') return;

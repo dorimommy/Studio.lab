@@ -529,23 +529,6 @@
     });
   });
 
-  let catalogNavigation = 0;
-  window.addEventListener('__sl_routeChanged', () => { catalogNavigation++; });
-  window.addEventListener('__sl_applyCatalogPrompt', (event) => {
-    const { requestId, text, route } = event.detail || {};
-    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
-        typeof text !== 'string' || !text.trim() || text.length > 16000 ||
-        route !== location.href) return;
-    const epoch = chatEpoch;
-    const navigation = catalogNavigation;
-    const guard = () => location.href === route && chatEpoch === epoch && catalogNavigation === navigation;
-    DynamicStudioAPI.setSystemInstructions(text, applied => {
-      window.dispatchEvent(new CustomEvent('__sl_catalogPromptResult_' + requestId,
-        { detail: { ok: applied === true && guard() } }));
-    }, guard);
-  });
-
-
   const URL_MARKER = 'GenerateContent';
   const EVENT_NAME = '__aisu_xhrCapture';
 
@@ -636,6 +619,7 @@
   // A content-script event supplies the fallback model for outgoing generation requests.
   let overrideModelId = null;
   let overrideBaseModel = null;
+  let stealthOverrideModelId = null;
   const activeGenerationXhrs = new Set();
 
   function clearModelOverride() {
@@ -654,6 +638,7 @@
   }
 
   function currentModelOverride() {
+    if (stealthOverrideModelId) return stealthOverrideModelId;
     if (!overrideModelId) return null;
     const nativeModel = DynamicStudioAPI.getModel();
     if (nativeModel && !overrideBaseModel) {
@@ -666,10 +651,35 @@
     return overrideModelId;
   }
 
+  function resolveStealthModelId(requestedId) {
+    const cleanReq = String(requestedId || 'gemini-3.1-flash-lite').replace(/^models\//, '').trim();
+    if (cleanReq === 'gemini-3.1-flash-lite') {
+      return 'gemini-3.1-flash-lite';
+    }
+    try {
+      const rawFeatured = window.localStorage && window.localStorage.getItem('sl_featured_models');
+      if (rawFeatured) {
+        const list = JSON.parse(rawFeatured);
+        if (Array.isArray(list) && list.length > 0) {
+          const exact = list.find(m => m && m.id === cleanReq);
+          if (exact && exact.id) return exact.id;
+          const previewMatch = list.find(m => m && m.id === cleanReq + '-preview');
+          if (previewMatch && previewMatch.id) return previewMatch.id;
+          const prefixMatch = list.find(m => m && typeof m.id === 'string' && m.id.startsWith(cleanReq));
+          if (prefixMatch && prefixMatch.id) return prefixMatch.id;
+        }
+      }
+    } catch (_) {}
+    return cleanReq;
+  }
+
   window.addEventListener('__sl_routeChanged', (event) => {
     const current = event.detail?.current?.key;
     const previous = event.detail?.previous?.key;
-    if (current && previous && current !== previous) clearModelOverride();
+    if (current && previous && current !== previous) {
+      stealthOverrideModelId = null;
+      clearModelOverride();
+    }
   });
   document.addEventListener('click', event => {
     const resetButton = event.target?.closest?.('button[data-test-clear="outside"][aria-label="New chat"]');
@@ -714,6 +724,61 @@
     window.dispatchEvent(new CustomEvent('__sl_modelDirectResult', {
       detail: { requestId, applied }
     }));
+  });
+
+  window.addEventListener('__sl_stealthSwitchModel', (e) => {
+    const requestId = e.detail?.requestId;
+    const targetModel = e.detail?.modelId || 'gemini-3.1-flash-lite';
+    const originalSignalModel = DynamicStudioAPI.getModel() || '';
+    const originalOverrideModel = overrideModelId || null;
+    const resolvedModelId = resolveStealthModelId(targetModel);
+
+    let signalApplied = false;
+    try {
+      signalApplied = DynamicStudioAPI.setModel(resolvedModelId);
+      if (!signalApplied && resolvedModelId !== targetModel) {
+        signalApplied = DynamicStudioAPI.setModel(targetModel);
+      }
+    } catch (_) {}
+
+    stealthOverrideModelId = resolvedModelId;
+
+    if (requestId) {
+      window.dispatchEvent(new CustomEvent('__sl_stealthSwitchModelResult', {
+        detail: {
+          requestId,
+          originalSignalModel,
+          originalOverrideModel,
+          appliedModel: resolvedModelId,
+          signalApplied
+        }
+      }));
+    }
+  });
+
+  window.addEventListener('__sl_stealthRestoreModel', (e) => {
+    const requestId = e.detail?.requestId;
+    const originalSignalModel = e.detail?.originalSignalModel || '';
+    const originalOverrideModel = e.detail?.originalOverrideModel || null;
+
+    stealthOverrideModelId = null;
+
+    let restoredSignal = false;
+    if (originalSignalModel) {
+      try {
+        restoredSignal = DynamicStudioAPI.setModel(originalSignalModel);
+      } catch (_) {}
+    }
+    overrideModelId = originalOverrideModel;
+    if (originalOverrideModel) {
+      overrideBaseModel = DynamicStudioAPI.getModel();
+    }
+
+    if (requestId) {
+      window.dispatchEvent(new CustomEvent('__sl_stealthRestoreModelResult', {
+        detail: { requestId, restoredSignal }
+      }));
+    }
   });
 
   window.addEventListener('__sl_setModel', (e) => {
@@ -993,9 +1058,8 @@
     const request = requestMeta();
     emitRequest(request, modifiedBody);
 
-    const genModel = overrideModelId || DynamicStudioAPI.getModel();
     window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
-      detail: { url: this.__aisuUrl, model: genModel, ts: Date.now() }
+      detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
     }));
 
     const xhr = this;
@@ -1007,25 +1071,6 @@
       if (finished) return;
       finished = true;
       activeGenerationXhrs.delete(xhr);
-      if (xhr.status === 429) {
-        // Ground-truth quota signal for the limit tracker: Google's own 429
-        // body names the exhausted quota; surface it, change nothing else.
-        try {
-          const raw = _nativeRT ? (_nativeRT.call(xhr) || '') : '';
-          const quotaMatch = /GenerateRequestsPerDayPerProjectPerModel[\w-]*/.exec(raw);
-          const limitMatch = /"quotaValue"\s*:\s*"?(\d+)"?/.exec(raw);
-          window.dispatchEvent(new CustomEvent('__sl_quotaExceeded', {
-            detail: {
-              version: 1,
-              requestId: request.requestId,
-              model: genModel || null,
-              quotaId: quotaMatch ? quotaMatch[0] : null,
-              limit: limitMatch ? parseInt(limitMatch[1], 10) : null,
-              ts: Date.now()
-            }
-          }));
-        } catch (_) {}
-      }
       try { emitResponse(request, xhr.responseText, ok); } catch (_) {}
       emitRequestFinished(request, ok);
     };

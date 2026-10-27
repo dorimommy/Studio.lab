@@ -41,9 +41,13 @@
     });
     return storageQueue;
   }
+  function isStealthDraftText(txt) {
+    if (typeof txt !== 'string') return false;
+    return txt.includes('[[SL_HIDDEN_SUGGEST_REQ]]') || txt.includes('[[SL_HIDDEN_IMPROVE_REQ]]');
+  }
   function validDraft(value, path) {
     return !!(value && value.version === 2 && value.route === path &&
-      typeof value.text === 'string' && value.text.trim() && value.text.length <= MAX_TEXT &&
+      typeof value.text === 'string' && value.text.trim() && !isStealthDraftText(value.text) && value.text.length <= MAX_TEXT &&
       Number.isFinite(value.ts) && value.ts <= Date.now() + 60000 &&
       Date.now() - value.ts <= MAX_AGE && value.ts > (sentAt.get(path) || 0));
   }
@@ -71,7 +75,7 @@
     pendingSave = null;
     if (!draft) return;
     enqueue(async () => {
-      if (!draft.text.trim()) await store.remove(keyFor(draft.route));
+      if (!draft.text.trim() || isStealthDraftText(draft.text)) await store.remove(keyFor(draft.route));
       else if (draft.text.length <= MAX_TEXT && draft.ts > (sentAt.get(draft.route) || 0)) {
         // Make room before writing so the new draft does not first hit Chrome's quota.
         await pruneDrafts(draft);
@@ -81,6 +85,7 @@
   }
   function onInput(event) {
     if (!enabled || restoring || !isPromptTextarea(event.target) || !route()) return;
+    if (document.body?.classList?.contains('aistu-stealth-sending-prompt') || isStealthDraftText(event.target.value || '')) return;
     revision++;
     activeTextarea = event.target;
     activeRoute = route();
@@ -202,12 +207,13 @@
     removeIndicator();
     const promptBox = textarea.closest('ms-prompt-box');
     if (!promptBox) return;
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
     indicatorEl = el(
       '<div class="sl-draft-indicator">' +
       '<span class="material-symbols-outlined notranslate sl-draft-icon">history</span>' +
-      '<span class="sl-draft-indicator-text">Restored unsaved draft</span>' +
-      '<button type="button" class="sl-draft-discard-btn">Discard</button>' +
-      '<button type="button" class="sl-draft-close-btn" title="Dismiss">×</button>' +
+      `<span class="sl-draft-indicator-text">${t('draft_restored_text', 'Restored unsaved draft')}</span>` +
+      `<button type="button" class="sl-draft-discard-btn">${t('draft_discard_btn', 'Discard')}</button>` +
+      `<button type="button" class="sl-draft-close-btn" title="${t('draft_dismiss_title', 'Dismiss')}">×</button>` +
       '</div>'
     );
     $('.sl-draft-discard-btn', indicatorEl).onclick = event => {

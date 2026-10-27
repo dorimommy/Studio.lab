@@ -12,9 +12,6 @@
   } catch (_) { return; }
   const VERSION = manifest.version_name || manifest.version;
   const STORAGE_KEY = 'slState';
-  const readyAccountFrames = new WeakSet();
-  const readyCatalogFrames = new WeakSet();
-  const pendingCatalogRefresh = new Set();
   const ICONS = {
     bolt: '<path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/>',
@@ -40,18 +37,22 @@
     tune: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>',
     science: '<path d="M9 3h6M10 3v7L4 20c-.3.6.1 1 1 1h14c.9 0 1.3-.4 1-1l-6-10V3"/><path d="M7 15h10"/>',
     person: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
-    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>'
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>',
+    palette: '<path d="M12 3a9 9 0 0 0 0 18c1.3 0 2.2-.9 2.2-2.1 0-.5-.2-1-.5-1.4-.3-.3-.4-.8-.4-1.2 0-1 0.8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.1-4-7.5-9-7.5z"/><circle cx="7.5" cy="10.5" r="1.2"/><circle cx="10.5" cy="7.5" r="1.2"/><circle cx="14.5" cy="7.5" r="1.2"/><circle cx="16.5" cy="10.5" r="1.2"/>',
+    add: '<path d="M12 5v14M5 12h14"/>',
+    arrow_back: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+    download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+    upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/>'
   };
 
   const TABS = [
     { id: 'home', label: 'Home', icon: 'home', tone: 'blue', description: 'Google AI Studio and Studio.lab, in one place.' },
-    { id: 'native', label: 'Google AI Studio', icon: 'tune', tone: 'purple', description: 'Appearance, keyboard shortcuts, autocomplete, notifications, and microphone.' },
+    { id: 'native', label: 'Google AI Studio', icon: 'tune', tone: 'purple', description: 'Keyboard shortcuts, autocomplete, notifications, and microphone.' },
     { id: 'all', label: 'Studio.lab', icon: 'science', tone: 'green', description: 'All your Studio.lab preferences.' },
+    { id: 'theme', label: 'Theme', icon: 'palette', tone: 'pink', description: 'Choose between Original Theme and your saved custom themes.' },
     { id: 'injection', label: 'Performance', icon: 'bolt', tone: 'orange', description: 'Recover interrupted responses and keep long conversations responsive.' },
     { id: 'tweaks', label: 'Workspace', icon: 'tune', tone: 'purple', description: 'Choose your interface helpers and what stays visible.' },
     { id: 'modules', label: 'Tools', icon: 'calculate', tone: 'green', description: 'Manage chat tools, local profiles, exports, and privacy.' },
-    { id: 'market', label: 'Market', icon: 'storage', tone: 'green', description: 'Discover Modern Web Chat themes and system prompts, or create your own.' },
-    { id: 'account', label: 'Account', icon: 'person', tone: 'pink', description: 'Sign in, sync your Studio.lab preferences, and manage your account.' },
     { id: 'info', label: 'Info', icon: 'info', tone: 'blue', description: 'Updates, compatibility, and information about Studio.lab.' }
   ];
 
@@ -96,12 +97,6 @@
       description: 'Configure your chat tools and the information kept in this browser.'
     },
     {
-      id: 'export',
-      tabId: 'modules',
-      title: 'Export',
-      description: 'Download full conversations in Markdown, Text or JSON.'
-    },
-    {
       id: 'privacy', tabId: 'modules', title: 'Privacy',
       description: 'Choose which usage requests AI Studio can send.'
     }
@@ -112,12 +107,13 @@
     'word-counter': 'Show word and character counts for messages.',
     'scroll-bottom': 'Add a button that returns you to the newest message.',
     'draft-saver': 'Recover unsent prompts after reloading.',
-    'limit-tracker': 'Count requests per model for the current Pacific day and show how much of the estimated daily quota is left. Quota resets at midnight Pacific.',
     'text-formatter': 'Show Markdown controls and smart lists for prompts.',
     'modern-web-chat': 'Use the alternate chat layout with its input bar and media gallery.',
     'telemetry-blocker': 'Block supported analytics requests while you use AI Studio.',
     'default-profile': 'Reuse a model and instruction in new chats.',
     'chat-export': 'Download this conversation as Markdown or JSON.',
+    'chat-cleanup': 'Automatically remove Think blocks, bulk delete Think/Media/Code blocks with progress tracking, and fix share chat blank screen errors.',
+    'response-history': 'Keep and switch between multiple regenerated responses (<1/3>) right below the chat turn.',
     'optimizer-smart': 'Hide older messages while keeping native chat nodes intact. Restore them when needed.',
     'optimizer-hard': 'Remove older rendered turns from this browser session when you run cleanup.',
     'initial-chat-render': 'Show the latest 20 messages first and load earlier messages in batches as you scroll up or use history controls. Keep the complete conversation available for writing and model context.',
@@ -134,12 +130,13 @@
     'scroll-bottom': 'Jump to latest message',
     'word-counter': 'Word counter',
     'draft-saver': 'Save drafts',
-    'limit-tracker': 'Daily limit tracker',
     'text-formatter': 'Formatting toolbar',
     'modern-web-chat': 'Chat layout',
     'telemetry-blocker': 'Block usage analytics',
     'default-profile': 'New chat defaults',
     'chat-export': 'Export conversation',
+    'chat-cleanup': 'Chat cleanup & Share fix',
+    'response-history': 'Multiple Response Options',
     'optimizer-smart': 'Buffered',
     'optimizer-hard': 'Physical cleanup',
     'initial-chat-render': 'Fast chat opening',
@@ -153,16 +150,29 @@
 
   const DEFAULT_STATE = {
     responseRecoveryEnabled: true,
-    optimizerEnabled: false,
+    optimizerEnabled: true,
     optimizerMode: 'smart',
     keepLast: 15,
     autoKeep: true,
     scrollBottomEnabled: true,
     wordCounterEnabled: true,
     textFormatterEnabled: true,
-    modernWebChatEnabled: false,
-    cleanerEnabled: false,
-    draftSaverEnabled: true
+    modernWebChatEnabled: true,
+    cleanerEnabled: true,
+    cleanerTips: true,
+    cleanerBanners: true,
+    cleanerSidebarBanners: true,
+    cleanerHallucinations: true,
+    cleanerFeedback: true,
+    cleanerSuggestions: true,
+    draftSaverEnabled: true,
+    multipleResponseEnabled: true,
+    autoDeleteThoughtsEnabled: false,
+    deleteThoughtDelay: 5,
+    welcomeCompleted: false,
+    language: 'vi',
+    activeThemeId: 'original',
+    customThemes: []
   };
 
   const moduleApi = window.StudioLab || {};
@@ -179,14 +189,16 @@
     getTurnCount,
     refreshLiveStats,
     html,
-    announceSettings
+    announceSettings,
+    saveCustomTheme,
+    applyThemeById,
+    deleteCustomTheme
   };
 
   let initialized = false;
   let contextStopped = false;
   let routeWatcherId = null;
   let closeUpdatePopup = null;
-  let cancelCatalogPrompt = null;
   let modalEl = null;
   let modalScope = null;
   let returnFocus = null;
@@ -195,9 +207,8 @@
   let currentRoute = readRoute();
   let activeTab = 'home';
   let browseTab = 'home';
+  let themeEditorState = null;
   let nativeSettings = null;
-  let themePreview = null;
-  let pendingOwnCreations = false;
   let openingModal = false;
   let settingsEntryBound = false;
   let searchQuery = '';
@@ -227,7 +238,6 @@
     initialized = false;
     clearInterval(routeWatcherId);
     routeWatcherId = null;
-    cancelCatalogPrompt?.();
     closeUpdatePopup?.();
     closeModal();
     for (const module of [...modules].reverse()) callModule(module, 'dispose');
@@ -271,9 +281,14 @@
   function finishInitialLoad() {
     if (!extensionActive()) return;
     initialized = true;
+    if (state.language) {
+      window.StudioLab?.i18n?.applyLanguage?.(state.language, ctx);
+    }
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
     initModules();
     refreshLiveStats();
     checkUpdates();
+    window.StudioLab?.i18n?.maybeShowWelcomeModal?.(ctx);
   }
   try {
     store.get([STORAGE_KEY]).then(data => {
@@ -307,52 +322,24 @@
     const prev = snapshotState();
     Object.assign(state, migrateStoredState(incoming));
     normalizeState();
+    if (state.language && state.language !== prev.language) {
+      window.StudioLab?.i18n?.applyLanguage?.(state.language, ctx);
+    }
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
     if (Object.prototype.hasOwnProperty.call(incoming, 'bypassEnabled')) saveState();
     notifyModules(prev);
-    updateModalState();
+    if (state.language !== prev.language && modalEl) {
+      rerenderModalInPlace();
+    } else {
+      updateModalState();
+    }
   }
   if (!extensionActive()) return;
   shellScope.add(store.onChange(handleStorageChange));
 
-  let applyingCatalogPrompt = false;
-  function handleContentMessage(msg, sender, reply) {
+  function handleContentMessage(msg) {
     if (!extensionActive()) return;
     if (msg && msg.action === 'openStudioLab') openModal();
-    if (msg?.action !== 'slApplyPrompt') return;
-    if (sender?.id !== chrome.runtime.id || location.origin !== 'https://aistudio.google.com' ||
-        typeof msg.text !== 'string' || !msg.text.trim() || msg.text.length > 16000 ||
-        typeof msg.requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(msg.requestId)) {
-      reply({ ok: false, error: 'The system prompt request was invalid.' }); return;
-    }
-    if (applyingCatalogPrompt) { reply({ ok: false, error: 'Another system prompt is being applied. Try again.' }); return; }
-    if (!$('ms-prompt-box, ms-system-instructions-panel, textarea[aria-label="System instructions"]')) {
-      reply({ ok: false, error: 'Open a chat in Google AI Studio before applying this prompt.' }); return;
-    }
-    applyingCatalogPrompt = true;
-    const route = location.href, focused = document.activeElement;
-    const eventName = '__sl_catalogPromptResult_' + msg.requestId;
-    let completed = false;
-    const finish = result => {
-      if (completed) return;
-      completed = true; applyingCatalogPrompt = false;
-      cancelCatalogPrompt = null;
-      clearTimeout(timeout); window.removeEventListener(eventName, receive);
-      const ok = result?.ok === true && route === location.href;
-      if (route === location.href && focused?.isConnected) focused.focus({ preventScroll: true });
-      reply(ok ? { ok: true } : { ok: false, error: 'The system prompt could not be applied. Keep this chat open and retry.' });
-    };
-    const receive = event => finish(event.detail);
-    const timeout = setTimeout(() => finish({ ok: false }), 3000);
-    cancelCatalogPrompt = () => {
-      completed = true;
-      applyingCatalogPrompt = false;
-      clearTimeout(timeout);
-      window.removeEventListener(eventName, receive);
-      cancelCatalogPrompt = null;
-    };
-    window.addEventListener(eventName, receive);
-    window.dispatchEvent(new CustomEvent('__sl_applyCatalogPrompt', { detail: { requestId: msg.requestId, text: msg.text, route } }));
-    return true;
   }
   chrome.runtime.onMessage.addListener(handleContentMessage);
   shellScope.add(() => chrome.runtime.onMessage.removeListener(handleContentMessage));
@@ -390,9 +377,189 @@
     state.scrollBottomEnabled = !!state.scrollBottomEnabled;
     state.wordCounterEnabled = !!state.wordCounterEnabled;
     state.textFormatterEnabled = state.textFormatterEnabled !== false;
-    state.modernWebChatEnabled = !!state.modernWebChatEnabled;
+    // Chat layout is permanently enabled and hidden from settings
+    state.modernWebChatEnabled = true;
     state.cleanerEnabled = !!state.cleanerEnabled;
     state.draftSaverEnabled = state.draftSaverEnabled !== false;
+    state.multipleResponseEnabled = state.multipleResponseEnabled !== false;
+    state.autoDeleteThoughtsEnabled = !!state.autoDeleteThoughtsEnabled;
+    state.deleteThoughtDelay = Math.min(3600, Math.max(1, parseInt(state.deleteThoughtDelay, 10) || 5));
+    state.welcomeCompleted = !!state.welcomeCompleted;
+    state.language = String(state.language || 'vi');
+    if (!Array.isArray(state.customThemes)) {
+      state.customThemes = [];
+    } else {
+      state.customThemes = state.customThemes
+        .filter(item => item && typeof item === 'object' && item.id)
+        .map(item => ({
+          id: String(item.id),
+          name: String(item.name || 'Custom Theme').trim() || 'Custom Theme',
+          description: String(item.description || '').trim(),
+          createdAt: item.createdAt || new Date().toISOString(),
+          updatedAt: item.updatedAt || new Date().toISOString(),
+          config: item.config && typeof item.config === 'object' ? item.config : {}
+        }));
+    }
+    const rawThemeId = String(state.activeThemeId || 'original');
+    const validCustomTheme = state.customThemes.some(item => item.id === rawThemeId);
+    state.activeThemeId = (rawThemeId === 'original' || validCustomTheme) ? rawThemeId : 'original';
+  }
+
+  function applyThemeById(themeId) {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const targetId = String(themeId || 'original');
+    const exists = targetId === 'original' || (Array.isArray(state.customThemes) && state.customThemes.some(item => item.id === targetId));
+    const nextId = exists ? targetId : 'original';
+    setState({ activeThemeId: nextId });
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
+    announceSettings(t('theme_applied_toast', 'Theme applied.'));
+    rerenderThemeTabInPlace();
+  }
+
+  function saveCustomTheme(themeInput = {}) {
+    const list = Array.isArray(state.customThemes) ? [...state.customThemes] : [];
+    const now = new Date().toISOString();
+    const editingId = themeInput.id || (themeEditorState?.mode === 'edit' ? themeEditorState.themeId : null);
+    const normalizeCfg = window.StudioLab?.themePresets?.normalizeThemeConfig;
+    const rawConfig = themeInput.config && typeof themeInput.config === 'object' ? themeInput.config : {};
+    const finalConfig = normalizeCfg ? normalizeCfg(rawConfig) : rawConfig;
+    let savedTheme;
+    if (editingId && list.some(item => item.id === editingId)) {
+      const idx = list.findIndex(item => item.id === editingId);
+      savedTheme = {
+        ...list[idx],
+        name: String(themeInput.name || list[idx].name || `Custom Theme ${idx + 1}`).trim(),
+        description: String(themeInput.description ?? list[idx].description ?? '').trim(),
+        updatedAt: now,
+        config: finalConfig
+      };
+      list[idx] = savedTheme;
+    } else {
+      const id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+      savedTheme = {
+        id,
+        name: String(themeInput.name || `Custom Theme ${list.length + 1}`).trim(),
+        description: String(themeInput.description || '').trim(),
+        createdAt: now,
+        updatedAt: now,
+        config: finalConfig
+      };
+      list.push(savedTheme);
+    }
+    themeEditorState = null;
+    setState({
+      customThemes: list,
+      activeThemeId: savedTheme.id
+    });
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
+    rerenderThemeTabInPlace();
+    return savedTheme;
+  }
+
+  function deleteCustomTheme(themeId) {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const targetId = String(themeId || '');
+    if (!targetId || targetId === 'original') return;
+    const nextList = (state.customThemes || []).filter(item => item.id !== targetId);
+    const nextActive = state.activeThemeId === targetId ? 'original' : state.activeThemeId;
+    if (themeEditorState && themeEditorState.themeId === targetId) {
+      themeEditorState = null;
+    }
+    setState({
+      customThemes: nextList,
+      activeThemeId: nextActive
+    });
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
+    announceSettings(t('theme_deleted_toast', 'Custom theme deleted.'));
+    rerenderThemeTabInPlace();
+  }
+
+  function exportCustomTheme(themeId) {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const targetId = String(themeId || '');
+    const item = (state.customThemes || []).find(th => th.id === targetId);
+    if (!item) return;
+
+    const serializeFn = window.StudioLab?.themePresets?.serializeThemelab;
+    const contentStr = serializeFn
+      ? serializeFn(item)
+      : JSON.stringify({
+          format: 'studiolab-themelab',
+          version: '2.2.2',
+          exportedAt: new Date().toISOString(),
+          theme: {
+            name: item.name || 'Custom Theme',
+            description: item.description || '',
+            config: item.config || {}
+          }
+        }, null, 2);
+
+    const rawSlug = String(item.name || 'custom-theme')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u00C0-\u1EF9_-]+/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'custom-theme';
+
+    const blob = new Blob([contentStr], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${rawSlug}.themelab`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    announceSettings(t('theme_exported_toast', 'Exported .themelab file!'));
+  }
+
+  function importCustomThemeFromText(rawText, fallbackName = 'Imported Theme') {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    try {
+      const parseFn = window.StudioLab?.themePresets?.parseThemelab;
+      const parsed = parseFn
+        ? parseFn(rawText, fallbackName)
+        : (() => {
+            const obj = JSON.parse(rawText);
+            const node = obj.theme || obj;
+            if (!node || typeof node !== 'object' || (!node.config && !node.mainInterface)) {
+              throw new Error('Invalid .themelab');
+            }
+            return {
+              name: String(node.name || fallbackName || 'Imported Theme').trim(),
+              description: String(node.description || '').trim(),
+              config: node.config || node
+            };
+          })();
+
+      // Guarantee a New Theme insertion + immediate auto-apply
+      const prevEditorState = themeEditorState;
+      themeEditorState = null;
+      const saved = saveCustomTheme({
+        name: parsed.name,
+        description: parsed.description,
+        config: parsed.config
+      });
+      if (prevEditorState) themeEditorState = null;
+      announceSettings(t('theme_imported_toast', 'Theme (.themelab) imported and applied immediately!'));
+      return saved;
+    } catch (_) {
+      announceSettings(t('theme_import_error_toast', 'Invalid or corrupted .themelab file.'), true);
+      return null;
+    }
+  }
+
+  if (window.StudioLab) {
+    window.StudioLab.themeManager = {
+      saveCustomTheme,
+      applyThemeById,
+      deleteCustomTheme,
+      exportCustomTheme,
+      importCustomThemeFromText,
+      getActiveThemeId: () => state.activeThemeId || 'original',
+      getCustomThemes: () => [...(state.customThemes || [])]
+    };
   }
 
   function snapshotState() {
@@ -507,7 +674,6 @@
     if (!isSettings) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (themePreview) { finishThemePreview('return'); return; }
     openModal();
   }
 
@@ -554,17 +720,10 @@
         nativeSettings = factory({
           onClosed: () => {
             if (nativeSettings !== requestedAdapter) return;
-            if (themePreview) { themePreview.nativeClosed = true; return; }
             closeModal(true);
-          },
-          onRestoreFrameFocus: frame => {
-            if (!modalEl || themePreview || nativeSettings !== requestedAdapter || !modalEl.contains(frame)) return;
-            if (activeTab === 'account' && frame === modalEl.querySelector('[data-sl-account-frame]')) sendAccountViewport(true);
-            else if (activeTab === 'market' && frame === modalEl.querySelector('[data-sl-catalog-frame="market"]')) sendCatalogViewport(true);
           },
           onChange: () => {
             if (!modalEl || nativeSettings !== requestedAdapter) return;
-            if (themePreview) { themePreview.park(); return; }
             const slot = modalEl.querySelector('[data-sl-native-settings]');
             if (slot && nativeSettings?.getHost()) {
               restoreBackgroundInert();
@@ -720,8 +879,15 @@
   }
 
   function closeModal(nativeClosed = false) {
-    finishThemePreview('return', false);
-    pendingOwnCreations = false;
+    if (themeEditorState) {
+      const draft = window.StudioLab?.themeEditorUI?.getDraft?.();
+      if (draft && draft.isDirty) {
+        saveCustomTheme({ name: draft.name, config: draft.config });
+      }
+      themeEditorState = null;
+      window.StudioLab?.themeEditorUI?.resetDraftSession?.();
+      window.StudioLab?.themeEngine?.syncFromState?.(state);
+    }
     closeSettingsMenu(false);
     const adapter = nativeSettings;
     nativeSettings = null;
@@ -817,7 +983,7 @@
 
   function makeBackgroundInert() {
     const disableSiblings = () => {
-      if (!modalEl || themePreview || nativeSettings?.usesNativeFocusTrap?.()) return;
+      if (!modalEl || nativeSettings?.usesNativeFocusTrap?.()) return;
       const overlayRoot = nativeSettings?.getOverlayRoot?.();
       for (const element of document.body.children) {
         if (element === modalEl || element === overlayRoot || ['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName)) continue;
@@ -833,14 +999,15 @@
   }
 
   function renderDialog() {
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
     const tabs = TABS.map(renderTabButton).join('');
     const selected = TABS.find(tab => tab.id === activeTab) || TABS[0];
 
     return `
-      <div class="sl-dialog sl-settings-shell ${activeTab === 'home' ? 'sl-settings-home' : ''}" lang="en" role="dialog" aria-modal="true" aria-label="Google AI Studio and Studio.lab Settings">
+      <div class="sl-dialog sl-settings-shell ${activeTab === 'home' ? 'sl-settings-home' : ''}" lang="${html(state.language || 'en')}" role="dialog" aria-modal="true" aria-label="Google AI Studio and Studio.lab Settings">
         <header class="sl-settings-topbar">
-          <div class="sl-settings-topbar-start"><button type="button" class="sl-settings-menu-button" data-sl-settings-menu aria-label="Search and settings sections" aria-expanded="false" aria-controls="sl-settings-mobile-menu">${renderIcon('menu', 'plain')}</button><span class="sl-settings-brand">Settings</span></div>
-          <h1 id="sl-settings-page-title" data-sl-settings-title tabindex="-1" cdkFocusInitial>${html(selected.label)}</h1>
+          <div class="sl-settings-topbar-start"><button type="button" class="sl-settings-menu-button" data-sl-settings-menu aria-label="Search and settings sections" aria-expanded="false" aria-controls="sl-settings-mobile-menu">${renderIcon('menu', 'plain')}</button><span class="sl-settings-brand">${html(t('Settings'))}</span></div>
+          <h1 id="sl-settings-page-title" data-sl-settings-title tabindex="-1" cdkFocusInitial>${html(t(selected.label))}</h1>
           <div class="sl-settings-topbar-end"><button type="button" class="sl-close-btn" data-sl-close aria-label="Close settings">${renderIcon('close', 'plain')}</button></div>
         </header>
         <div class="sl-settings-layout">
@@ -851,19 +1018,18 @@
           <main class="sl-settings-main" aria-labelledby="sl-settings-page-title">
             <div class="sl-settings-main-heading">
               <div class="sl-settings-section-heading" data-sl-section-heading>
-                <p data-sl-settings-description>${html(selected.description)}</p>
+                <p data-sl-settings-description>${html(t(selected.description))}</p>
               </div>
             </div>
             <div class="sl-dialog-body" id="sl-settings-content" tabindex="0" role="region" aria-labelledby="sl-settings-page-title">
                 ${renderHomeTab()}
                 ${renderNativeTab()}
-                ${renderAccountTab()}
-                ${renderCatalogTab('market')}
+                ${renderThemeTab()}
                 ${GROUPS.map(renderGroupTab).join('')}
                 ${renderInfoTab()}
                 <section class="sl-settings-page sl-settings-search-page" data-sl-tab-content="search" aria-label="Search results" hidden>
                   <ul class="sl-settings-result-list" data-sl-search-results></ul>
-                  <div class="sl-settings-empty" data-sl-search-empty hidden><h2>No settings found</h2><p>Try theme, autocomplete, turn limit, or sync.</p></div>
+                  <div class="sl-settings-empty" data-sl-search-empty hidden><h2>${html(t('No settings found'))}</h2><p>Try autocomplete, turn limit, or formatting.</p></div>
                 </section>
             </div>
             <p class="sl-settings-feedback" data-sl-settings-feedback hidden></p>
@@ -873,7 +1039,7 @@
           </main>
         </div>
         <dialog id="sl-settings-mobile-menu" class="sl-settings-mobile-menu" aria-labelledby="sl-settings-menu-title">
-          <div class="sl-settings-mobile-menu-header"><h2 id="sl-settings-menu-title">Settings sections</h2><button type="button" class="sl-close-btn" data-sl-settings-menu-close aria-label="Close settings sections">${renderIcon('close', 'plain')}</button></div>
+          <div class="sl-settings-mobile-menu-header"><h2 id="sl-settings-menu-title">${html(t('Settings'))}</h2><button type="button" class="sl-close-btn" data-sl-settings-menu-close aria-label="Close settings sections">${renderIcon('close', 'plain')}</button></div>
           <div data-sl-menu-nav-slot></div>
         </dialog>
       </div>
@@ -881,10 +1047,11 @@
   }
 
   function renderSettingsSearch() {
-    return `<form class="sl-search-field" role="search" aria-label="Search settings" data-sl-search-form>
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
+    return `<form class="sl-search-field" role="search" aria-label="${html(t('Search settings'))}" data-sl-search-form>
       <div class="sl-search-container">${renderIcon('search', 'search')}
         <label for="sl-settings-search" class="sl-sr-only">Search Google AI Studio and Studio.lab settings</label>
-        <input id="sl-settings-search" type="search" data-sl-search-input placeholder="Search settings" aria-controls="sl-settings-content" aria-describedby="sl-settings-search-help" value="${html(searchQuery)}" autocomplete="off" aria-keyshortcuts="Control+K">
+        <input id="sl-settings-search" type="search" data-sl-search-input placeholder="${html(t('Search settings'))}" aria-controls="sl-settings-content" aria-describedby="sl-settings-search-help" value="${html(searchQuery)}" autocomplete="off" aria-keyshortcuts="Control+K">
         <button type="button" class="sl-search-clear ${searchQuery ? 'visible' : ''}" data-sl-search-clear aria-label="Clear search" ${searchQuery ? '' : 'disabled'}>${renderIcon('close', 'plain')}</button>
       </div><button type="submit" class="sl-search-show" data-sl-search-show hidden>Show results</button><p id="sl-settings-search-help" class="sl-sr-only">Search any section. Results update as you type. Choose a result to open its setting. On small screens, press Enter or Show results. Press Escape to clear.</p>
     </form>`;
@@ -906,28 +1073,73 @@
       const url = new URL(image?.getAttribute('src') || '', location.href);
       if (url.protocol === 'https:' && /(^|\.)googleusercontent\.com$/.test(url.hostname)) source = url.href;
     } catch (_) {}
-    // This is the profile already visible in GAIS, not the private Studio.lab account.
     return { name, image: source };
   }
 
   function renderHomeTab() {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
     const profile = readVisibleGaisProfile();
     const shortcuts = [
-      ['native', 'Google AI Studio', 'Appearance, keyboard shortcuts, and input.', 'tune', 'tweaks'],
-      ['all', 'Studio.lab', 'Chat tools, workspace, and performance.', 'science', 'injection'],
-      ['market', 'Themes and prompts', 'Discover community creations or make your own.', 'storage', 'modules'],
-      ['account', 'Your account', 'Manage your sign-in and settings sync.', 'person', 'account']
+      ['native', t('tab_native', 'Google AI Studio'), t('home_card_native_help', 'Keyboard shortcuts, autocomplete, and input.'), 'tune', 'tweaks'],
+      ['all', 'Studio.lab', t('home_card_studiolab_help', 'Chat tools, workspace, and performance.'), 'science', 'injection']
     ];
+    const fallbackLanguages = [
+      { code: 'vi', nativeName: 'Tiếng Việt', englishName: 'Vietnamese', badge: 'VN' },
+      { code: 'en', nativeName: 'English', englishName: 'English', badge: 'EN' },
+      { code: 'zh-CN', nativeName: '中文 (简体)', englishName: 'Chinese (Simplified)', badge: 'CN' },
+      { code: 'zh-TW', nativeName: '中文 (繁體)', englishName: 'Chinese (Traditional)', badge: 'TW' },
+      { code: 'ja', nativeName: '日本語', englishName: 'Japanese', badge: 'JP' },
+      { code: 'ko', nativeName: '한국어', englishName: 'Korean', badge: 'KR' },
+      { code: 'es', nativeName: 'Español', englishName: 'Spanish', badge: 'ES' },
+      { code: 'fr', nativeName: 'Français', englishName: 'French', badge: 'FR' },
+      { code: 'de', nativeName: 'Deutsch', englishName: 'German', badge: 'DE' },
+      { code: 'ru', nativeName: 'Русский', englishName: 'Russian', badge: 'RU' },
+      { code: 'pt', nativeName: 'Português', englishName: 'Portuguese', badge: 'PT' },
+      { code: 'uk', nativeName: 'Українська', englishName: 'Ukrainian', badge: 'UA' },
+      { code: 'it', nativeName: 'Italiano', englishName: 'Italian', badge: 'IT' },
+      { code: 'id', nativeName: 'Bahasa Indonesia', englishName: 'Indonesian', badge: 'ID' },
+      { code: 'th', nativeName: 'ไทย', englishName: 'Thai', badge: 'TH' },
+      { code: 'hi', nativeName: 'हिन्दी', englishName: 'Hindi', badge: 'IN' },
+      { code: 'ar', nativeName: 'العربية', englishName: 'Arabic', badge: 'AR' },
+      { code: 'tr', nativeName: 'Türkçe', englishName: 'Turkish', badge: 'TR' },
+      { code: 'pl', nativeName: 'Polski', englishName: 'Polish', badge: 'PL' },
+      { code: 'nl', nativeName: 'Nederlands', englishName: 'Dutch', badge: 'NL' }
+    ];
+    const i18nLangs = window.StudioLab?.i18n?.LANGUAGES;
+    const languages = (Array.isArray(i18nLangs) && i18nLangs.length) ? i18nLangs : fallbackLanguages;
+    const currentLang = window.StudioLab?.i18n?.getLang?.() || state.language || 'vi';
+    const langOptions = languages.map(l => {
+      const code = l.code || '';
+      const native = l.nativeName || l.native || code;
+      const english = l.englishName || l.name || '';
+      const badge = l.badge || l.flag || '';
+      const label = english && english !== native
+        ? `${badge ? badge + ' · ' : ''}${native} (${english})`
+        : `${badge ? badge + ' · ' : ''}${native}`;
+      return `<option value="${html(code)}" ${code === currentLang ? 'selected' : ''}>${html(label)}</option>`;
+    }).join('');
+
     return `
       <section class="sl-settings-page" data-sl-tab-content="home" aria-label="Workspace overview" ${activeTab === 'home' ? '' : 'hidden'}>
         <div class="sl-settings-home-intro" data-sl-home-intro>
           <div class="sl-home-brands" role="group" aria-label="Your Google AI Studio profile and Studio.lab"><div class="sl-settings-avatar">${profile.image ? `<img src="${html(profile.image)}" alt="" referrerpolicy="no-referrer">` : renderIcon('person', 'plain')}</div><span class="sl-home-brand-join" aria-hidden="true">×</span><img src="${html(chrome.runtime.getURL('images/SL_PFP_64.png'))}" width="64" height="64" alt=""></div>
-          <div><h2>${html(profile.name || 'Your workspace')}</h2><p>Personalize Google AI Studio and Studio.lab.</p></div>
+          <div><h2>${html(profile.name || t('home_workspace_title', 'Your workspace'))}</h2><p>${html(t('home_workspace_subtitle', 'Personalize Google AI Studio and Studio.lab.'))}</p></div>
         </div>
         <div class="sl-settings-home-grid" role="group" aria-label="Quick settings links">
-          ${shortcuts.map(([id, label, help, icon, tone]) => `<button type="button" class="sl-settings-home-card" data-sl-open-tab="${id}">${renderIcon(icon, tone)}<span class="sl-setting-copy"><span class="sl-settings-home-card-title">${label}</span><span class="sl-settings-home-card-help">${help}</span></span>${renderIcon('arrow_outward', 'plain')}</button>`).join('')}
+          ${shortcuts.map(([id, label, help, icon, tone]) => `<button type="button" class="sl-settings-home-card" data-sl-open-tab="${id}">${renderIcon(icon, tone)}<span class="sl-setting-copy"><span class="sl-settings-home-card-title">${html(label)}</span><span class="sl-settings-home-card-help">${html(help)}</span></span>${renderIcon('arrow_outward', 'plain')}</button>`).join('')}
         </div>
-        <p class="sl-settings-home-note">Settings save automatically. Google AI Studio saves its preferences; Studio.lab keeps yours in this browser and can sync them through Account.</p>
+        <div class="sl-setting-row sl-settings-card" style="margin-top: 14px;">
+          <div class="sl-setting-copy">
+            <label class="sl-setting-label" for="sl-home-language-select">${html(t('language_label', 'Display language'))}</label>
+            <p class="sl-setting-help">${html(t('language_help', 'Choose the display language for Studio.lab settings and tools.'))}</p>
+          </div>
+          <div class="sl-setting-control">
+            <select id="sl-home-language-select" class="sl-setting-input" data-sl-language-select>
+              ${langOptions}
+            </select>
+          </div>
+        </div>
+        <p class="sl-settings-home-note">${html(t('home_auto_save_note', 'Settings save automatically. Google AI Studio saves its preferences; Studio.lab keeps yours in this browser.'))}</p>
       </section>
     `;
   }
@@ -955,19 +1167,245 @@
     if (loading) loading.hidden = !pending || !!nativeSettings?.getHost();
   }
 
+  function renderThemeTab() {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const isVisible = activeTab === 'theme';
+    return `
+      <section class="sl-settings-page sl-settings-theme-page" data-sl-tab-content="theme" data-sl-section="theme" aria-label="${html(t('tab_theme', 'Theme'))}" ${isVisible ? '' : 'hidden'}>
+        ${renderThemeTabInner()}
+      </section>
+    `;
+  }
+
+  function renderThemeTabInner() {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const activeThemeId = state.activeThemeId || 'original';
+    const customThemes = Array.isArray(state.customThemes) ? state.customThemes : [];
+
+    if (themeEditorState && window.StudioLab?.themeEditorUI?.renderEditorWorkspace) {
+      return window.StudioLab.themeEditorUI.renderEditorWorkspace({
+        editorState: themeEditorState,
+        customThemes,
+        renderIcon
+      });
+    }
+
+    const isOriginalActive = activeThemeId === 'original';
+
+    const customThemeCardsHtml = customThemes.map(item => {
+      const isActive = activeThemeId === item.id;
+      const presetKey = item.config?.mainInterface?.presetKey || 'purple';
+      const presetObj = window.StudioLab?.themePresets?.PRESET_PALETTES?.[presetKey];
+      const rp = item.config?.roleplay;
+      const stylePreset = item.config?.style?.stylePreset || 'default';
+      const summaryParts = [];
+      if (presetObj?.label) summaryParts.push(presetObj.label);
+      if (stylePreset === 'cartoon-pixel') {
+        summaryParts.push(`🕹️ ${t('te_style_pixel_title', 'Pixel Hoạt Hình')}`);
+      } else if (stylePreset === 'noble-fantasy') {
+        summaryParts.push(`❖ ${t('te_style_noble_title', 'Cổ điển Quý tộc')}`);
+      }
+      if (rp?.enableNameCustom && (rp.modelName || rp.userName)) {
+        summaryParts.push(`${rp.modelName || 'Model'} · ${rp.userName || 'User'}`);
+      }
+      const desc = item.description || summaryParts.join(' • ') || t('theme_custom_badge', 'Custom Theme');
+      return `
+        <div class="sl-setting-row sl-theme-card ${isActive ? 'is-active' : ''}" data-sl-theme-card="${html(item.id)}" data-sl-search-item data-sl-search="${html(item.name + ' ' + desc + ' Custom Theme .themelab')}">
+          <div class="sl-theme-card-start">
+            <span class="sl-theme-card-avatar" data-tone="pink">${renderIcon('palette', 'plain')}</span>
+            <div class="sl-setting-copy">
+              <div class="sl-theme-card-title-row">
+                <h3 class="sl-setting-label">${html(item.name)}</h3>
+                <span class="sl-theme-badge">${html(t('theme_custom_badge', 'Custom Theme'))}</span>
+                ${stylePreset === 'cartoon-pixel' ? `<span class="sl-theme-badge">8-BIT PIXEL</span>` : ''}
+                ${stylePreset === 'noble-fantasy' ? `<span class="sl-theme-badge">ROYAL NOVEL</span>` : ''}
+                ${isActive ? `<span class="sl-theme-badge sl-theme-badge--active">${html(t('theme_active_badge', 'Active'))}</span>` : ''}
+              </div>
+              <p class="sl-setting-help">${html(desc)}</p>
+            </div>
+          </div>
+          <div class="sl-setting-actions sl-theme-card-actions">
+            ${isActive
+              ? `<button type="button" class="sl-settings-button sl-theme-active-btn" disabled>${renderIcon('check', 'plain')}<span>${html(t('theme_active_badge', 'Active'))}</span></button>`
+              : `<button type="button" class="sl-settings-button primary" data-sl-apply-theme="${html(item.id)}">${html(t('theme_apply_btn', 'Apply theme'))}</button>`
+            }
+            <button type="button" class="sl-settings-button" data-sl-edit-theme="${html(item.id)}" title="${html(t('theme_edit_btn', 'Edit'))}">
+              ${renderIcon('edit', 'plain')}
+              <span>${html(t('theme_edit_btn', 'Edit'))}</span>
+            </button>
+            <button type="button" class="sl-settings-button" data-sl-export-theme="${html(item.id)}" title="${html(t('theme_export_btn_title', 'Export as .themelab file'))}">
+              ${renderIcon('download', 'plain')}
+              <span>${html(t('theme_export_btn', 'Export .themelab'))}</span>
+            </button>
+            <button type="button" class="sl-settings-button destructive" data-sl-delete-theme="${html(item.id)}" title="${html(t('theme_delete_btn', 'Delete'))}">
+              ${renderIcon('delete', 'plain')}
+              <span>${html(t('theme_delete_btn', 'Delete'))}</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="sl-theme-manager" data-sl-theme-manager>
+        <div class="sl-settings-list sl-theme-list" role="region" aria-label="${html(t('theme_section_available', 'Available themes'))}">
+          <div class="sl-setting-row sl-theme-card ${isOriginalActive ? 'is-active' : ''}" data-sl-theme-card="original" data-sl-search-item data-sl-search="Original Theme default interface giao diện gốc">
+            <div class="sl-theme-card-start">
+              <span class="sl-theme-card-avatar" data-tone="blue">${renderIcon('palette', 'plain')}</span>
+              <div class="sl-setting-copy">
+                <div class="sl-theme-card-title-row">
+                  <h3 class="sl-setting-label">${html(t('theme_original_title', 'Original Theme'))}</h3>
+                  <span class="sl-theme-badge">${html(t('theme_default_badge', 'Default'))}</span>
+                  ${isOriginalActive ? `<span class="sl-theme-badge sl-theme-badge--active">${html(t('theme_active_badge', 'Active'))}</span>` : ''}
+                </div>
+                <p class="sl-setting-help">${html(t('theme_original_desc', 'Default original interface of the Studio.lab extension.'))}</p>
+              </div>
+            </div>
+            <div class="sl-setting-actions sl-theme-card-actions">
+              ${isOriginalActive
+                ? `<button type="button" class="sl-settings-button sl-theme-active-btn" disabled>${renderIcon('check', 'plain')}<span>${html(t('theme_active_badge', 'Active'))}</span></button>`
+                : `<button type="button" class="sl-settings-button primary" data-sl-apply-theme="original">${html(t('theme_apply_btn', 'Apply theme'))}</button>`
+              }
+            </div>
+          </div>
+          ${customThemeCardsHtml}
+        </div>
+
+        <div class="sl-settings-list sl-theme-create-section">
+          <div class="sl-setting-row sl-theme-create-card" data-sl-create-theme-card data-sl-search-item data-sl-search="Create Theme Custom Theme Import .themelab tuỳ chỉnh nhập giao diện">
+            <div class="sl-theme-card-start">
+              <span class="sl-theme-card-avatar" data-tone="pink">${renderIcon('add', 'plain')}</span>
+              <div class="sl-setting-copy">
+                <h3 class="sl-setting-label">${html(t('theme_create_title', 'Create Theme / Custom Theme'))}</h3>
+                <p class="sl-setting-help">${html(t('theme_create_desc', 'Create a custom theme or import an exported .themelab file to apply it immediately.'))}</p>
+              </div>
+            </div>
+            <div class="sl-setting-actions sl-theme-card-actions">
+              <button type="button" class="sl-settings-button" data-sl-import-theme-btn title="${html(t('theme_import_btn_title', 'Import a .themelab file and apply immediately'))}">
+                ${renderIcon('upload', 'plain')}
+                <span>${html(t('theme_import_btn', 'Import .themelab'))}</span>
+              </button>
+              <input type="file" accept=".themelab,application/json" data-sl-import-theme-input hidden>
+              <button type="button" class="sl-settings-button primary" data-sl-open-theme-creator>
+                ${renderIcon('add', 'plain')}
+                <span>${html(t('theme_create_btn', 'Create Theme'))}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function rerenderThemeTabInPlace() {
+    if (!modalEl) return;
+    const section = modalEl.querySelector('[data-sl-tab-content="theme"]');
+    if (!section) return;
+    section.innerHTML = renderThemeTabInner();
+    bindThemeTabEvents(section);
+  }
+
+  function bindThemeTabEvents(root) {
+    if (!root) return;
+    const editorRoot = root.querySelector('[data-sl-theme-editor-view]');
+    if (editorRoot && window.StudioLab?.themeEditorUI?.bindEditorEvents) {
+      window.StudioLab.themeEditorUI.bindEditorEvents(editorRoot, {
+        onSave: ({ name, config }) => {
+          saveCustomTheme({ name, config });
+        },
+        onBack: () => {
+          themeEditorState = null;
+          window.StudioLab?.themeEngine?.syncFromState?.(state);
+          rerenderThemeTabInPlace();
+        },
+        announce: announceSettings
+      });
+      return;
+    }
+
+    root.querySelectorAll('[data-sl-apply-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-apply-theme') || 'original';
+        applyThemeById(themeId);
+      });
+    });
+    root.querySelectorAll('[data-sl-open-theme-creator]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        themeEditorState = { mode: 'create', themeId: null };
+        rerenderThemeTabInPlace();
+      });
+    });
+    root.querySelectorAll('[data-sl-edit-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-edit-theme');
+        if (!themeId) return;
+        themeEditorState = { mode: 'edit', themeId };
+        rerenderThemeTabInPlace();
+      });
+    });
+    root.querySelectorAll('[data-sl-export-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-export-theme');
+        if (!themeId) return;
+        exportCustomTheme(themeId);
+      });
+    });
+    root.querySelectorAll('[data-sl-delete-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-delete-theme');
+        if (!themeId) return;
+        deleteCustomTheme(themeId);
+      });
+    });
+
+    const importFileInput = root.querySelector('[data-sl-import-theme-input]');
+    root.querySelectorAll('[data-sl-import-theme-btn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        importFileInput?.click();
+      });
+    });
+    if (importFileInput) {
+      importFileInput.addEventListener('change', async () => {
+        const file = importFileInput.files?.[0];
+        if (!file) return;
+        try {
+          const rawText = await file.text();
+          const fallbackName = String(file.name || 'Imported Theme')
+            .replace(/\.themelab$/i, '')
+            .replace(/\.json$/i, '')
+            .trim() || 'Imported Theme';
+          importCustomThemeFromText(rawText, fallbackName);
+        } catch (_) {
+          const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+          announceSettings(t('theme_import_error_toast', 'Invalid or corrupted .themelab file.'), true);
+        }
+        importFileInput.value = '';
+      });
+    }
+  }
+
   function renderTabButton(tab) {
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
     return `
       <li><button type="button" class="sl-settings-nav-item ${activeTab === tab.id ? 'active' : ''}" data-sl-tab="${tab.id}" aria-controls="sl-settings-content" ${activeTab === tab.id ? 'aria-current="page"' : ''}>
-        <span class="sl-settings-nav-icon" data-tone="${tab.tone}">${renderIcon(tab.icon, 'plain')}</span><span class="sl-settings-nav-label">${html(tab.label)}</span>
+        <span class="sl-settings-nav-icon" data-tone="${tab.tone}">${renderIcon(tab.icon, 'plain')}</span><span class="sl-settings-nav-label">${html(t(tab.label))}</span>
       </button></li>
     `;
   }
 
   function selectTab(tabId, focusContent = true) {
-    if (tabId === 'library') tabId = 'market';
-    if (tabId === 'market') pendingCatalogRefresh.add(tabId);
     if (!TABS.some(tab => tab.id === tabId)) return;
     closeSettingsMenu(false);
+    if (themeEditorState) {
+      const draft = window.StudioLab?.themeEditorUI?.getDraft?.();
+      if (draft && draft.isDirty) {
+        saveCustomTheme({ name: draft.name, config: draft.config });
+      }
+      themeEditorState = null;
+      window.StudioLab?.themeEditorUI?.resetDraftSession?.();
+      window.StudioLab?.themeEngine?.syncFromState?.(state);
+      rerenderThemeTabInPlace();
+    }
     activeTab = tabId;
     browseTab = tabId;
     searchQuery = '';
@@ -983,205 +1421,6 @@
     if (focusContent) modalEl?.querySelector('[data-sl-settings-title]')?.focus({ preventScroll: true });
   }
 
-  function renderAccountTab() {
-    return `
-      <section class="sl-settings-page" data-sl-tab-content="account" aria-label="Studio.lab account settings" ${activeTab === 'account' ? '' : 'hidden'}>
-        <iframe class="sl-account-frame" data-sl-account-frame title="Studio.lab Account and settings sync" data-src="${html(chrome.runtime.getURL('account/account.html'))}" referrerpolicy="no-referrer"></iframe>
-      </section>
-    `;
-  }
-
-  function updateAccountFrame() {
-    if (!modalEl) return;
-    updateCatalogFrame();
-    modalEl.querySelector('.sl-dialog')?.classList.toggle('sl-account-active', activeTab === 'account');
-    if (activeTab !== 'account') return;
-    const frame = modalEl.querySelector('[data-sl-account-frame]');
-    if (!frame) return;
-    frame.style.colorScheme = document.body.classList.contains('light-theme') ? 'light' : 'dark';
-    if (!frame.getAttribute('src')) frame.setAttribute('src', frame.dataset.src);
-    sendAccountViewport();
-  }
-
-  function sendAccountViewport(restoreFocus = false) {
-    sendCatalogViewport();
-    if (!modalEl || activeTab !== 'account') return;
-    const frame = modalEl.querySelector('[data-sl-account-frame]');
-    const body = modalEl.querySelector('.sl-dialog-body');
-    if (!frame?.contentWindow || !body || !readyAccountFrames.has(frame)) return;
-    if (frame.style.minHeight) setPrivateDialogSpace(frame, true);
-    const frameRect = frame.getBoundingClientRect();
-    const bodyRect = body.getBoundingClientRect();
-    const bodyStyle = getComputedStyle(body);
-    const start = Math.max(frameRect.top, bodyRect.top + (parseFloat(bodyStyle.paddingTop) || 0));
-    const end = Math.min(frameRect.bottom, bodyRect.bottom - (parseFloat(bodyStyle.paddingBottom) || 0));
-    const top = Math.max(0, Math.round(start - frameRect.top));
-    const height = Math.floor(end - start);
-    if (height < 1 || top + height > 10000) return;
-    const accountOrigin = new URL(chrome.runtime.getURL('account/account.html')).origin;
-    // Layout numbers keep the child confirmation inside the visible Settings area.
-    // Account commands and data never pass through the host page.
-    frame.contentWindow.postMessage({ type: 'slAccountUi', action: 'viewport', top, height,
-      ...(restoreFocus === true ? { restoreFocus: true } : {}),
-      theme: document.body.classList.contains('light-theme') ? 'light' : 'dark' }, accountOrigin);
-  }
-
-  function setPrivateDialogSpace(frame, open) {
-    const body = modalEl?.querySelector('.sl-dialog-body');
-    if (!frame || !body) return;
-    if (!open) { frame.style.removeProperty('min-height'); return; }
-    const style = getComputedStyle(body);
-    const available = Math.floor(body.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0));
-    if (available >= 1 && available <= 10000) frame.style.minHeight = available + 'px';
-  }
-
-  function renderCatalogTab(view) {
-    return `<section class="sl-settings-page" data-sl-tab-content="${view}" aria-label="${view === 'market' ? 'Studio.lab community market' : 'Your themes and system prompts'}" ${activeTab === view ? '' : 'hidden'}>
-      <iframe class="sl-account-frame" data-sl-catalog-frame="${view}" title="${view === 'market' ? 'Studio.lab Market' : 'Studio.lab Themes and prompts'}" data-src="${html(chrome.runtime.getURL('account/catalog.html') + '#' + view)}" referrerpolicy="no-referrer"></iframe>
-    </section>`;
-  }
-
-  function updateCatalogFrame() {
-    if (!modalEl || activeTab !== 'market') return;
-    const frame = modalEl.querySelector(`[data-sl-catalog-frame="${activeTab}"]`);
-    if (!frame) return;
-    frame.style.colorScheme = document.body.classList.contains('light-theme') ? 'light' : 'dark';
-    if (!frame.getAttribute('src')) frame.setAttribute('src', frame.dataset.src);
-    sendCatalogViewport();
-  }
-
-  function sendCatalogViewport(restoreFocus = false) {
-    if (!modalEl || activeTab !== 'market') return;
-    const frame = modalEl.querySelector(`[data-sl-catalog-frame="${activeTab}"]`);
-    const body = modalEl.querySelector('.sl-dialog-body');
-    if (!frame?.contentWindow || !body || !readyCatalogFrames.has(frame)) return;
-    if (frame.style.minHeight) setPrivateDialogSpace(frame, true);
-    const rect = frame.getBoundingClientRect(), clip = body.getBoundingClientRect();
-    const style = getComputedStyle(body);
-    const start = Math.max(rect.top, clip.top + (parseFloat(style.paddingTop) || 0));
-    const end = Math.min(rect.bottom, clip.bottom - (parseFloat(style.paddingBottom) || 0));
-    const top = Math.max(0, Math.round(start - rect.top)), height = Math.floor(end - start);
-    if (height < 1 || top + height > 10000) return;
-    const refresh = pendingCatalogRefresh.delete(activeTab);
-    frame.contentWindow.postMessage({ type: 'slCatalogViewport', top, height, ...(refresh ? { refresh: true } : {}),
-      ...(restoreFocus === true ? { restoreFocus: true } : {}),
-      desktop: isDesktopDevice(),
-      theme: document.body.classList.contains('light-theme') ? 'light' : 'dark'
-    }, new URL(chrome.runtime.getURL('account/catalog.html')).origin);
-    if (pendingOwnCreations) {
-      pendingOwnCreations = false;
-      frame.contentWindow.postMessage({ type: 'slCatalogView', view: 'profile' }, new URL(chrome.runtime.getURL('account/catalog.html')).origin);
-    }
-  }
-
-  function sendCatalogSearch() {
-    if (!modalEl || activeTab !== 'market') return;
-    const frame = modalEl.querySelector('[data-sl-catalog-frame="market"]');
-    if (!frame?.contentWindow || !readyCatalogFrames.has(frame)) return;
-    frame.contentWindow.postMessage({ type: 'slCatalogSearch', query: searchQuery.trim().slice(0, 100) },
-      new URL(chrome.runtime.getURL('account/catalog.html')).origin);
-  }
-
-  function isDesktopDevice() {
-    const ua = navigator.userAgent || '';
-    return navigator.userAgentData?.mobile !== true && !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) &&
-      !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-
-  function startThemePreview(frame, data) {
-    const origin = new URL(chrome.runtime.getURL('account/catalog.html')).origin;
-    const requestId = data.requestId;
-    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId)) return;
-    const reply = (action, error) => frame.contentWindow?.postMessage({ type: 'slCatalogPreview', requestId, action,
-      ...(error ? { error } : {}) }, origin);
-    let palette;
-    try { palette = window.StudioLabCatalogSchema.validateTheme(data.palette); }
-    catch (_) { reply('error', 'Choose a valid theme palette before previewing.'); return; }
-    if (!modalEl || themePreview) {
-      reply('error', 'Close the current preview, then try again.'); return;
-    }
-    closeSettingsMenu(false);
-    // The preview uses production MWC controls with public sample messages and leaves the live chat untouched.
-    const stage = el('<section class="sl-theme-preview-stage" role="dialog" aria-modal="true" aria-label="Modern Web Chat theme preview"></section>');
-    const bar = el('<section class="sl-theme-preview-bar" role="region" aria-label="Google AI Studio theme preview"><div class="sl-theme-preview-copy"><strong>Theme preview</strong></div><div class="sl-theme-preview-actions"><button type="button" data-sl-preview-back>Back to Market</button></div></section>');
-    const previewFrame = el('<iframe class="sl-theme-preview-frame" title="Modern Web Chat with your theme" aria-busy="true" referrerpolicy="no-referrer"></iframe>');
-    previewFrame.src = chrome.runtime.getURL('account/theme-preview.html') + '#request=' + encodeURIComponent(requestId) +
-      '&parent=' + encodeURIComponent(location.origin);
-    stage.append(bar, previewFrame);
-    const parked = new Map(), inert = new Map();
-    function hide(node) {
-      if (!node || parked.has(node)) return;
-      parked.set(node, node.classList.contains('sl-theme-preview-hidden'));
-      node.classList.add('sl-theme-preview-hidden');
-    }
-    function park() {
-      hide(modalEl);
-      const pane = nativeSettings?.getHost()?.pane;
-      if (pane && themePreview) themePreview.nativeHosted = true;
-      const overlay = window.StudioLab.NativeSettings?.getOverlayParts(pane);
-      hide(overlay?.host);
-      hide(overlay?.backdrop);
-      for (const node of document.body.children) {
-        if (node === stage || node === modalEl || ['SCRIPT', 'STYLE', 'LINK'].includes(node.tagName)) continue;
-        if (!inert.has(node)) inert.set(node, node.inert);
-        node.inert = true;
-      }
-    }
-    function onPreviewMessage(event) {
-      if (!event.isTrusted || event.origin !== origin || event.source !== previewFrame.contentWindow ||
-          event.data?.requestId !== requestId || themePreview?.stage !== stage) return;
-      if (event.data.type === 'sl-theme-preview-ready') {
-        previewFrame.contentWindow.postMessage({ type: 'sl-theme-preview-update', requestId, theme: palette }, origin);
-      } else if (event.data.type === 'sl-theme-preview-applied') {
-        clearTimeout(themePreview.readyTimeout);
-        previewFrame.setAttribute('aria-busy', 'false');
-      } else if (event.data.type === 'sl-theme-preview-close') finishThemePreview('return');
-      else if (event.data.type === 'sl-theme-preview-error') finishThemePreview('error');
-    }
-    themePreview = { frame, requestId, bar, stage, previewFrame, parked, inert, park, reply, onPreviewMessage,
-      nativeHosted: !!nativeSettings?.getHost() };
-    try {
-      nativeSettings?.setPreviewActive?.(true);
-      if (modalEl.parentNode !== document.body) {
-        // Atomic movement preserves the connected private iframe and its draft.
-        if (typeof document.body.moveBefore !== 'function') throw new Error('Atomic movement unavailable.');
-        document.body.moveBefore(modalEl, null);
-      }
-      park();
-      window.addEventListener('message', onPreviewMessage);
-      document.body.appendChild(stage);
-      themePreview.readyTimeout = setTimeout(() => {
-        if (themePreview?.stage === stage) finishThemePreview('error');
-      }, 15000);
-      themePreview.observer = observe(document.body, { childList: true, subtree: true }, park);
-      bar.querySelector('[data-sl-preview-back]').addEventListener('click', () => finishThemePreview('return'));
-      bar.querySelector('[data-sl-preview-back]').focus({ preventScroll: true });
-    } catch (_) { finishThemePreview('error'); }
-  }
-
-  function finishThemePreview(action = 'return', restoreFocus = true) {
-    const current = themePreview;
-    if (!current) return;
-    themePreview = null;
-    clearTimeout(current.readyTimeout);
-    current.observer?.();
-    window.removeEventListener('message', current.onPreviewMessage);
-    current.stage.remove();
-    for (const [node, existed] of current.parked) if (!existed) node.classList.remove('sl-theme-preview-hidden');
-    for (const [node, previous] of current.inert) node.inert = previous;
-    // A native dialog can disappear before its observer reports closure. Keep
-    // the connected editor instead of letting reconciliation close it on Back.
-    if (current.nativeClosed || (current.nativeHosted && !nativeSettings?.getHost())) {
-      nativeSettings?.dispose(); nativeSettings = null;
-      updateNativeAvailability(); makeBackgroundInert();
-    } else nativeSettings?.setPreviewActive?.(false);
-    if (modalEl && restoreFocus) {
-      current.frame.focus({ preventScroll: true });
-      sendCatalogViewport(true);
-    }
-    current.reply(action, action === 'error' ? 'Google AI Studio could not open the preview. Try again.' : undefined);
-  }
-
   function settingsGroup(module) {
     if (['text-formatter', 'modern-web-chat'].includes(module.id)) return 'tweaks';
     if (module.id === 'telemetry-blocker') return 'privacy';
@@ -1189,14 +1428,16 @@
   }
 
   function renderGroupTab(group) {
-    const groupModules = modules.filter(module => settingsGroup(module) === group.id);
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
+    // Hide modern-web-chat ("Chat layout") from settings so it stays permanently on
+    const groupModules = modules.filter(module => settingsGroup(module) === group.id && module.id !== 'modern-web-chat');
     const visible = activeTab === group.tabId || activeTab === 'all';
     const controls = group.id === 'optimizer'
       ? renderOptimizerModes(groupModules) + (callModule(moduleById.get('optimizer-hard'), 'renderControls', ctx) || '')
       : groupModules.map(renderModuleItem).join('');
     const master = group.enabledKey ? renderCheckboxRow({
-      id: group.id + '-enabled', title: group.title,
-      description: group.id === 'optimizer' ? 'Keep long conversations responsive.' : 'Choose which interface elements to hide.',
+      id: group.id + '-enabled', title: t(group.title),
+      description: t(group.id === 'optimizer' ? 'Keep long conversations responsive.' : 'Choose which interface elements to hide.'),
       key: group.enabledKey, extra: `data-sl-group-toggle="${group.id}" data-sl-setting-master`,
       card: false, heading: 'h2'
     }) : '';
@@ -1204,29 +1445,33 @@
     const sectionLabel = group.id === 'response-recovery' ? 'sl-label-response-recovery'
       : group.enabledKey ? 'sl-label-' + group.id + '-enabled' : 'sl-section-' + group.id;
     const fields = group.enabledKey
-      ? `<fieldset class="sl-setting-dependent" data-sl-dependent="${group.enabledKey}" ${state[group.enabledKey] ? '' : 'disabled'}><legend class="sl-sr-only">${html(group.title)} options</legend>${controls}</fieldset>`
+      ? `<fieldset class="sl-setting-dependent" data-sl-dependent="${group.enabledKey}" ${state[group.enabledKey] ? '' : 'disabled'}><legend class="sl-sr-only">${html(t(group.title))} options</legend>${controls}</fieldset>`
       : controls;
     return `
       <section class="sl-settings-section" data-sl-tab-content="${group.tabId}" data-sl-section="${group.id}" aria-labelledby="${sectionLabel}" ${visible ? '' : 'hidden'}>
-        ${standalone ? '' : `<header class="${group.id === 'modules' ? 'sl-sr-only' : 'sl-settings-section-header'}"><h2 id="sl-section-${group.id}">${html(group.title)}</h2></header>`}
+        ${standalone ? '' : `<header class="${group.id === 'modules' ? 'sl-sr-only' : 'sl-settings-section-header'}"><h2 id="sl-section-${group.id}">${html(t(group.title))}</h2></header>`}
         <div class="${group.id === 'modules' ? 'sl-settings-tools' : 'sl-settings-list'} ${group.id === 'optimizer' ? 'sl-optimizer-card' : ''}">
           ${master}${fields}
         </div>
-        ${group.showTurnCounter ? `<p class="sl-setting-note"><span data-sl-live="turn-count">${getTurnCount()}</span> turns currently rendered. Saved chats stay in Google AI Studio.</p>` : ''}
+        ${group.showTurnCounter ? `<p class="sl-setting-note"><span data-sl-live="turn-count">${getTurnCount()}</span> ${html(t('turns_rendered_note', 'turns currently rendered. Saved chats stay in Google AI Studio.'))}</p>` : ''}
       </section>
     `;
   }
 
   function renderModuleItem(module) {
-    const description = SETTING_HELP[module.id] || (module.details || []).map(detail => detail.text).join(' ') || module.subtitle || '';
-    const title = SETTING_TITLES[module.id] || module.title;
+    if (module.id === 'modern-web-chat') return '';
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
+    const rawDesc = SETTING_HELP[module.id] || (module.details || []).map(detail => detail.text).join(' ') || module.subtitle || '';
+    const rawTitle = SETTING_TITLES[module.id] || module.title;
+    const description = t(rawDesc);
+    const title = t(rawTitle);
     if (module.stateKey) return renderCheckboxRow({
       id: module.id, title, description, key: module.stateKey,
       extra: `data-sl-module-id="${html(module.id)}"`, moduleId: module.id,
       heading: module.id === 'response-recovery' ? 'h2' : '', card: false
     });
     return `<div class="sl-setting-tool ${module.id === 'chat-export' ? 'sl-setting-export' : ''}" data-sl-module-item="${html(module.id)}" data-sl-search-item data-sl-search="${html(module.title + ' ' + title + ' ' + description)}">
-      <div class="sl-setting-copy"><h3 class="sl-setting-label" id="sl-setting-${html(module.id)}">${html(title)}</h3><p class="${module.id === 'default-profile' ? 'sl-sr-only' : 'sl-setting-help'}" id="sl-help-${html(module.id)}">${html(description)}</p></div>
+      ${module.id === 'chat-cleanup' ? '' : `<div class="sl-setting-copy"><h3 class="sl-setting-label" id="sl-setting-${html(module.id)}">${html(title)}</h3><p class="${module.id === 'default-profile' ? 'sl-sr-only' : 'sl-setting-help'}" id="sl-help-${html(module.id)}">${html(description)}</p></div>`}
       ${callModule(module, 'renderControls', ctx) || ''}
     </div>`;
   }
@@ -1242,10 +1487,11 @@
   }
 
   function renderOptimizerModes(choices) {
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
     return `<fieldset class="sl-setting-fieldset" data-sl-search-item data-sl-search="Optimization strategy buffered safe physical aggressive cleanup ${html(choices.map(choice => SETTING_HELP[choice.id] || '').join(' '))}" aria-describedby="sl-optimizer-mode-help">
-      <legend class="sl-setting-label">Older turns</legend>
+      <legend class="sl-setting-label">${html(t('Older turns'))}</legend>
       <p class="sl-sr-only" id="sl-optimizer-mode-help">Choose how older rendered turns are handled.</p>
-      <div class="sl-setting-radio-options">${choices.map(choice => `<label class="sl-setting-radio-option" for="sl-control-${html(choice.id)}"><input type="radio" id="sl-control-${html(choice.id)}" name="sl-optimizer-mode" value="${html(choice.modeValue)}" data-sl-state-key="${html(choice.modeKey)}" data-sl-module-id="${html(choice.id)}" aria-labelledby="sl-label-${html(choice.id)}" aria-describedby="sl-help-${html(choice.id)}" ${state[choice.modeKey] === choice.modeValue ? 'checked' : ''}><span class="sl-setting-copy"><span class="sl-setting-label" id="sl-label-${html(choice.id)}">${html(SETTING_TITLES[choice.id] || choice.title)}</span><span class="sl-setting-help" id="sl-help-${html(choice.id)}">${html(SETTING_HELP[choice.id] || choice.subtitle)}</span></span></label>`).join('')}</div>
+      <div class="sl-setting-radio-options">${choices.map(choice => `<label class="sl-setting-radio-option" for="sl-control-${html(choice.id)}"><input type="radio" id="sl-control-${html(choice.id)}" name="sl-optimizer-mode" value="${html(choice.modeValue)}" data-sl-state-key="${html(choice.modeKey)}" data-sl-module-id="${html(choice.id)}" aria-labelledby="sl-label-${html(choice.id)}" aria-describedby="sl-help-${html(choice.id)}" ${state[choice.modeKey] === choice.modeValue ? 'checked' : ''}><span class="sl-setting-copy"><span class="sl-setting-label" id="sl-label-${html(choice.id)}">${html(t(SETTING_TITLES[choice.id] || choice.title))}</span><span class="sl-setting-help" id="sl-help-${html(choice.id)}">${html(t(SETTING_HELP[choice.id] || choice.subtitle))}</span></span></label>`).join('')}</div>
     </fieldset>`;
   }
 
@@ -1275,7 +1521,7 @@
           <a class="sl-setting-row sl-settings-search-link" href="https://github.com/dorimommy/Studio.lab" target="_blank" rel="noopener noreferrer"><span class="sl-info-link-icon">${renderIcon('science', 'plain')}</span><span class="sl-setting-copy"><span class="sl-setting-label">Project on GitHub</span><span class="sl-setting-help">Source code, releases, and bug reports.<span class="sl-sr-only"> Opens a new tab.</span></span></span>${renderIcon('arrow_outward', 'plain')}</a>
           <a class="sl-setting-row sl-settings-search-link" href="https://reddit.com/r/GoogleAIStudio/" target="_blank" rel="noopener noreferrer"><span class="sl-info-link-icon">${renderIcon('person', 'plain')}</span><span class="sl-setting-copy"><span class="sl-setting-label">Google AI Studio community</span><span class="sl-setting-help">Discussions on Reddit.<span class="sl-sr-only"> Opens a new tab.</span></span></span>${renderIcon('arrow_outward', 'plain')}</a>
         </section>
-        <details class="sl-info-privacy sl-info-expand"><summary><span class="sl-setting-copy"><span class="sl-setting-label">Data and privacy</span><span class="sl-setting-help">Storage, sync, and connected services.</span></span>${renderIcon('chevron_down', 'plain')}</summary><div class="sl-info-expand-content"><p>Preferences stay in this browser. Optional Account sync backs up selected settings; chats, drafts, instructions, profiles, and credentials are excluded.</p><p>GitHub provides update checks. Supabase stores account settings and your theme and prompt library. You choose what to publish in Market. No analytics are collected.</p></div></details>
+        <details class="sl-info-privacy sl-info-expand"><summary><span class="sl-setting-copy"><span class="sl-setting-label">Data and privacy</span><span class="sl-setting-help">Local browser storage and update checks.</span></span>${renderIcon('chevron_down', 'plain')}</summary><div class="sl-info-expand-content"><p>Preferences stay locally in this browser. Chats, drafts, instructions, profiles, and credentials never leave your device.</p><p>GitHub provides update checks. No analytics are collected.</p></div></details>
       </section>
     `;
   }
@@ -1300,8 +1546,7 @@
       event.preventDefault();
       if (!searchQuery.trim()) return;
       closeSettingsMenu(false);
-      (activeTab === 'market' ? modalEl.querySelector('[data-sl-catalog-frame="market"]')
-        : modalEl.querySelector('[data-sl-search-result]') || modalEl.querySelector('[data-sl-settings-title]'))?.focus({ preventScroll: true });
+      (modalEl.querySelector('[data-sl-search-result]') || modalEl.querySelector('[data-sl-settings-title]'))?.focus({ preventScroll: true });
     });
     modalEl.querySelector('[data-sl-settings-menu]')?.addEventListener('click', openSettingsMenu);
     modalEl.querySelector('[data-sl-settings-menu-close]')?.addEventListener('click', () => closeSettingsMenu());
@@ -1380,94 +1625,28 @@
       control.addEventListener('change', () => handleSettingChange(control));
     });
 
+    const langSelect = modalEl.querySelector('[data-sl-language-select]');
+    if (langSelect) {
+      const styledLangSelect = window.StudioLabSelect?.enhance?.(langSelect);
+      if (styledLangSelect && modalScope) modalScope.add(() => styledLangSelect.dispose());
+      langSelect.addEventListener('change', () => {
+        const nextLang = langSelect.value;
+        if (!nextLang) return;
+        window.StudioLab?.i18n?.applyLanguage?.(nextLang, ctx);
+        setState({ language: nextLang });
+        rerenderModalInPlace();
+      });
+    }
+
+    const themeSection = modalEl.querySelector('[data-sl-tab-content="theme"]');
+    if (themeSection) {
+      bindThemeTabEvents(themeSection);
+    }
+
     modules.forEach((module) => {
       const dispose = callModule(module, 'bindControls', modalEl, ctx);
       if (typeof dispose === 'function' && modalScope) modalScope.add(dispose);
     });
-
-    const accountFrame = modalEl.querySelector('[data-sl-account-frame]');
-    const catalogFrames = [...modalEl.querySelectorAll('[data-sl-catalog-frame]')];
-    if (catalogFrames.length && modalScope) {
-      const origin = new URL(chrome.runtime.getURL('account/catalog.html')).origin;
-      modalScope.listen(window, 'message', event => {
-        if (!event.isTrusted || event.origin !== origin || event.data?.type !== 'slCatalogUi') return;
-        const frame = catalogFrames.find(item => item.dataset.slCatalogFrame === activeTab && event.source === item.contentWindow);
-        if (!frame) return;
-        const action = event.data.action;
-        if (action === 'preview-theme') { startThemePreview(frame, event.data); return; }
-        if (themePreview) return;
-        if (isSettingsMenuOpen() && ['close', 'focus-next', 'focus-previous', 'open-account'].includes(action)) {
-          if (action === 'close') closeSettingsMenu();
-          return;
-        }
-        if (action === 'resize') {
-          const height = event.data.height;
-          if (!Number.isInteger(height) || height < 1 || height > 10000) return;
-          readyCatalogFrames.add(frame);
-          frame.style.height = height + 'px';
-          sendCatalogViewport();
-          sendCatalogSearch();
-        } else if (action === 'dialog-open' || action === 'dialog-close') {
-          setPrivateDialogSpace(frame, action === 'dialog-open');
-          sendCatalogViewport();
-        }
-        else if (action === 'close') closeModal();
-        else if (action === 'open-account') selectTab('account');
-        else if (action === 'focus-next' || action === 'focus-previous') {
-          const controls = getModalFocusables(), index = controls.indexOf(frame);
-          if (index < 0) return;
-          const step = action === 'focus-next' ? 1 : -1;
-          controls[(index + step + controls.length) % controls.length]?.focus();
-        }
-      });
-      catalogFrames.forEach(frame => modalScope.listen(frame, 'load', sendCatalogViewport));
-      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
-      modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendCatalogViewport, { passive: true });
-      modalScope.listen(window, 'resize', sendCatalogViewport);
-    }
-    if (accountFrame && modalScope) {
-      const accountOrigin = new URL(chrome.runtime.getURL('account/account.html')).origin;
-      modalScope.listen(window, 'message', event => {
-        if (!event.isTrusted || activeTab !== 'account' || event.source !== accountFrame.contentWindow || event.origin !== accountOrigin || event.data?.type !== 'slAccountUi') return;
-        if (isSettingsMenuOpen() && ['close', 'focus-next', 'focus-previous'].includes(event.data.action)) {
-          if (event.data.action === 'close') closeSettingsMenu();
-          return;
-        }
-        if (event.data.action === 'close') closeModal();
-        else if (event.data.action === 'open-market') {
-          pendingOwnCreations = true;
-          selectTab('market');
-          sendCatalogViewport();
-        }
-        else if (event.data.action === 'resize') {
-          const height = event.data.height;
-          if (!Number.isInteger(height) || height < 1 || height > 10000) return;
-          readyAccountFrames.add(accountFrame);
-          accountFrame.style.height = height + 'px';
-          sendAccountViewport();
-        } else if (event.data.action === 'dialog-open' || event.data.action === 'dialog-close') {
-          setPrivateDialogSpace(accountFrame, event.data.action === 'dialog-open');
-          sendAccountViewport();
-        }
-        else if (event.data.action === 'focus-next' || event.data.action === 'focus-previous') {
-          const focusable = getModalFocusables();
-          const index = focusable.indexOf(accountFrame);
-          if (index < 0) return;
-          const step = event.data.action === 'focus-next' ? 1 : -1;
-          focusable[(index + step + focusable.length) % focusable.length]?.focus();
-        }
-      });
-      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
-      modalScope.listen(accountFrame, 'load', sendAccountViewport);
-      modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendAccountViewport, { passive: true });
-      modalScope.listen(window, 'resize', () => {
-        scrollActiveTabIntoView();
-        sendAccountViewport();
-      });
-      const viewportObserver = new ResizeObserver(sendAccountViewport);
-      viewportObserver.observe(modalEl.querySelector('.sl-dialog-body'));
-      modalScope.add(() => viewportObserver.disconnect());
-    }
 
     const copyBtn = modalEl.querySelector('[data-sl-copy-diagnostics]');
     if (copyBtn) {
@@ -1492,6 +1671,37 @@
     updateModalState();
     updateTabs();
     applySearchFilter();
+  }
+
+  function rerenderModalInPlace() {
+    if (!modalEl) return;
+    closeSettingsMenu(false);
+    const nativeHost = nativeSettings?.getHost?.();
+    const tempHolder = document.createDocumentFragment();
+    if (nativeHost?.component && modalEl.contains(nativeHost.component)) {
+      tempHolder.appendChild(nativeHost.component);
+    }
+    if (modalScope) {
+      modalScope.dispose();
+    }
+    modalScope = window.StudioLab.createScope ? window.StudioLab.createScope() : null;
+    backgroundInertObserver = null;
+    searchResultsSignature = '';
+
+    modalEl.innerHTML = renderDialog();
+    const slot = modalEl.querySelector('[data-sl-native-settings]');
+    if (slot && tempHolder.firstChild) {
+      slot.appendChild(tempHolder.firstChild);
+    }
+    if (slot && nativeSettings) {
+      nativeSettings.attach(modalEl, slot);
+    }
+    if (!nativeSettings?.usesNativeFocusTrap?.()) {
+      makeBackgroundInert();
+    }
+    bindModalEvents();
+    refreshDiagnostics();
+    refreshUpdateInfo();
   }
 
   function clearSearchQuery() {
@@ -1557,22 +1767,21 @@
     shell?.classList.toggle('sl-search-active', activeTab === 'search');
     shell?.classList.toggle('sl-native-active', activeTab === 'native');
     const heading = modalEl.querySelector('.sl-settings-main-heading');
-    if (heading) heading.hidden = ['home', 'account', 'info', 'market'].includes(activeTab);
+    if (heading) heading.hidden = ['home', 'info'].includes(activeTab);
     const home = modalEl.querySelector('[data-sl-home-intro]');
     if (home) home.hidden = activeTab !== 'home';
+    const t = (text) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(text, text) : text;
     const tab = TABS.find(item => item.id === activeTab);
     const searchInput = modalEl.querySelector('[data-sl-search-input]');
     if (searchInput) {
-      const label = current === 'market' ? 'Search themes and prompts' : 'Search settings';
-      searchInput.placeholder = current === 'market' ? 'Search Market' : label;
-      searchInput.setAttribute('aria-label', label);
-      searchInput.maxLength = current === 'market' ? 100 : 256;
+      searchInput.placeholder = t('Search settings');
+      searchInput.setAttribute('aria-label', t('Search settings'));
+      searchInput.maxLength = 256;
     }
     const title = modalEl.querySelector('[data-sl-settings-title]');
     const description = modalEl.querySelector('[data-sl-settings-description]');
-    if (title) title.textContent = tab?.label || 'Search results';
-    if (description) description.textContent = tab?.description || 'Search across Google AI Studio and Studio.lab.';
-    updateAccountFrame();
+    if (title) title.textContent = tab ? t(tab.label) : t('Search results');
+    if (description) description.textContent = tab ? t(tab.description) : 'Search across Google AI Studio and Studio.lab.';
   }
 
   function scrollActiveTabIntoView() {
@@ -1583,14 +1792,6 @@
   function applySearchFilter(announce = true) {
     if (!modalEl) return;
     const query = normalizeSearch(searchQuery).slice(0, 256);
-    if (browseTab === 'market') {
-      activeTab = 'market';
-      updateTabs();
-      sendCatalogSearch();
-      const show = modalEl.querySelector('[data-sl-search-show]');
-      if (show) { show.hidden = !query; show.textContent = 'Show Market'; }
-      return;
-    }
     activeTab = query ? 'search' : browseTab;
     updateTabs();
     nativeSettings?.filter('');
@@ -1631,8 +1832,9 @@
     const aliases = {
       'response-recovery': 'recovery interrupted відповідь відновлення', optimizer: 'optimizer optimization turns chat оптимізація ліміт повідомлення чат',
       'optimizer-hard': 'automatic manual turn limit keep turns ліміт повідомлень автоматичний',
-      'modern-web-chat': 'layout appearance chat інтерфейс вигляд чат',
       'chat-export': 'download conversation markdown json export завантажити експорт чат',
+      'chat-cleanup': 'cleanup delete think media code share fix xoá think xoá all sửa lỗi share',
+      'response-history': 'multiple response options history <1/3> rerun tạo lại phản hồi',
       'default-profile': 'model system prompt instruction default profile defaults модель інструкція промпт',
       'draft-saver': 'draft save чернетка зберегти', 'word-counter': 'words characters counter слова символи',
       'text-formatter': 'markdown formatting текст форматування', 'telemetry-blocker': 'privacy analytics телеметрія приватність'
@@ -1669,19 +1871,17 @@
       add(section.dataset.slTabContent, title, SETTING_HELP[module] || '', control, aliases[module] || '');
     }
     for (const item of modalEl.querySelectorAll('.sl-native-setting-row')) {
+      if (item.hasAttribute('data-sl-hidden-theme') || item.hidden) continue;
       const title = item.querySelector('.setting-label, .title, label')?.textContent?.trim();
       const help = item.querySelector('.setting-description')?.textContent?.trim() || '';
+      if (/^theme$/i.test(title || '') || /adjust the visual appearance/i.test(help)) continue;
       add('native', title, help, item, 'Google AI Studio GAIS ' +
-        (/theme/i.test(title || '') ? 'appearance light dark system тема вигляд світла темна' :
-          /submit/i.test(title || '') ? 'shortcut enter keyboard клавіатура клавіша' :
-            /autocomplete/i.test(title || '') ? 'completion text автодоповнення' :
-              /notification/i.test(title || '') ? 'сповіщення' : /microphone/i.test(title || '') ? 'мікрофон' : ''));
+        (/submit/i.test(title || '') ? 'shortcut enter keyboard клавіатура клавіша' :
+          /autocomplete/i.test(title || '') ? 'completion text автодоповнення' :
+            /notification/i.test(title || '') ? 'сповіщення' : /microphone/i.test(title || '') ? 'мікрофон' : ''));
     }
-    // Private-frame contents and account identity never become host-page search data.
-    for (const tab of TABS.filter(tab => ['market', 'account', 'info', 'native'].includes(tab.id))) {
-      const words = tab.id === 'market' ? 'theme themes colors create library install download community system prompts instructions тема теми кольори створити бібліотека маркет промпт інструкції'
-        : tab.id === 'account' ? 'Google sign in sync cloud backup security sign out delete account акаунт вхід синхронізація безпека видалити'
-          : tab.id === 'info' ? 'version diagnostics privacy updates версія діагностика приватність оновлення' : 'GAIS Google preferences';
+    for (const tab of TABS.filter(tab => ['info', 'native'].includes(tab.id))) {
+      const words = tab.id === 'info' ? 'version diagnostics privacy updates версія діагностика приватність оновлення' : 'GAIS Google preferences';
       add(tab.id, tab.label, tab.description, null, words);
     }
     return entries;
@@ -1869,12 +2069,6 @@
 
   function escHandler(event) {
     if (event.defaultPrevented) return;
-    if (themePreview) {
-      if (event.key === 'Escape') {
-        event.preventDefault(); event.stopPropagation(); finishThemePreview('return');
-      }
-      return;
-    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
       focusSettingsSearch();

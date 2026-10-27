@@ -456,6 +456,7 @@
   }
 
   window.addEventListener('__sl_restoreAllTurns', () => materializeAll(false));
+  window.addEventListener('__sl_bulkCleanupStart', () => materializeAll(false));
   window.addEventListener('__sl_requestOlderTurns', event => {
     const count = event.detail?.count;
     if (typeof count !== 'number' || !Number.isFinite(count)) return;

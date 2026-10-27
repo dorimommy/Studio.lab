@@ -29,34 +29,38 @@
     format: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 17v2h14v-2H5zm4.5-4.2h5l.9 2.2h2.1L12.75 4h-1.5L6.5 15h2.1l.9-2.2zM12 5.98L13.87 11h-3.74L12 5.98z"/></svg>'
   };
 
+  function t(key, fallback) {
+    return window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fallback || key) : (fallback || key);
+  }
+
   const BUTTONS_FULL = [
-    { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
-    { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
-    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
+    { id: 'bold', icon: SVG_ICONS.bold, titleKey: 'fmt_bold', title: 'Bold (Ctrl+B)', action: 'bold' },
+    { id: 'italic', icon: SVG_ICONS.italic, titleKey: 'fmt_italic', title: 'Italic (Ctrl+I)', action: 'italic' },
+    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, titleKey: 'fmt_strikethrough', title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
     { id: 'sep1', type: 'separator' },
-    { id: 'h1', text: 'H1', title: 'Heading 1 (#)', action: 'h1' },
-    { id: 'h2', text: 'H2', title: 'Heading 2 (##)', action: 'h2' },
-    { id: 'h3', text: 'H3', title: 'Heading 3 (###)', action: 'h3' },
+    { id: 'h1', text: 'H1', titleKey: 'fmt_h1', title: 'Heading 1 (#)', action: 'h1' },
+    { id: 'h2', text: 'H2', titleKey: 'fmt_h2', title: 'Heading 2 (##)', action: 'h2' },
+    { id: 'h3', text: 'H3', titleKey: 'fmt_h3', title: 'Heading 3 (###)', action: 'h3' },
     { id: 'sep2', type: 'separator' },
-    { id: 'ul', icon: SVG_ICONS.ul, title: 'Bullet List (- item)', action: 'ul' },
-    { id: 'ol', icon: SVG_ICONS.ol, title: 'Numbered List (1. item)', action: 'ol' },
-    { id: 'task', icon: SVG_ICONS.task, title: 'Task List (- [ ] task)', action: 'task' },
-    { id: 'quote', icon: SVG_ICONS.quote, title: 'Blockquote (> quote)', action: 'quote' },
+    { id: 'ul', icon: SVG_ICONS.ul, titleKey: 'fmt_ul', title: 'Bullet List (- item)', action: 'ul' },
+    { id: 'ol', icon: SVG_ICONS.ol, titleKey: 'fmt_ol', title: 'Numbered List (1. item)', action: 'ol' },
+    { id: 'task', icon: SVG_ICONS.task, titleKey: 'fmt_task', title: 'Task List (- [ ] task)', action: 'task' },
+    { id: 'quote', icon: SVG_ICONS.quote, titleKey: 'fmt_quote', title: 'Blockquote (> quote)', action: 'quote' },
     { id: 'sep3', type: 'separator' },
-    { id: 'link', icon: SVG_ICONS.link, title: 'Insert Link (Ctrl+K)', action: 'link' },
-    { id: 'code', icon: SVG_ICONS.code, title: 'Code Block / Inline Code', action: 'code' }
+    { id: 'link', icon: SVG_ICONS.link, titleKey: 'fmt_link', title: 'Insert Link (Ctrl+K)', action: 'link' },
+    { id: 'code', icon: SVG_ICONS.code, titleKey: 'fmt_code', title: 'Code Block / Inline Code', action: 'code' }
   ];
 
   const BUTTONS_FLOATING = [
-    { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
-    { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
-    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
+    { id: 'bold', icon: SVG_ICONS.bold, titleKey: 'fmt_bold', title: 'Bold (Ctrl+B)', action: 'bold' },
+    { id: 'italic', icon: SVG_ICONS.italic, titleKey: 'fmt_italic', title: 'Italic (Ctrl+I)', action: 'italic' },
+    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, titleKey: 'fmt_strikethrough', title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
     { id: 'sep1', type: 'separator' },
-    { id: 'ul', icon: SVG_ICONS.ul, title: 'Bullet List', action: 'ul' },
-    { id: 'ol', icon: SVG_ICONS.ol, title: 'Numbered List', action: 'ol' },
+    { id: 'ul', icon: SVG_ICONS.ul, titleKey: 'fmt_ul', title: 'Bullet List', action: 'ul' },
+    { id: 'ol', icon: SVG_ICONS.ol, titleKey: 'fmt_ol', title: 'Numbered List', action: 'ol' },
     { id: 'sep2', type: 'separator' },
-    { id: 'link', icon: SVG_ICONS.link, title: 'Insert Link (Ctrl+K)', action: 'link' },
-    { id: 'code', icon: SVG_ICONS.code, title: 'Code', action: 'code' }
+    { id: 'link', icon: SVG_ICONS.link, titleKey: 'fmt_link', title: 'Insert Link (Ctrl+K)', action: 'link' },
+    { id: 'code', icon: SVG_ICONS.code, titleKey: 'fmt_code', title: 'Code', action: 'code' }
   ];
 
   // CSS values were sampled from AI Studio's native controls.
@@ -362,6 +366,22 @@
     if (watching) return;
     watching = true;
     watcherScope.every(600, attachToPromptBox);
+    watcherScope.listen(window, '__sl_languageChanged', () => {
+      if (toggleBtnEl) {
+        const title = t('fmt_toggle_title', 'Text Formatting');
+        toggleBtnEl.setAttribute('title', title);
+        toggleBtnEl.setAttribute('aria-label', title);
+      }
+      const wasInlineVisible = inlineToolbarEl && inlineToolbarEl.classList.contains('sl-fmt-visible');
+      if (floatingToolbarEl && floatingToolbarEl.parentNode) floatingToolbarEl.parentNode.removeChild(floatingToolbarEl);
+      if (inlineToolbarEl && inlineToolbarEl.parentNode) inlineToolbarEl.parentNode.removeChild(inlineToolbarEl);
+      floatingToolbarEl = null;
+      inlineToolbarEl = null;
+      if (activeTextarea) {
+        ensureToolbars(activeTextarea);
+        if (wasInlineVisible && inlineToolbarEl) inlineToolbarEl.classList.add('sl-fmt-visible');
+      }
+    });
     attachToPromptBox();
   }
 
@@ -437,8 +457,9 @@
 
       if (btn.action === 'h1' && !headingDropdownAdded) {
         headingDropdownAdded = true;
+        const hTitle = t('fmt_headings', 'Headings');
         const hDrop = el(`<div class="sl-fmt-heading-dropdown">
-          <button type="button" class="sl-fmt-btn sl-fmt-heading-btn" title="Headings" aria-label="Headings"><span class="sl-fmt-btn-text">H ▾</span></button>
+          <button type="button" class="sl-fmt-btn sl-fmt-heading-btn" title="${hTitle}" aria-label="${hTitle}"><span class="sl-fmt-btn-text">H ▾</span></button>
           <div class="sl-fmt-heading-menu"></div>
         </div>`);
         const hMenu = $('.sl-fmt-heading-menu', hDrop);
@@ -462,8 +483,9 @@
         tb.append(hDrop);
       }
 
+      const btnTitle = btn.titleKey ? t(btn.titleKey, btn.title) : btn.title;
       const label = btn.icon || (btn.text ? `<span class="sl-fmt-btn-text">${btn.text}</span>` : '');
-      const button = el(`<button type="button" class="sl-fmt-btn"${btn.action ? ` data-action="${btn.action}"` : ''} title="${btn.title}" aria-label="${btn.title}">${label}</button>`);
+      const button = el(`<button type="button" class="sl-fmt-btn"${btn.action ? ` data-action="${btn.action}"` : ''} title="${btnTitle}" aria-label="${btnTitle}">${label}</button>`);
 
       button.addEventListener('mousedown', (e) => {
         e.preventDefault(); // Keep focus in textarea
@@ -501,7 +523,8 @@
       const buttonWrapper = promptBox.querySelector('.button-wrapper');
       const footerRow = buttonsRow || buttonWrapper;
       if (footerRow) {
-        toggleBtnEl = el(`<button type="button" class="sl-fmt-toggle" title="Format Text" aria-label="Toggle formatting toolbar">${SVG_ICONS.format}</button>`);
+        const toggleTitle = t('fmt_toggle_title', 'Text Formatting');
+        toggleBtnEl = el(`<button type="button" class="sl-fmt-toggle" title="${toggleTitle}" aria-label="${toggleTitle}">${SVG_ICONS.format}</button>`);
 
         toggleBtnEl.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -626,16 +649,16 @@
     const overlay = el(`
       <div class="sl-overlay sl-fmt-modal-overlay" role="dialog" aria-modal="true">
       <div class="sl-fmt-modal">
-        <h2>Insert Link</h2>
-        <label for="sl-link-url">URL</label>
+        <h2>${t('fmt_modal_title', 'Insert Link')}</h2>
+        <label for="sl-link-url">${t('fmt_modal_url', 'URL')}</label>
         <input type="url" id="sl-link-url" placeholder="https://example.com" value="https://" autocomplete="off">
 
-        <label for="sl-link-text">Display Text (optional)</label>
-        <input type="text" id="sl-link-text" placeholder="Link text" value="${escapeHtml(selectedText)}" autocomplete="off">
+        <label for="sl-link-text">${t('fmt_modal_display_text', 'Display Text (optional)')}</label>
+        <input type="text" id="sl-link-text" placeholder="${t('fmt_modal_link_placeholder', 'Link text')}" value="${escapeHtml(selectedText)}" autocomplete="off">
 
         <div class="sl-fmt-modal-actions">
-          <button type="button" class="sl-fmt-btn-cancel sl-cancel-btn">Cancel</button>
-          <button type="button" class="sl-fmt-btn-submit sl-submit-btn">Insert Link</button>
+          <button type="button" class="sl-fmt-btn-cancel sl-cancel-btn">${t('fmt_modal_cancel', 'Cancel')}</button>
+          <button type="button" class="sl-fmt-btn-submit sl-submit-btn">${t('fmt_modal_insert', 'Insert Link')}</button>
         </div>
       </div>
       </div>
