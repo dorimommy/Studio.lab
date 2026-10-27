@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  const { $, el, scope } = window.StudioLabCore;
+
   let capture = null;
   let chatEpoch = 0;
   const pendingSaves = new Map();
@@ -318,7 +320,7 @@
   function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = el('<a></a>');
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -335,19 +337,22 @@
     subtitle: 'Export complete context to Markdown or JSON.',
     alwaysSelected: true,
     onRouteChange() { currentCapture(); },
-    renderControls: () => `
-      <div class="sl-setting-tool-fields">
-        <div class="sl-setting-actions">
-          <button type="button" class="sl-settings-button" id="sl-export-md" aria-describedby="sl-help-chat-export">Download Markdown</button>
-          <button type="button" class="sl-settings-button" id="sl-export-json" aria-describedby="sl-help-chat-export">Download JSON</button>
+    renderControls: () => {
+      const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+      return `
+        <div class="sl-setting-tool-fields">
+          <div class="sl-setting-actions">
+            <button type="button" class="sl-settings-button" id="sl-export-md" aria-describedby="sl-help-chat-export">${t('btn_download_md', 'Download Markdown')}</button>
+            <button type="button" class="sl-settings-button" id="sl-export-json" aria-describedby="sl-help-chat-export">${t('btn_download_json', 'Download JSON')}</button>
+          </div>
+          <p class="sl-setting-help" id="sl-export-status" hidden></p>
         </div>
-        <p class="sl-setting-help" id="sl-export-status" hidden></p>
-      </div>
-    `,
+      `;
+    },
     bindControls: (modalEl, ctx) => {
-      const btnMd = modalEl.querySelector('#sl-export-md');
-      const btnJson = modalEl.querySelector('#sl-export-json');
-      const status = modalEl.querySelector('#sl-export-status');
+      const btnMd = $('#sl-export-md', modalEl);
+      const btnJson = $('#sl-export-json', modalEl);
+      const status = $('#sl-export-status', modalEl);
       function runExport(action) {
         let result;
         try { result = action(); }
@@ -363,12 +368,10 @@
         event.stopPropagation();
         runExport(exportAsJson);
       };
-      btnMd?.addEventListener('click', onMarkdown);
-      btnJson?.addEventListener('click', onJson);
-      return () => {
-        btnMd?.removeEventListener('click', onMarkdown);
-        btnJson?.removeEventListener('click', onJson);
-      };
+      const s = scope();
+      if (btnMd) s.on(btnMd, 'click', onMarkdown);
+      if (btnJson) s.on(btnJson, 'click', onJson);
+      return () => s.dispose();
     }
   });
 })();

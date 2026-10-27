@@ -3,6 +3,7 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, $$, el, scope } = window.StudioLabCore;
 
   const AUTO_KEEP = 15;
 
@@ -17,7 +18,7 @@
     modeValue: 'hard',
     enabledKey: 'optimizerEnabled',
     defaults: {
-      optimizerEnabled: false,
+      optimizerEnabled: true,
       optimizerMode: 'smart',
       keepLast: 15,
       autoKeep: true
@@ -33,6 +34,7 @@
       sync(ctx);
     },
     renderControls(ctx) {
+      const t = (k, fb) => (window.StudioLab.i18n ? window.StudioLab.i18n.t(k, fb) : fb);
       const keepValue = ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast;
       const disabled = ctx.state.autoKeep || !ctx.state.optimizerEnabled ? 'disabled' : '';
       return `
@@ -42,8 +44,8 @@
           <div class="sl-setting-disclosure-content">
           <div class="sl-setting-row">
             <div class="sl-setting-copy">
-              <label class="sl-setting-label" for="sl-hard-auto-keep">Automatic turn limit</label>
-              <p class="sl-setting-help" id="sl-hard-auto-help">Keep the latest ${AUTO_KEEP} rendered turns.</p>
+              <label class="sl-setting-label" for="sl-hard-auto-keep">${t('auto_turn_limit_label', 'Automatic turn limit')}</label>
+              <p class="sl-setting-help" id="sl-hard-auto-help">${t('auto_turn_limit_help', `Keep the latest ${AUTO_KEEP} rendered turns.`)}</p>
             </div>
             <div class="sl-setting-control">
               <span class="sl-setting-checkbox-hit">
@@ -53,12 +55,11 @@
           </div>
           <div class="sl-setting-row">
             <div class="sl-setting-copy">
-              <label class="sl-setting-label" for="sl-hard-keep-number">Turns to keep</label>
-              <p class="sl-setting-help" id="sl-hard-keep-help">Turn off the automatic limit to choose between 2 and 500 turns.</p>
+              <label class="sl-setting-label" for="sl-hard-keep-number">${t('turns_to_keep_label', 'Turns to keep')}</label>
+              <p class="sl-setting-help" id="sl-hard-keep-help">${t('turns_to_keep_help', 'Turn off the automatic limit to choose between 2 and 500 turns.')}</p>
             </div>
             <div class="sl-setting-control">
               <input type="number" class="sl-setting-input" id="sl-hard-keep-number" data-sl-keep-number min="2" max="500" step="1" value="${keepValue}" aria-describedby="sl-hard-keep-help sl-hard-keep-error" ${disabled}>
-              <input type="range" class="sl-setting-range" id="sl-hard-keep-range" data-sl-keep-slider min="2" max="500" step="1" value="${keepValue}" aria-label="Turns to keep" aria-describedby="sl-hard-keep-help" ${disabled}>
               <p class="sl-setting-help" id="sl-hard-keep-error" data-sl-keep-error hidden></p>
             </div>
           </div>
@@ -66,30 +67,28 @@
           </details>
           <div class="sl-setting-row" data-sl-hard-cleanup-row ${ctx.state.optimizerMode !== 'hard' ? 'hidden' : ''}>
             <div class="sl-setting-copy">
-              <p class="sl-setting-label">Clean up this chat</p>
-              <p class="sl-setting-help" id="sl-hard-cleanup-help">Remove older rendered turns from this browser session. This cannot be undone here.</p>
+              <p class="sl-setting-label">${t('cleanup_chat_label', 'Clean up this chat')}</p>
+              <p class="sl-setting-help" id="sl-hard-cleanup-help">${t('cleanup_chat_help', 'Remove older rendered turns from this browser session. This cannot be undone here.')}</p>
             </div>
             <div class="sl-setting-actions">
-              <button type="button" class="sl-settings-button destructive" data-sl-apply-hard aria-describedby="sl-hard-cleanup-help" ${ctx.state.optimizerEnabled ? '' : 'disabled'}>Apply cleanup</button>
+              <button type="button" class="sl-settings-button destructive" data-sl-apply-hard aria-describedby="sl-hard-cleanup-help" ${ctx.state.optimizerEnabled ? '' : 'disabled'}>${t('btn_apply_cleanup', 'Apply cleanup')}</button>
             </div>
           </div>
         </div>
       `;
     },
     bindControls(root, ctx) {
-      const panel = root.querySelector('[data-sl-controls-for="optimizer-hard"]');
+      const panel = $('[data-sl-controls-for="optimizer-hard"]', root);
       if (!panel) return;
 
-      const autoToggle = panel.querySelector('[data-sl-auto-keep]');
-      const slider = panel.querySelector('[data-sl-keep-slider]');
-      const number = panel.querySelector('[data-sl-keep-number]');
-      const error = panel.querySelector('[data-sl-keep-error]');
-      const applyButton = panel.querySelector('[data-sl-apply-hard]');
-      const removers = [];
+      const autoToggle = $('[data-sl-auto-keep]', panel);
+      const number = $('[data-sl-keep-number]', panel);
+      const error = $('[data-sl-keep-error]', panel);
+      const applyButton = $('[data-sl-apply-hard]', panel);
+      const io = scope();
       function listen(element, type, callback) {
         if (!element) return;
-        element.addEventListener(type, callback);
-        removers.push(() => element.removeEventListener(type, callback));
+        io.on(element, type, callback);
       }
 
       if (autoToggle) {
@@ -120,9 +119,7 @@
           if (invalid) return;
           ctx.setState({ keepLast }, { render: false });
           if (number && number !== control) number.value = String(keepLast);
-          if (slider && slider !== control) slider.value = String(keepLast);
       }
-      listen(slider, 'input', () => setKeep(slider));
       listen(number, 'input', () => setKeep(number));
       listen(number, 'blur', () => {
         if (number?.getAttribute('aria-invalid') === 'true') {
@@ -140,23 +137,22 @@
           ctx.announceSettings?.(removed ? 'Removed ' + removed + ' older rendered turns.' : 'No older turns needed cleanup.');
         });
       }
-      return () => removers.forEach(remove => remove());
+      return () => io.dispose();
     },
     updateControls(root, ctx) {
-      const panel = root.querySelector('[data-sl-controls-for="optimizer-hard"]');
+      const panel = $('[data-sl-controls-for="optimizer-hard"]', root);
       if (!panel) return;
 
       panel.hidden = false;
-      const cleanupRow = panel.querySelector('[data-sl-hard-cleanup-row]');
+      const cleanupRow = $('[data-sl-hard-cleanup-row]', panel);
       if (cleanupRow) cleanupRow.hidden = ctx.state.optimizerMode !== 'hard';
-      const summary = panel.querySelector('[data-sl-keep-summary-text]');
+      const summary = $('[data-sl-keep-summary-text]', panel);
       const summaryText = turnLimitSummary(ctx.state);
       if (summary && summary.textContent !== summaryText) summary.textContent = summaryText;
 
-      const autoToggle = panel.querySelector('[data-sl-auto-keep]');
-      const slider = panel.querySelector('[data-sl-keep-slider]');
-      const number = panel.querySelector('[data-sl-keep-number]');
-      const applyButton = panel.querySelector('[data-sl-apply-hard]');
+      const autoToggle = $('[data-sl-auto-keep]', panel);
+      const number = $('[data-sl-keep-number]', panel);
+      const applyButton = $('[data-sl-apply-hard]', panel);
       const keepValue = String(ctx.state.autoKeep ? AUTO_KEEP : ctx.state.keepLast);
       const disabled = !!ctx.state.autoKeep || !ctx.state.optimizerEnabled;
 
@@ -164,15 +160,11 @@
         autoToggle.checked = !!ctx.state.autoKeep;
         autoToggle.disabled = !ctx.state.optimizerEnabled;
       }
-      if (slider) {
-        slider.disabled = disabled;
-        if (slider !== document.activeElement && slider.value !== keepValue) slider.value = keepValue;
-      }
       if (number) {
         number.disabled = disabled;
         if (disabled) {
           number.removeAttribute('aria-invalid');
-          const error = panel.querySelector('[data-sl-keep-error]');
+          const error = $('[data-sl-keep-error]', panel);
           if (error) { error.textContent = ''; error.hidden = true; }
         }
         // Live turn statistics refresh every two seconds. Preserve an unfinished
@@ -189,7 +181,10 @@
   }
 
   function turnLimitSummary(state) {
-    return 'Turn limit · ' + (state.autoKeep ? 'Automatic, ' + AUTO_KEEP : 'Manual, ' + state.keepLast);
+    const t = (k, fb) => (window.StudioLab.i18n ? window.StudioLab.i18n.t(k, fb) : fb);
+    return state.autoKeep
+      ? t('turn_limit_summary_auto', 'Turn limit · Automatic, ') + AUTO_KEEP
+      : t('turn_limit_summary_manual', 'Turn limit · Manual, ') + state.keepLast;
   }
 
   function sync(ctx) {
@@ -198,10 +193,9 @@
   }
 
   function start() {
-    let style = document.getElementById('sl-fast-render-style');
+    let style = $('#sl-fast-render-style');
     if (!style) {
-      style = document.createElement('style');
-      style.id = 'sl-fast-render-style';
+      style = el('<style id="sl-fast-render-style"></style>');
       style.textContent = `
         ms-chat-turn {
           content-visibility: auto;
@@ -213,13 +207,13 @@
   }
 
   function stop() {
-    const style = document.getElementById('sl-fast-render-style');
+    const style = $('#sl-fast-render-style');
     if (style) style.remove();
   }
 
   function applyHardCleanup(ctx) {
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const turns = Array.from(document.querySelectorAll(turnSel));
+    const turns = $$(turnSel);
     if (!turns.length) return;
 
     const keep = ctx.state.autoKeep

@@ -602,7 +602,8 @@ ms-prompt-box {
   border-radius: 0; overflow: hidden; background: var(--sl-settings-page); color: var(--sl-settings-text);
   font: 14px/1.5 'Segoe UI', Arial, sans-serif; color-scheme: dark;
 }
-body.light-theme .sl-dialog.sl-settings-shell {
+:is(body.light-theme, body[data-sl-theme-mode="light"]) .sl-overlay { background: #fff; }
+:is(body.light-theme, body[data-sl-theme-mode="light"]) .sl-dialog.sl-settings-shell {
   --sl-settings-page: #fff; --sl-settings-surface: #f2f3f5; --sl-settings-text: #1f1f1f;
   --sl-settings-muted: #555960; --sl-settings-outline: #c4c7c5; --sl-settings-control-outline: #747775;
   --sl-settings-hover: #e8eaed; --sl-settings-selected: #c2e7ff; --sl-settings-selected-text: #001d35;
@@ -817,7 +818,6 @@ body.light-theme .sl-dialog.sl-settings-shell {
 .sl-settings-home-card-help { display: block; margin-top: 4px; color: var(--sl-settings-muted); font-size: 13px; line-height: 20px; }
 .sl-settings-home-card > .sl-icon-wrap:first-child { width: 40px; height: 40px; border-radius: 50%; background: #d6baff; color: #4f2a89; }
 .sl-settings-home-card > .sl-icon-wrap--injection:first-child, .sl-settings-home-card > .sl-icon-wrap--modules:first-child { background: #78d999; color: #14532d; }
-.sl-settings-home-card > .sl-icon-wrap--account:first-child { background: #ffaee3; color: #702453; }
 .sl-settings-home-card > .sl-icon-wrap:last-child { color: var(--sl-settings-muted); }
 .sl-settings-shortcuts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 620px; margin: 0 auto; }
 .sl-settings-shortcuts .sl-settings-button { border-radius: 20px; }
@@ -830,6 +830,8 @@ body.light-theme .sl-dialog.sl-settings-shell {
 /* Adapter classes win over the native component's centered Angular layout. */
 .sl-settings-shell .sl-native-settings-component { display: block; width: 100%; min-width: 0; color: var(--sl-settings-text); font: inherit; }
 .sl-native-settings-component > h2, .sl-native-settings-component mat-dialog-actions { display: none !important; }
+.sl-settings-shell [data-sl-hidden-theme="true"],
+.sl-settings-shell .setting-section[data-test-id*="theme" i] { display: none !important; }
 .sl-settings-shell .sl-native-settings-component mat-dialog-content { display: flex !important; flex-direction: column !important; gap: var(--sl-settings-tile-gap) !important; width: 100% !important; max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; border-radius: 0; background: transparent; }
 .sl-settings-shell .sl-native-settings-component :has(> .sl-native-setting-row) { display: flex !important; flex-direction: column !important; gap: var(--sl-settings-tile-gap) !important; }
 .sl-settings-shell .sl-native-settings-component :has(> .sl-native-setting-row) > :is(mat-divider,hr,[role=separator]) { display: none !important; }
@@ -874,7 +876,7 @@ body.light-theme .sl-dialog.sl-settings-shell {
   --color-v3-surface-container-high: var(--sl-settings-surface); --color-v3-text: var(--sl-settings-text);
   --color-v3-surface-container-highest: #303234; color-scheme: dark;
 }
-body.light-theme .sl-native-settings-select-panel {
+:is(body.light-theme, body[data-sl-theme-mode="light"]) .sl-native-settings-select-panel {
   --sl-settings-page: #fff; --sl-settings-surface: #f2f3f5; --sl-settings-hover: #e8eaed; --sl-settings-text: #1f1f1f; --sl-settings-muted: #555960;
   --sl-settings-link: #0b57d0; --sl-settings-primary-ink: #fff; --sl-settings-control-outline: #747775;
   --color-v3-surface-container-highest: #e8eaed; color-scheme: light;
@@ -890,6 +892,11 @@ body.light-theme .sl-native-settings-select-panel {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 16px; border: 0; user-select: none;
   background: var(--sl-settings-page); color: var(--sl-settings-text);
   font: 13px/20px 'Segoe UI',Arial,sans-serif; color-scheme: dark;
+}
+:is(body.light-theme, body[data-sl-theme-mode="light"]) .sl-theme-preview-bar {
+  --sl-settings-page: #fff; --sl-settings-surface: #f2f3f5; --sl-settings-hover: #e8eaed;
+  --sl-settings-text: #1f1f1f; --sl-settings-muted: #555960; --sl-settings-link: #0b57d0; --sl-settings-primary-ink: #fff;
+  color-scheme: light;
 }
 .sl-theme-preview-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .sl-theme-preview-copy strong { flex: 0 0 auto; }
@@ -981,3 +988,1325 @@ body.light-theme .sl-native-settings-select-panel {
   .sl-settings-shell :focus-visible { background: Highlight !important; color: HighlightText !important; text-decoration: underline; }
   .sl-settings-shell :focus-visible { outline-color: Highlight; }
 }
+
+/* ============================================================
+   Multiple Response Options (<X/Y>) & Rerun Transitions
+   ============================================================ */
+.aistu-history-navigator {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 2px !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 4px auto 2px 2px !important;
+  height: 26px !important;
+  width: fit-content !important;
+  align-self: flex-start !important;
+  position: relative !important;
+  z-index: 10 !important;
+  user-select: none !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-history-navigator {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.aistu-nav-btn {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  color: var(--sl-mwc-muted, #c4c7c5) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+  padding: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-nav-btn {
+  color: var(--sl-mwc-muted, #5f6368) !important;
+}
+
+.aistu-nav-btn svg {
+  pointer-events: none !important;
+}
+
+.aistu-nav-btn:hover:not(:disabled) {
+  background: var(--sl-mwc-hover, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--sl-mwc-text, #e3e3e3) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-nav-btn:hover:not(:disabled) {
+  background: var(--sl-mwc-hover, rgba(15, 23, 42, 0.06)) !important;
+  color: var(--sl-mwc-text, #1f2937) !important;
+}
+
+.aistu-nav-btn:disabled {
+  opacity: 0.28 !important;
+  cursor: not-allowed !important;
+}
+
+.aistu-nav-counter {
+  color: var(--sl-mwc-muted, #c4c7c5) !important;
+  font-size: 11.5px !important;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
+  font-variant-numeric: tabular-nums !important;
+  font-weight: 600 !important;
+  min-width: 32px !important;
+  text-align: center !important;
+  letter-spacing: 0.5px !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-nav-counter {
+  color: var(--sl-mwc-muted, #5f6368) !important;
+}
+
+@keyframes aistu-slide-left-out {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-48px, 0, 0);
+    opacity: 0;
+  }
+}
+@keyframes aistu-slide-left-in {
+  0% {
+    transform: translate3d(48px, 0, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+@keyframes aistu-slide-right-out {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(48px, 0, 0);
+    opacity: 0;
+  }
+}
+@keyframes aistu-slide-right-in {
+  0% {
+    transform: translate3d(-48px, 0, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+ms-chat-turn .turn-content.aistu-slide-left-out,
+.chat-turn-container .turn-content.aistu-slide-left-out,
+.aistu-slide-left-out {
+  will-change: transform, opacity !important;
+  animation: aistu-slide-left-out 0.17s cubic-bezier(0.4, 0, 0.85, 0.25) forwards !important;
+}
+ms-chat-turn .turn-content.aistu-slide-left-in,
+.chat-turn-container .turn-content.aistu-slide-left-in,
+.aistu-slide-left-in {
+  will-change: transform, opacity !important;
+  animation: aistu-slide-left-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+}
+ms-chat-turn .turn-content.aistu-slide-right-out,
+.chat-turn-container .turn-content.aistu-slide-right-out,
+.aistu-slide-right-out {
+  will-change: transform, opacity !important;
+  animation: aistu-slide-right-out 0.17s cubic-bezier(0.4, 0, 0.85, 0.25) forwards !important;
+}
+ms-chat-turn .turn-content.aistu-slide-right-in,
+.chat-turn-container .turn-content.aistu-slide-right-in,
+.aistu-slide-right-in {
+  will-change: transform, opacity !important;
+  animation: aistu-slide-right-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+}
+
+/* Never show <X/Y> navigator on standalone Think blocks */
+ms-chat-turn[data-sl-thought-turn="true"] .aistu-history-navigator,
+ms-chat-turn.thought-activity-host:not(:has(ms-text-chunk:not(ms-thought-chunk *))) .aistu-history-navigator,
+ms-chat-turn:has(ms-thought-chunk):not(:has(ms-text-chunk:not(ms-thought-chunk *))) .aistu-history-navigator,
+.chat-turn-container:has(ms-thought-chunk):not(:has(ms-text-chunk:not(ms-thought-chunk *))) .aistu-history-navigator {
+  display: none !important;
+}
+
+ms-chat-turn.aistu-editing-silent .chat-turn-container.model.edit,
+ms-chat-turn.aistu-editing-silent .chat-turn-container.user.edit,
+.chat-turn-container.model.edit.aistu-editing-silent,
+.chat-turn-container.user.edit.aistu-editing-silent,
+ms-chat-turn.aistu-editing-silent .chat-turn-container.user.edit ms-autosize-textarea,
+.chat-turn-container.user.edit.aistu-editing-silent ms-autosize-textarea {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+
+ms-chat-turn.aistu-editing-silent .turn-content,
+.chat-turn-container.aistu-editing-silent .turn-content {
+  opacity: 0 !important;
+}
+
+ms-chat-turn.aistu-editing-silent ms-autosize-textarea,
+ms-chat-turn.aistu-editing-silent .textarea-row,
+ms-chat-turn.aistu-editing-silent textarea,
+ms-chat-turn.aistu-editing-silent .button-row,
+ms-chat-turn.aistu-editing-silent ms-chat-turn-actions,
+ms-chat-turn.aistu-editing-silent .chat-turn-actions,
+.chat-turn-container.aistu-editing-silent ms-autosize-textarea,
+.chat-turn-container.aistu-editing-silent .textarea-row,
+.chat-turn-container.aistu-editing-silent textarea,
+.chat-turn-container.aistu-editing-silent .button-row,
+.chat-turn-container.aistu-editing-silent ms-chat-turn-actions,
+.chat-turn-container.aistu-editing-silent .chat-turn-actions {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  z-index: -9999 !important;
+}
+
+/* ============================================================
+   Full-Screen Markdown Edit Popup Modal (User & Model Turns)
+   ============================================================ */
+.aistu-edit-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;
+  background: rgba(0, 0, 0, 0.65) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+  animation: sl-fade-in 0.16s ease-out !important;
+}
+
+.aistu-edit-modal-card {
+  width: min(92vw, 1280px) !important;
+  height: min(88vh, 880px) !important;
+  background: #191919 !important;
+  border: 1px solid #2e2e2e !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Google Sans", Roboto, sans-serif !important;
+}
+
+body.light-theme .aistu-edit-modal-card {
+  background: #ffffff !important;
+  border-color: #dcdcdc !important;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.22) !important;
+}
+
+.aistu-edit-modal-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 18px !important;
+  background: #202020 !important;
+  border-bottom: 1px solid #2e2e2e !important;
+  gap: 12px !important;
+  flex-shrink: 0 !important;
+}
+
+body.light-theme .aistu-edit-modal-header {
+  background: #f8f9fa !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.aistu-edit-modal-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.aistu-edit-modal-role-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 3px 10px !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px !important;
+  text-transform: uppercase !important;
+  background: rgba(138, 180, 248, 0.14) !important;
+  color: #8ab4f8 !important;
+}
+
+body.light-theme .aistu-edit-modal-role-badge {
+  background: rgba(11, 87, 208, 0.1) !important;
+  color: #0b57d0 !important;
+}
+
+.aistu-edit-modal-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #e3e3e3 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+body.light-theme .aistu-edit-modal-title {
+  color: #1f1f1f !important;
+}
+
+.aistu-edit-modal-meta {
+  font-size: 12px !important;
+  color: #8e918f !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.aistu-edit-modal-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.aistu-edit-modal-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid #333333 !important;
+  background: #262626 !important;
+  color: #e3e3e3 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease !important;
+  user-select: none !important;
+}
+
+body.light-theme .aistu-edit-modal-btn {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.aistu-edit-modal-btn:hover {
+  background: #303030 !important;
+  border-color: #444444 !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .aistu-edit-modal-btn:hover {
+  background: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.aistu-edit-modal-btn.aistu-btn-save {
+  background: #8ab4f8 !important;
+  border-color: #8ab4f8 !important;
+  color: #062e6f !important;
+  font-weight: 600 !important;
+}
+
+.aistu-edit-modal-btn.aistu-btn-save:hover {
+  background: #a8c7fa !important;
+  border-color: #a8c7fa !important;
+  color: #041e49 !important;
+}
+
+body.light-theme .aistu-edit-modal-btn.aistu-btn-save {
+  background: #0b57d0 !important;
+  border-color: #0b57d0 !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .aistu-edit-modal-btn.aistu-btn-save:hover {
+  background: #0842a0 !important;
+  border-color: #0842a0 !important;
+}
+
+.aistu-edit-modal-btn.aistu-btn-cancel:hover {
+  background: rgba(242, 184, 181, 0.14) !important;
+  border-color: rgba(242, 184, 181, 0.35) !important;
+  color: #f2b8b5 !important;
+}
+
+body.light-theme .aistu-edit-modal-btn.aistu-btn-cancel:hover {
+  background: rgba(220, 38, 38, 0.1) !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+  color: #dc2626 !important;
+}
+
+.aistu-edit-modal-body {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  background: #141414 !important;
+}
+
+body.light-theme .aistu-edit-modal-body {
+  background: #ffffff !important;
+}
+
+.aistu-edit-modal-textarea {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: #e3e3e3 !important;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 14px !important;
+  line-height: 1.65 !important;
+  padding: 20px 24px !important;
+  margin: 0 !important;
+  resize: none !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  scrollbar-width: thin !important;
+}
+
+body.light-theme .aistu-edit-modal-textarea {
+  color: #1e293b !important;
+}
+
+/* ============================================================
+   Rerun Button 500ms Hold Radial Progress Ring & Improve Response Popup
+   ============================================================ */
+button.rerun-button,
+button[name="rerun-button"],
+ms-button[name="rerun-button"] {
+  position: relative !important;
+}
+
+.aistu-rerun-hold-ring {
+  position: absolute !important;
+  inset: -2px !important;
+  width: calc(100% + 4px) !important;
+  height: calc(100% + 4px) !important;
+  pointer-events: none !important;
+  z-index: 5 !important;
+  transform: rotate(-90deg) !important;
+}
+
+.aistu-rerun-hold-ring circle {
+  fill: none !important;
+  stroke: var(--sl-ct-ui-accent, #8ab4f8) !important;
+  stroke-width: 2.4 !important;
+  stroke-linecap: round !important;
+  stroke-dasharray: 88 !important;
+  stroke-dashoffset: 88 !important;
+  animation: aistu-rerun-ring-fill 0.5s linear forwards !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-rerun-hold-ring circle {
+  stroke: var(--sl-ct-ui-accent, #0b57d0) !important;
+}
+
+@keyframes aistu-rerun-ring-fill {
+  0% {
+    stroke-dashoffset: 88;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Stealth Turn & Thought Chunk Hiding (Zero visual footprint while allowing Angular IntersectionObserver & Material menu triggers to function) */
+ms-chat-turn[data-aistu-stealth-turn="true"],
+ms-chat-turn[data-aistu-stealth-thought="true"],
+.chat-turn-container[data-aistu-stealth-turn="true"],
+.chat-turn-container[data-aistu-stealth-thought="true"],
+ms-chat-turn:has([data-aistu-stealth-marker="true"]) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  max-height: 1px !important;
+  margin: -1px 0 0 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+}
+
+/* Hide transient native select/menu/dialog overlays during programmatic Thinking Level switch or silent turn deletion */
+body.aistu-stealth-switching-thinking .cdk-overlay-pane.ms-select-panel-class,
+body.aistu-stealth-switching-thinking .cdk-overlay-pane:has(#mat-select-0-panel),
+body.aistu-stealth-switching-thinking .cdk-overlay-pane:has(.mat-mdc-select-panel[aria-label*="Thinking" i]),
+body.aistu-stealth-switching-thinking .cdk-overlay-backdrop,
+body.aistu-stealth-deleting-turns .cdk-overlay-container,
+body.aistu-stealth-deleting-turns .cdk-overlay-pane:has(.mat-mdc-menu-panel),
+body.aistu-stealth-deleting-turns .mat-mdc-menu-panel,
+body.aistu-stealth-deleting-turns .mat-mdc-dialog-container,
+body.aistu-stealth-deleting-turns .cdk-overlay-backdrop,
+body.aistu-stealth-mounting-runsettings ms-right-side-panel,
+body.aistu-stealth-mounting-runsettings .drawer-container:has(ms-run-settings) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+}
+
+/* Visual Freeze for Thinking Level UI while Minimal is active in the background */
+body[data-aistu-frozen-thinking] #mat-select-0 .mat-mdc-select-min-line,
+body[data-aistu-frozen-thinking] mat-select[aria-label*="Thinking" i] .mat-mdc-select-min-line,
+body[data-aistu-frozen-thinking] ms-thinking-level-setting mat-select .mat-mdc-select-min-line,
+body[data-aistu-frozen-thinking] .sl-header-thinking-btn .thinking-label {
+  font-size: 0 !important;
+  color: transparent !important;
+  position: relative !important;
+}
+
+body[data-aistu-frozen-thinking] #mat-select-0 .mat-mdc-select-min-line::after,
+body[data-aistu-frozen-thinking] mat-select[aria-label*="Thinking" i] .mat-mdc-select-min-line::after,
+body[data-aistu-frozen-thinking] ms-thinking-level-setting mat-select .mat-mdc-select-min-line::after {
+  content: attr(data-aistu-frozen-label) !important;
+  font-size: 14px !important;
+  color: var(--mat-select-enabled-trigger-text-color, var(--color-v3-text, #e3e3e3)) !important;
+}
+
+body[data-aistu-frozen-thinking] .sl-header-thinking-btn .thinking-label::after {
+  content: attr(data-aistu-frozen-label) !important;
+  font-size: 12.5px !important;
+  color: var(--sl-ct-ui-text, var(--color-v3-text, #e3e3e3)) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"])[data-aistu-frozen-thinking] #mat-select-0 .mat-mdc-select-min-line::after,
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"])[data-aistu-frozen-thinking] mat-select[aria-label*="Thinking" i] .mat-mdc-select-min-line::after,
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"])[data-aistu-frozen-thinking] ms-thinking-level-setting mat-select .mat-mdc-select-min-line::after,
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"])[data-aistu-frozen-thinking] .sl-header-thinking-btn .thinking-label::after {
+  color: var(--sl-ct-ui-text, #1f1f1f) !important;
+}
+
+/* Visual Freeze for Model Selector UI while gemini-3.1-flash-lite is active in the background */
+body[data-aistu-frozen-model] [data-aistu-frozen-model-label] {
+  font-size: 0 !important;
+  color: transparent !important;
+  position: relative !important;
+}
+
+body[data-aistu-frozen-model] [data-aistu-frozen-model-label]::after {
+  content: attr(data-aistu-frozen-model-label) !important;
+  font-size: var(--aistu-frozen-model-font-size, 13.5px) !important;
+  color: var(--sl-ct-ui-text, var(--color-v3-text, #e3e3e3)) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"])[data-aistu-frozen-model] [data-aistu-frozen-model-label]::after {
+  color: var(--sl-ct-ui-text, #1f1f1f) !important;
+}
+
+/* Hide transient prompt text in Prompt Bar while sending stealth turn */
+body.aistu-stealth-sending-prompt ms-prompt-box textarea,
+body.aistu-stealth-sending-prompt ms-prompt-input textarea,
+body.aistu-stealth-sending-prompt ms-prompt-box .ql-editor {
+  color: transparent !important;
+  caret-color: transparent !important;
+  text-shadow: none !important;
+}
+
+body.aistu-stealth-sending-prompt .sl-draft-indicator {
+  display: none !important;
+}
+
+/* Improve Response Compact Anchored Popover */
+.aistu-improve-popup-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  display: block !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.aistu-improve-popup-card {
+  position: fixed !important;
+  width: min(calc(100vw - 20px), 296px) !important;
+  max-width: 296px !important;
+  background: #1b1b1f !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.28) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  color: #e3e3e3 !important;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Google Sans", Roboto, sans-serif !important;
+  animation: aistu-improve-popover-in 0.14s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transform-origin: var(--aistu-popover-origin, bottom left) !important;
+}
+
+@keyframes aistu-improve-popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-popup-card {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15), 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+  color: #1f1f1f !important;
+}
+
+.aistu-improve-popup-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  padding: 9px 11px !important;
+  background: #222227 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-popup-header {
+  background: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.aistu-improve-popup-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.aistu-improve-popup-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 21px !important;
+  height: 21px !important;
+  border-radius: 6px !important;
+  background: rgba(138, 180, 248, 0.15) !important;
+  color: #8ab4f8 !important;
+  flex-shrink: 0 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-popup-badge {
+  background: rgba(11, 87, 208, 0.1) !important;
+  color: #0b57d0 !important;
+}
+
+.aistu-improve-popup-title {
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  color: #e3e3e3 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-popup-title {
+  color: #1e293b !important;
+}
+
+.aistu-improve-close-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #28282e !important;
+  color: #b4b7bc !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-close-btn {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+.aistu-improve-close-btn:hover {
+  background: rgba(242, 184, 181, 0.16) !important;
+  border-color: rgba(242, 184, 181, 0.4) !important;
+  color: #f2b8b5 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-close-btn:hover {
+  background: rgba(220, 38, 38, 0.1) !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+  color: #dc2626 !important;
+}
+
+.aistu-improve-popup-body {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  padding: 10px 11px !important;
+}
+
+.aistu-improve-loading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 8px 6px !important;
+  text-align: left !important;
+}
+
+.aistu-improve-spinner {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0 !important;
+  border-radius: 50% !important;
+  border: 2.2px solid rgba(138, 180, 248, 0.2) !important;
+  border-top-color: #8ab4f8 !important;
+  animation: aistu-improve-spin 0.8s linear infinite !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-spinner {
+  border-color: rgba(11, 87, 208, 0.18) !important;
+  border-top-color: #0b57d0 !important;
+}
+
+@keyframes aistu-improve-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aistu-improve-loading-text {
+  margin: 0 !important;
+  font-size: 11.5px !important;
+  line-height: 1.4 !important;
+  color: #c4c7c5 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-loading-text {
+  color: #475569 !important;
+}
+
+.aistu-improve-options-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+}
+
+.aistu-improve-option-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 7px !important;
+  width: 100% !important;
+  min-height: 31px !important;
+  padding: 5px 9px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #232329 !important;
+  color: #e3e3e3 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.08s ease !important;
+  box-sizing: border-box !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-option-btn {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.aistu-improve-option-btn:hover {
+  background: rgba(138, 180, 248, 0.14) !important;
+  border-color: #8ab4f8 !important;
+  color: #ffffff !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-option-btn:hover {
+  background: rgba(11, 87, 208, 0.08) !important;
+  border-color: #0b57d0 !important;
+  color: #0b57d0 !important;
+}
+
+.aistu-improve-option-btn:active {
+  transform: scale(0.99) !important;
+}
+
+.aistu-improve-option-start {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.aistu-improve-option-index {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 5px !important;
+  background: rgba(138, 180, 248, 0.14) !important;
+  color: #8ab4f8 !important;
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  flex-shrink: 0 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-option-index {
+  background: rgba(11, 87, 208, 0.1) !important;
+  color: #0b57d0 !important;
+}
+
+.aistu-improve-option-text {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.aistu-improve-option-arrow {
+  width: 13px !important;
+  height: 13px !important;
+  color: #8e918f !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.15s ease, color 0.15s ease !important;
+}
+
+.aistu-improve-option-btn:hover .aistu-improve-option-arrow {
+  transform: translateX(2px) !important;
+  color: #8ab4f8 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-option-btn:hover .aistu-improve-option-arrow {
+  color: #0b57d0 !important;
+}
+
+.aistu-improve-custom-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding-top: 6px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-custom-row {
+  border-top-color: #e2e8f0 !important;
+}
+
+.aistu-improve-custom-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  height: 31px !important;
+  padding: 0 9px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #141417 !important;
+  color: #e3e3e3 !important;
+  font-size: 12px !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-custom-input {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.aistu-improve-custom-input:focus {
+  border-color: #8ab4f8 !important;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.18) !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-custom-input:focus {
+  border-color: #0b57d0 !important;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.15) !important;
+}
+
+.aistu-improve-custom-input::placeholder {
+  color: #8e918f !important;
+}
+
+.aistu-improve-submit-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 31px !important;
+  height: 31px !important;
+  min-width: 31px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border: 1px solid #8ab4f8 !important;
+  background: #8ab4f8 !important;
+  color: #062e6f !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+}
+
+:is(body.light-mode, body.light-theme, body[data-sl-theme-mode="light"]) .aistu-improve-submit-btn {
+  background: #0b57d0 !important;
+  border-color: #0b57d0 !important;
+  color: #ffffff !important;
+}
+
+.aistu-improve-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.08) !important;
+}
+
+.aistu-improve-submit-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* ============================================================
+   First-Run Welcome & Language Picker Modal
+   ============================================================ */
+.sl-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483645;
+  background: rgba(8, 10, 16, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+}
+
+.sl-welcome-card {
+  width: min(680px, 100%);
+  max-height: 88vh;
+  background: #1c1d24;
+  border: 1px solid rgba(168, 199, 250, 0.22);
+  border-radius: 24px;
+  padding: 28px;
+  box-sizing: border-box;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+  color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+  animation: sl-fade-in 0.22s ease-out;
+}
+
+.sl-welcome-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.sl-welcome-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.sl-welcome-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sl-welcome-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(168, 199, 250, 0.14);
+  color: #a8c7fa;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.sl-welcome-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.sl-welcome-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.sl-welcome-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  padding: 4px 2px;
+  max-height: 360px;
+  scrollbar-width: thin;
+}
+
+.sl-welcome-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #252731;
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.sl-welcome-lang-btn:hover {
+  background: #2e313e;
+  border-color: rgba(168, 199, 250, 0.35);
+}
+
+.sl-welcome-lang-btn.active {
+  background: rgba(168, 199, 250, 0.16);
+  border-color: #a8c7fa;
+  color: #ffffff;
+}
+
+.sl-welcome-lang-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a8c7fa;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sl-welcome-lang-btn.active .sl-welcome-lang-badge {
+  background: #a8c7fa;
+  color: #062e6f;
+}
+
+.sl-welcome-lang-names {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.sl-welcome-lang-native {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-welcome-lang-en {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-welcome-lang-check {
+  opacity: 0;
+  color: #a8c7fa;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sl-welcome-lang-btn.active .sl-welcome-lang-check {
+  opacity: 1;
+}
+
+.sl-welcome-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.sl-welcome-note {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  flex: 1 1 240px;
+}
+
+.sl-welcome-confirm-btn {
+  padding: 11px 24px;
+  border-radius: 999px;
+  border: none;
+  background: #a8c7fa;
+  color: #062e6f;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sl-welcome-confirm-btn:hover {
+  background: #c2e7ff;
+  transform: translateY(-1px);
+}
+
+/* Studio.lab Theme Manager & Empty Custom Theme Editor Shell */
+.sl-settings-theme-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sl-theme-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sl-theme-card,
+.sl-theme-create-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  transition: background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.sl-theme-card.is-active {
+  box-shadow: inset 0 0 0 1.5px var(--sl-settings-link);
+}
+
+.sl-theme-card-start {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sl-theme-card-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 50%;
+  background: #8ed1fc;
+  color: #004a70;
+}
+
+.sl-theme-card-avatar[data-tone="pink"] {
+  background: #ffade3;
+  color: #822c68;
+}
+
+.sl-theme-card-avatar svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sl-theme-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sl-theme-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  background: var(--sl-settings-hover);
+  color: var(--sl-settings-muted);
+}
+
+.sl-theme-badge--active {
+  background: var(--sl-settings-selected);
+  color: var(--sl-settings-selected-text);
+}
+
+.sl-theme-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.sl-theme-card-actions .sl-settings-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sl-theme-active-btn {
+  background: var(--sl-settings-selected) !important;
+  color: var(--sl-settings-selected-text) !important;
+  opacity: 1 !important;
+  font-weight: 600 !important;
+}
+
+.sl-theme-editor-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 420px;
+}
+
+.sl-theme-editor-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 20px;
+  background: var(--sl-settings-surface);
+}
+
+.sl-theme-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sl-theme-editor-heading {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--sl-settings-text);
+  margin: 0;
+}
+
+.sl-theme-editor-empty-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  padding: 32px 24px;
+  border-radius: 20px;
+  background: var(--sl-settings-surface);
+  border: 1px dashed var(--sl-settings-outline);
+  text-align: center;
+}
+
+.sl-theme-editor-empty-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+}
+
+.sl-theme-editor-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ffade3;
+  color: #822c68;
+  margin-bottom: 4px;
+}
+
+.sl-theme-editor-empty-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sl-theme-editor-empty-inner h3 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--sl-settings-text);
+}
+
+.sl-theme-editor-empty-inner p {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--sl-settings-muted);
+}
+
+@media (max-width: 760px) {
+  .sl-theme-card,
+  .sl-theme-create-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sl-theme-card-actions {
+    justify-content: flex-start;
+  }
+}
+

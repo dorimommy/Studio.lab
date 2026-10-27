@@ -3,8 +3,13 @@
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
+  // SDK: window.StudioLabCore is bundled before this file.
+  const { $, $$, el, scope } = window.StudioLabCore;
+
   let ctxRef = null;
-  let watcherInterval = null;
+  let watching = false;
+  const watcherScope = scope();
+  let taScope = null;
   let activeTextarea = null;
   let floatingToolbarEl = null;
   let inlineToolbarEl = null;
@@ -24,34 +29,38 @@
     format: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 17v2h14v-2H5zm4.5-4.2h5l.9 2.2h2.1L12.75 4h-1.5L6.5 15h2.1l.9-2.2zM12 5.98L13.87 11h-3.74L12 5.98z"/></svg>'
   };
 
+  function t(key, fallback) {
+    return window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fallback || key) : (fallback || key);
+  }
+
   const BUTTONS_FULL = [
-    { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
-    { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
-    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
+    { id: 'bold', icon: SVG_ICONS.bold, titleKey: 'fmt_bold', title: 'Bold (Ctrl+B)', action: 'bold' },
+    { id: 'italic', icon: SVG_ICONS.italic, titleKey: 'fmt_italic', title: 'Italic (Ctrl+I)', action: 'italic' },
+    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, titleKey: 'fmt_strikethrough', title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
     { id: 'sep1', type: 'separator' },
-    { id: 'h1', text: 'H1', title: 'Heading 1 (#)', action: 'h1' },
-    { id: 'h2', text: 'H2', title: 'Heading 2 (##)', action: 'h2' },
-    { id: 'h3', text: 'H3', title: 'Heading 3 (###)', action: 'h3' },
+    { id: 'h1', text: 'H1', titleKey: 'fmt_h1', title: 'Heading 1 (#)', action: 'h1' },
+    { id: 'h2', text: 'H2', titleKey: 'fmt_h2', title: 'Heading 2 (##)', action: 'h2' },
+    { id: 'h3', text: 'H3', titleKey: 'fmt_h3', title: 'Heading 3 (###)', action: 'h3' },
     { id: 'sep2', type: 'separator' },
-    { id: 'ul', icon: SVG_ICONS.ul, title: 'Bullet List (- item)', action: 'ul' },
-    { id: 'ol', icon: SVG_ICONS.ol, title: 'Numbered List (1. item)', action: 'ol' },
-    { id: 'task', icon: SVG_ICONS.task, title: 'Task List (- [ ] task)', action: 'task' },
-    { id: 'quote', icon: SVG_ICONS.quote, title: 'Blockquote (> quote)', action: 'quote' },
+    { id: 'ul', icon: SVG_ICONS.ul, titleKey: 'fmt_ul', title: 'Bullet List (- item)', action: 'ul' },
+    { id: 'ol', icon: SVG_ICONS.ol, titleKey: 'fmt_ol', title: 'Numbered List (1. item)', action: 'ol' },
+    { id: 'task', icon: SVG_ICONS.task, titleKey: 'fmt_task', title: 'Task List (- [ ] task)', action: 'task' },
+    { id: 'quote', icon: SVG_ICONS.quote, titleKey: 'fmt_quote', title: 'Blockquote (> quote)', action: 'quote' },
     { id: 'sep3', type: 'separator' },
-    { id: 'link', icon: SVG_ICONS.link, title: 'Insert Link (Ctrl+K)', action: 'link' },
-    { id: 'code', icon: SVG_ICONS.code, title: 'Code Block / Inline Code', action: 'code' }
+    { id: 'link', icon: SVG_ICONS.link, titleKey: 'fmt_link', title: 'Insert Link (Ctrl+K)', action: 'link' },
+    { id: 'code', icon: SVG_ICONS.code, titleKey: 'fmt_code', title: 'Code Block / Inline Code', action: 'code' }
   ];
 
   const BUTTONS_FLOATING = [
-    { id: 'bold', icon: SVG_ICONS.bold, title: 'Bold (Ctrl+B)', action: 'bold' },
-    { id: 'italic', icon: SVG_ICONS.italic, title: 'Italic (Ctrl+I)', action: 'italic' },
-    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
+    { id: 'bold', icon: SVG_ICONS.bold, titleKey: 'fmt_bold', title: 'Bold (Ctrl+B)', action: 'bold' },
+    { id: 'italic', icon: SVG_ICONS.italic, titleKey: 'fmt_italic', title: 'Italic (Ctrl+I)', action: 'italic' },
+    { id: 'strikethrough', icon: SVG_ICONS.strikethrough, titleKey: 'fmt_strikethrough', title: 'Strikethrough (Ctrl+Shift+X)', action: 'strikethrough' },
     { id: 'sep1', type: 'separator' },
-    { id: 'ul', icon: SVG_ICONS.ul, title: 'Bullet List', action: 'ul' },
-    { id: 'ol', icon: SVG_ICONS.ol, title: 'Numbered List', action: 'ol' },
+    { id: 'ul', icon: SVG_ICONS.ul, titleKey: 'fmt_ul', title: 'Bullet List', action: 'ul' },
+    { id: 'ol', icon: SVG_ICONS.ol, titleKey: 'fmt_ol', title: 'Numbered List', action: 'ol' },
     { id: 'sep2', type: 'separator' },
-    { id: 'link', icon: SVG_ICONS.link, title: 'Insert Link (Ctrl+K)', action: 'link' },
-    { id: 'code', icon: SVG_ICONS.code, title: 'Code', action: 'code' }
+    { id: 'link', icon: SVG_ICONS.link, titleKey: 'fmt_link', title: 'Insert Link (Ctrl+K)', action: 'link' },
+    { id: 'code', icon: SVG_ICONS.code, titleKey: 'fmt_code', title: 'Code', action: 'code' }
   ];
 
   // CSS values were sampled from AI Studio's native controls.
@@ -339,8 +348,7 @@
 
   function injectCSS() {
     if (document.getElementById('sl-text-formatter-css')) return;
-    styleEl = document.createElement('style');
-    styleEl.id = 'sl-text-formatter-css';
+    styleEl = el('<style id="sl-text-formatter-css"></style>');
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
   }
@@ -355,16 +363,32 @@
   }
 
   function startWatcher() {
-    if (watcherInterval) return;
-    watcherInterval = setInterval(attachToPromptBox, 600);
+    if (watching) return;
+    watching = true;
+    watcherScope.every(600, attachToPromptBox);
+    watcherScope.listen(window, '__sl_languageChanged', () => {
+      if (toggleBtnEl) {
+        const title = t('fmt_toggle_title', 'Text Formatting');
+        toggleBtnEl.setAttribute('title', title);
+        toggleBtnEl.setAttribute('aria-label', title);
+      }
+      const wasInlineVisible = inlineToolbarEl && inlineToolbarEl.classList.contains('sl-fmt-visible');
+      if (floatingToolbarEl && floatingToolbarEl.parentNode) floatingToolbarEl.parentNode.removeChild(floatingToolbarEl);
+      if (inlineToolbarEl && inlineToolbarEl.parentNode) inlineToolbarEl.parentNode.removeChild(inlineToolbarEl);
+      floatingToolbarEl = null;
+      inlineToolbarEl = null;
+      if (activeTextarea) {
+        ensureToolbars(activeTextarea);
+        if (wasInlineVisible && inlineToolbarEl) inlineToolbarEl.classList.add('sl-fmt-visible');
+      }
+    });
     attachToPromptBox();
   }
 
   function stopWatcher() {
-    if (watcherInterval) {
-      clearInterval(watcherInterval);
-      watcherInterval = null;
-    }
+    if (!watching) return;
+    watching = false;
+    watcherScope.dispose();
   }
 
   function cleanupDOM() {
@@ -381,13 +405,11 @@
     inlineToolbarEl = null;
     toggleBtnEl = null;
 
-    if (activeTextarea) {
-      activeTextarea.removeEventListener('keydown', handleKeyDown);
-      activeTextarea.removeEventListener('mouseup', handleMouseUp);
-      activeTextarea.removeEventListener('keyup', handleKeyUp);
-      activeTextarea.removeEventListener('blur', handleBlur);
-      activeTextarea = null;
+    if (taScope) {
+      taScope.dispose();
+      taScope = null;
     }
+    activeTextarea = null;
   }
 
   function findPromptTextarea() {
@@ -399,8 +421,8 @@
       'textarea'
     ];
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && el.offsetParent !== null) return el;
+      const candidate = $(sel);
+      if (candidate && candidate.offsetParent !== null) return candidate;
     }
     return null;
   }
@@ -410,92 +432,60 @@
     if (!textarea) return;
 
     if (activeTextarea !== textarea) {
-      if (activeTextarea) {
-        activeTextarea.removeEventListener('keydown', handleKeyDown);
-        activeTextarea.removeEventListener('mouseup', handleMouseUp);
-        activeTextarea.removeEventListener('keyup', handleKeyUp);
-        activeTextarea.removeEventListener('blur', handleBlur);
-      }
+      if (taScope) taScope.dispose();
       activeTextarea = textarea;
-      activeTextarea.addEventListener('keydown', handleKeyDown);
-      activeTextarea.addEventListener('mouseup', handleMouseUp);
-      activeTextarea.addEventListener('keyup', handleKeyUp);
-      activeTextarea.addEventListener('blur', handleBlur);
+      taScope = scope();
+      taScope.on(activeTextarea, 'keydown', handleKeyDown);
+      taScope.on(activeTextarea, 'mouseup', handleMouseUp);
+      taScope.on(activeTextarea, 'keyup', handleKeyUp);
+      taScope.on(activeTextarea, 'blur', handleBlur);
     }
 
     ensureToolbars(textarea);
   }
 
   function createToolbarNode(className, buttons) {
-    const tb = document.createElement('div');
-    tb.className = `sl-fmt-toolbar ${className}`;
-    tb.setAttribute('role', 'toolbar');
-    tb.setAttribute('aria-label', 'Text formatting options');
+    const tb = el(`<div class="sl-fmt-toolbar ${className}" role="toolbar" aria-label="Text formatting options"></div>`);
 
     let headingDropdownAdded = false;
 
     buttons.forEach(btn => {
       if (btn.type === 'separator') {
-        const sep = document.createElement('div');
-        sep.className = 'sl-fmt-sep';
-        tb.appendChild(sep);
+        tb.append(el('<div class="sl-fmt-sep"></div>'));
         return;
       }
 
       if (btn.action === 'h1' && !headingDropdownAdded) {
         headingDropdownAdded = true;
-        const hDrop = document.createElement('div');
-        hDrop.className = 'sl-fmt-heading-dropdown';
-
-        const hBtn = document.createElement('button');
-        hBtn.type = 'button';
-        hBtn.className = 'sl-fmt-btn sl-fmt-heading-btn';
-        hBtn.title = 'Headings';
-        hBtn.setAttribute('aria-label', 'Headings');
-        hBtn.innerHTML = '<span class="sl-fmt-btn-text">H ▾</span>';
-
-        const hMenu = document.createElement('div');
-        hMenu.className = 'sl-fmt-heading-menu';
+        const hTitle = t('fmt_headings', 'Headings');
+        const hDrop = el(`<div class="sl-fmt-heading-dropdown">
+          <button type="button" class="sl-fmt-btn sl-fmt-heading-btn" title="${hTitle}" aria-label="${hTitle}"><span class="sl-fmt-btn-text">H ▾</span></button>
+          <div class="sl-fmt-heading-menu"></div>
+        </div>`);
+        const hMenu = $('.sl-fmt-heading-menu', hDrop);
 
         ['h1', 'h2', 'h3'].forEach((hAct, i) => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.className = 'sl-fmt-heading-item';
-          item.textContent = `H${i + 1}`;
+          const item = el(`<button type="button" class="sl-fmt-heading-item">H${i + 1}</button>`);
           item.addEventListener('mousedown', (e) => {
             e.preventDefault();
             applyFormatting(activeTextarea, hAct);
             hDrop.classList.remove('sl-open');
           });
-          hMenu.appendChild(item);
+          hMenu.append(item);
         });
 
-        hBtn.addEventListener('mousedown', (e) => {
+        $('.sl-fmt-heading-btn', hDrop).addEventListener('mousedown', (e) => {
           e.preventDefault();
           e.stopPropagation();
           hDrop.classList.toggle('sl-open');
         });
 
-        hDrop.appendChild(hBtn);
-        hDrop.appendChild(hMenu);
-        tb.appendChild(hDrop);
+        tb.append(hDrop);
       }
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'sl-fmt-btn';
-      if (btn.action) button.setAttribute('data-action', btn.action);
-      button.title = btn.title;
-      button.setAttribute('aria-label', btn.title);
-
-      if (btn.icon) {
-        button.innerHTML = btn.icon;
-      } else if (btn.text) {
-        const span = document.createElement('span');
-        span.className = 'sl-fmt-btn-text';
-        span.textContent = btn.text;
-        button.appendChild(span);
-      }
+      const btnTitle = btn.titleKey ? t(btn.titleKey, btn.title) : btn.title;
+      const label = btn.icon || (btn.text ? `<span class="sl-fmt-btn-text">${btn.text}</span>` : '');
+      const button = el(`<button type="button" class="sl-fmt-btn"${btn.action ? ` data-action="${btn.action}"` : ''} title="${btnTitle}" aria-label="${btnTitle}">${label}</button>`);
 
       button.addEventListener('mousedown', (e) => {
         e.preventDefault(); // Keep focus in textarea
@@ -506,7 +496,7 @@
         }
       });
 
-      tb.appendChild(button);
+      tb.append(button);
     });
 
     return tb;
@@ -533,12 +523,8 @@
       const buttonWrapper = promptBox.querySelector('.button-wrapper');
       const footerRow = buttonsRow || buttonWrapper;
       if (footerRow) {
-        toggleBtnEl = document.createElement('button');
-        toggleBtnEl.type = 'button';
-        toggleBtnEl.className = 'sl-fmt-toggle';
-        toggleBtnEl.title = 'Format Text';
-        toggleBtnEl.setAttribute('aria-label', 'Toggle formatting toolbar');
-        toggleBtnEl.innerHTML = SVG_ICONS.format;
+        const toggleTitle = t('fmt_toggle_title', 'Text Formatting');
+        toggleBtnEl = el(`<button type="button" class="sl-fmt-toggle" title="${toggleTitle}" aria-label="${toggleTitle}">${SVG_ICONS.format}</button>`);
 
         toggleBtnEl.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -651,7 +637,7 @@
 
   function openCustomLinkModal(textarea) {
     if (!textarea) return;
-    const existing = document.querySelector('.sl-link-modal-overlay');
+    const existing = $('.sl-link-modal-overlay');
     if (existing) existing.remove();
 
     hideFloatingToolbar();
@@ -660,34 +646,31 @@
     const end = textarea.selectionEnd;
     const selectedText = textarea.value.substring(start, end);
 
-    const overlay = document.createElement('div');
-    overlay.className = 'sl-overlay sl-fmt-modal-overlay';
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-
-    overlay.innerHTML = `
+    const overlay = el(`
+      <div class="sl-overlay sl-fmt-modal-overlay" role="dialog" aria-modal="true">
       <div class="sl-fmt-modal">
-        <h2>Insert Link</h2>
-        <label for="sl-link-url">URL</label>
+        <h2>${t('fmt_modal_title', 'Insert Link')}</h2>
+        <label for="sl-link-url">${t('fmt_modal_url', 'URL')}</label>
         <input type="url" id="sl-link-url" placeholder="https://example.com" value="https://" autocomplete="off">
-        
-        <label for="sl-link-text">Display Text (optional)</label>
-        <input type="text" id="sl-link-text" placeholder="Link text" value="${escapeHtml(selectedText)}" autocomplete="off">
-        
+
+        <label for="sl-link-text">${t('fmt_modal_display_text', 'Display Text (optional)')}</label>
+        <input type="text" id="sl-link-text" placeholder="${t('fmt_modal_link_placeholder', 'Link text')}" value="${escapeHtml(selectedText)}" autocomplete="off">
+
         <div class="sl-fmt-modal-actions">
-          <button type="button" class="sl-fmt-btn-cancel sl-cancel-btn">Cancel</button>
-          <button type="button" class="sl-fmt-btn-submit sl-submit-btn">Insert Link</button>
+          <button type="button" class="sl-fmt-btn-cancel sl-cancel-btn">${t('fmt_modal_cancel', 'Cancel')}</button>
+          <button type="button" class="sl-fmt-btn-submit sl-submit-btn">${t('fmt_modal_insert', 'Insert Link')}</button>
         </div>
       </div>
-    `;
+      </div>
+    `);
 
     document.body.appendChild(overlay);
 
-    const urlInput = overlay.querySelector('#sl-link-url');
-    const textInput = overlay.querySelector('#sl-link-text');
-    const closeBtn = overlay.querySelector('.sl-close-btn');
-    const cancelBtn = overlay.querySelector('.sl-cancel-btn');
-    const submitBtn = overlay.querySelector('.sl-submit-btn');
+    const urlInput = $('#sl-link-url', overlay);
+    const textInput = $('#sl-link-text', overlay);
+    const closeBtn = $('.sl-close-btn', overlay);
+    const cancelBtn = $('.sl-cancel-btn', overlay);
+    const submitBtn = $('.sl-submit-btn', overlay);
 
     setTimeout(() => {
       urlInput.focus();
@@ -1056,7 +1039,7 @@
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.sl-fmt-heading-dropdown')) {
-      document.querySelectorAll('.sl-fmt-heading-dropdown.sl-open').forEach(d => d.classList.remove('sl-open'));
+      $$('.sl-fmt-heading-dropdown.sl-open').forEach(d => d.classList.remove('sl-open'));
     }
   });
 

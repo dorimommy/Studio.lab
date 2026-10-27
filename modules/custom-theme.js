@@ -1,7 +1,7 @@
 (function (root, factory) {
   'use strict';
   const commonJS = typeof module === 'object' && module.exports;
-  const schema = commonJS ? require('../account/catalog-schema.js') : root.StudioLabCatalogSchema;
+  const schema = root.StudioLabCatalogSchema || null;
   const api = factory(schema);
   if (commonJS) module.exports = api;
   else {
@@ -14,6 +14,7 @@
   let activeRoot = null;
   const THEME_SCOPE = ':root:has(#sl-modern-web-chat-styles:not([disabled])) body[data-sl-custom-theme="true"][data-sl-custom-theme="true"]';
   function buildThemeCSS(asset) {
+    if (!schema) throw new Error('Theme schema unavailable.');
     const clean = schema.validateAsset(asset);
     if (clean.kind !== 'theme') throw new Error('Choose a theme.');
     const palette = schema.upgradeTheme(clean.payload);
@@ -76,7 +77,7 @@
     neutral['--color-v3-surface-container-highest'] = 'var(--sl-settings-hover)';
     const declarations = Object.entries(neutral).map(([key, value]) => `${key}:${value} !important;`).join('');
     return `${scope} :is(.sl-settings-shell,.sl-settings-shell *,.sl-native-settings-select-panel,.sl-native-settings-select-panel *){${declarations}color-scheme:dark !important;}
-      ${scope}.light-theme :is(.sl-settings-shell,.sl-settings-shell *,.sl-native-settings-select-panel,.sl-native-settings-select-panel *){color-scheme:light !important;}`;
+      ${scope}:is(.light-theme,[data-sl-theme-mode="light"]) :is(.sl-settings-shell,.sl-settings-shell *,.sl-native-settings-select-panel,.sl-native-settings-select-panel *){color-scheme:light !important;}`;
   }
   function paletteVariables(c, mode = 'dark') {
     let hover = c.accent;
@@ -304,12 +305,9 @@
       ${scope} .sl-toc-dash.active{background:var(--sl-mwc-accent) !important;}
       @media (forced-colors:active){${scope}{--sl-mwc-surface:Canvas !important;--sl-mwc-raised:Canvas !important;--sl-mwc-hover:Canvas !important;--sl-mwc-border:ButtonText !important;--sl-mwc-text:CanvasText !important;--sl-mwc-muted:CanvasText !important;--sl-mwc-accent:LinkText !important;}}`;
   }
-  function start(root, options = {}) {
+  function start(root) {
     const { document, chrome } = root;
-    // Account/Market are separate extension documents with their own theme.
-    const isolatedPreview = options.isolatedPreview === true && /\/account\/theme-preview\.html$/.test(root.location?.pathname || '') &&
-      document.body?.getAttribute('data-sl-theme-preview') === 'true';
-    if (root.location?.protocol === 'chrome-extension:' && !isolatedPreview) return { apply() {}, preview() {}, endPreview() {} };
+    if (root.location?.protocol === 'chrome-extension:') return { apply() {}, preview() {}, endPreview() {} };
     activeRoot = root;
     let style = null, sheet = null, generation = 0, pendingAsset = null, storedAsset = null, previewing = false;
     const canAdopt = typeof root.CSSStyleSheet === 'function' && 'adoptedStyleSheets' in document;
@@ -341,6 +339,11 @@
     function paint(value) {
       pendingAsset = value;
       if (!document.body || !document.head) return;
+      // Yield completely to the 4-Tab Custom Theme Engine (theme-engine.js) when present
+      if (root.StudioLab?.themeEngine) {
+        removeStyle();
+        return;
+      }
       let css = null, mode = null;
       try {
         if (value) { css = buildThemeCSS(value); mode = value.payload.mode; }
@@ -352,7 +355,9 @@
       if (css) document.body.setAttribute('data-sl-custom-theme', 'true');
       else {
         removeStyle();
-        document.body.removeAttribute('data-sl-custom-theme');
+        if (document.body.getAttribute('data-sl-custom-theme') === 'true') {
+          document.body.removeAttribute('data-sl-custom-theme');
+        }
       }
       activeMode = mode;
       root.dispatchEvent(new Event('sl-theme-changed'));
@@ -362,6 +367,7 @@
       if (!previewing) paint(value);
     }
     function preview(payload) {
+      if (!schema) return;
       const clean = schema.validateTheme(payload);
       previewing = true;
       paint({ id: '00000000-0000-4000-8000-000000000000', kind: 'theme', title: 'Preview', description: '',
@@ -369,23 +375,21 @@
         updated_at: '2026-10-11T00:00:00.000Z', payload: clean });
     }
     function endPreview() { previewing = false; paint(storedAsset); }
-    // The sample shares this renderer without reading account preferences or installing a saved theme.
-    if (!isolatedPreview) {
-      const initialGeneration = generation;
-      chrome.storage.local.get(['slActiveTheme'], stored => {
-        if (!chrome.runtime?.lastError && generation === initialGeneration) apply(stored?.slActiveTheme || null);
-      });
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && Object.prototype.hasOwnProperty.call(changes, 'slActiveTheme')) {
-          generation++; apply(changes.slActiveTheme.newValue || null);
-        }
-      });
-    }
+    const initialGeneration = generation;
+    chrome.storage.local.get(['slActiveTheme'], stored => {
+      if (!chrome.runtime?.lastError && generation === initialGeneration) apply(stored?.slActiveTheme || null);
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && Object.prototype.hasOwnProperty.call(changes, 'slActiveTheme')) {
+        generation++; apply(changes.slActiveTheme.newValue || null);
+      }
+    });
     if (!document.body) document.addEventListener('DOMContentLoaded', () => paint(pendingAsset), { once: true });
-    root.StudioLabThemePreview = Object.freeze({ preview, endPreview });
     return { apply, preview, endPreview };
   }
   return Object.freeze({ buildThemeCSS, start, mode: () => {
+    const engineMode = activeRoot?.StudioLab?.themeEngine?.getActiveMode?.();
+    if (engineMode) return engineMode;
     const modern = activeRoot?.document.getElementById('sl-modern-web-chat-styles');
     return modern && !modern.hasAttribute('disabled') && !modern.disabled ? activeMode : null;
   } });

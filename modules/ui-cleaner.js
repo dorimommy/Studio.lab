@@ -2,6 +2,7 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, el, waitFor } = window.StudioLabCore;
 
   let ctxRef = null;
   const styleElements = {};
@@ -99,7 +100,7 @@
   ];
 
   function extractUserName() {
-    const avatarImg = document.querySelector('img.avatar[alt]');
+    const avatarImg = $('img.avatar[alt]');
     if (avatarImg) {
       const alt = avatarImg.getAttribute('alt').trim();
       if (alt && alt.toLowerCase() !== 'avatar' && alt.toLowerCase() !== 'profile picture') {
@@ -107,7 +108,7 @@
       }
     }
 
-    const accBtn = document.querySelector('a[aria-label*="@"], button[aria-label*="@"]');
+    const accBtn = $('a[aria-label*="@"], button[aria-label*="@"]');
     if (accBtn) {
       const label = accBtn.getAttribute('aria-label');
       const match = label.match(/:\s*(.*?)\s*\(/);
@@ -125,7 +126,9 @@
   let typingInProgress = false;
   let typingInterval = null;
   let namePoll = null;
+  let namePollGen = 0;
   let nameRefresh = null;
+  const POLL_CANCELLED = {};
 
   function typeText(targetText) {
     if (typingInProgress || lastTypedName === targetText) return;
@@ -158,10 +161,10 @@
   }
 
   function stopWelcome() {
-    clearInterval(namePoll);
+    namePollGen++;
+    namePoll = null;
     clearInterval(nameRefresh);
     clearInterval(typingInterval);
-    namePoll = null;
     nameRefresh = null;
     typingInterval = null;
     typingInProgress = false;
@@ -177,33 +180,33 @@
     if (nameRefresh !== null) return;
 
     if (!updateUserName()) {
-      let attempts = 0;
-      namePoll = setInterval(() => {
-        attempts++;
-        if (updateUserName() || attempts >= 100) {
-          clearInterval(namePoll);
-          namePoll = null;
-        }
-      }, 100);
+      // Було: ручний setInterval з лічильником (100 спроб × 100 мс).
+      // waitFor робить те саме; покоління скасовує застарілий полл.
+      const gen = ++namePollGen;
+      namePoll = waitFor(() => {
+        if (gen !== namePollGen) return POLL_CANCELLED;
+        return updateUserName() || null;
+      }, { timeout: 10000, interval: 100 }).then(() => {
+        if (gen === namePollGen) namePoll = null;
+      });
     }
     nameRefresh = setInterval(updateUserName, 10000);
   }
 
   function toggleStyle(id, css, enabled) {
-    let el = styleElements[id] || document.getElementById('sl-style-' + id);
+    let styleEl = styleElements[id] || $('#sl-style-' + id);
     if (enabled) {
-      if (!el) {
-        el = document.createElement('style');
-        el.id = 'sl-style-' + id;
-        document.head.appendChild(el);
+      if (!styleEl) {
+        styleEl = el(`<style id="sl-style-${id}"></style>`);
+        document.head.appendChild(styleEl);
       }
-      el.textContent = css;
-      styleElements[id] = el;
+      styleEl.textContent = css;
+      styleElements[id] = styleEl;
     } else {
-      if (el) {
-        el.remove();
+      if (styleEl) {
+        styleEl.remove();
       }
-      const existing = document.getElementById('sl-style-' + id);
+      const existing = $('#sl-style-' + id);
       if (existing) existing.remove();
       delete styleElements[id];
     }

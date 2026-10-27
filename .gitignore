@@ -8,10 +8,22 @@
 !/CODE_OF_CONDUCT.md
 !/LICENSE
 !/manifest.json
+!/package.json
 !/background.js
 !/content.js
 !/interceptor.js
+!/rpc-transport.js
 !/sl-panel.css
+!/build/
+!/build/build.mjs
+!/dist/
+!/dist/core.js
+!/dist/core-main.js
+!/packages/
+!/packages/core/
+!/packages/core/package.json
+!/packages/core/src/
+!/packages/core/src/index.js
 
 !/modules/
 !/modules/registry.js
@@ -35,6 +47,7 @@
 !/modules/ui-cleaner.js
 !/modules/default-profile.js
 !/modules/draft-saver.js
+!/modules/limit-tracker.js
 !/modules/native-settings.js
 
 !/account/

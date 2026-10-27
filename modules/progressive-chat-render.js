@@ -3,6 +3,8 @@
 
   if (window.__slProgressiveChatRender) return;
 
+  const { $, observe, scope } = window.StudioLabCore;
+
   const PREFERENCE_KEY = 'sl_initialChatRenderEnabled';
   const JUMP_SELECTOR = 'ms-items-scrollbar [data-test-item-id], .sl-toc-dash, .sl-toc-item';
   const SEARCH_SELECTOR = 'button[aria-label="Search (Ctrl /)"]';
@@ -29,7 +31,7 @@
   let materializing = false;
   let materializedRoute = null;
   let removalObserver = null;
-  const bootstrapCleanups = [];
+  const bootstrapScope = scope();
   try { enabled = window.localStorage.getItem(PREFERENCE_KEY) !== 'false'; } catch (_) {}
 
   Object.defineProperty(window, '__slProgressiveChatRender', { configurable: true, value: Object.freeze({
@@ -76,7 +78,7 @@
     state.requested = 0;
     state.olderIntent = false;
     states.delete(state.reference);
-    if (!states.size) { removalObserver?.disconnect(); removalObserver = null; }
+    if (!states.size) { removalObserver?.(); removalObserver = null; }
   }
 
   function current(state) {
@@ -100,14 +102,13 @@
 
   function watchRemoval() {
     if (removalObserver) return;
-    removalObserver = new MutationObserver(records => {
+    removalObserver = observe(document.documentElement || document, { childList: true, subtree: true }, records => {
       if (!records.some(record => record.removedNodes?.length)) return;
       for (const state of activeStates()) if (!state.context.Ma?.nativeElement?.isConnected) {
         release(state);
         state.cancelled = true;
       }
     });
-    removalObserver.observe(document.documentElement || document, { childList: true, subtree: true });
   }
 
   function requestOlder(state, count) {
@@ -129,8 +130,8 @@
     state.observer = null;
     state.nearTop = false;
     const session = state.context.Ma?.nativeElement;
-    state.scroller = session?.querySelector('ms-autoscroll-container');
-    const oldest = session?.querySelector('ms-chat-turn');
+    state.scroller = session ? $('ms-autoscroll-container', session) : undefined;
+    const oldest = session ? $('ms-chat-turn', session) : undefined;
     if (!state.scroller || !oldest || typeof IntersectionObserver !== 'function') return;
     const reference = state.reference;
     const observer = new IntersectionObserver(entries => {
@@ -455,6 +456,7 @@
   }
 
   window.addEventListener('__sl_restoreAllTurns', () => materializeAll(false));
+  window.addEventListener('__sl_bulkCleanupStart', () => materializeAll(false));
   window.addEventListener('__sl_requestOlderTurns', event => {
     const count = event.detail?.count;
     if (typeof count !== 'number' || !Number.isFinite(count)) return;
@@ -568,9 +570,7 @@
     status = nextStatus;
     if (bootstrapTimer !== null) clearTimeout(bootstrapTimer);
     bootstrapTimer = null;
-    for (const cleanup of bootstrapCleanups.splice(0).reverse()) {
-      try { cleanup(); } catch (_) {}
-    }
+    bootstrapScope.dispose();
     retainExport = null;
   }
 
@@ -654,7 +654,7 @@
     const getter = () => value;
     const setter = next => { assigned = true; original = next; value = wrap(next); };
     Object.defineProperty(namespace, 'x', { configurable: true, enumerable: descriptor?.enumerable ?? true, get: getter, set: setter });
-    bootstrapCleanups.push(() => {
+    bootstrapScope.add(() => {
       const current = Object.getOwnPropertyDescriptor(namespace, 'x');
       if (current?.get !== getter && current?.value !== wrapper) return;
       if (!assigned) delete namespace.x;
@@ -684,7 +684,7 @@
         watchExport(next);
       };
       Object.defineProperty(window, 'default_MakerSuite', { configurable: true, enumerable: descriptor?.enumerable ?? true, get: getter, set: setter });
-      bootstrapCleanups.push(() => {
+      bootstrapScope.add(() => {
         const current = Object.getOwnPropertyDescriptor(window, 'default_MakerSuite');
         if (current?.get !== getter || current.set !== setter) return;
         const expiredHeightWatch = descriptor?.get && window.__slInitialChatRender?.status === 'unsupported';
