@@ -1,1 +1,0 @@
-{"description":"Internal SDK for Studio.lab modules: DOM, observer, storage and lifecycle helpers that remove content-script boilerplate.","exports":{".":"./src/index.js"},"license":"Apache-2.0","main":"src/index.js","name":"@studiolab/core","type":"module","version":"0.1.0"}
