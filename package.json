@@ -5,8 +5,6 @@
   "type": "commonjs",
   "description": "Google AI Studio enhancements extension",
   "scripts": {
-    "test": "node tests/run.cjs",
-    "check": "node scripts/check-account.cjs",
     "build": "node build/build.mjs"
   },
   "devDependencies": {

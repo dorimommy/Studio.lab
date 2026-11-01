@@ -2,10 +2,9 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
-  const { $, $$, debounce, el, scope } = window.StudioLabCore;
-  const io = scope();
-  // Було: ручний generatingTimeout + clearTimeout у трьох місцях. Debounce — те саме.
-  const scheduleStopGenerating = debounce(() => setGenerating(false), 2000);
+  const { $, $$, el, scope } = window.StudioLabCore;
+  let scrollerScope = null;
+  let cancelStopGenerating = null;
 
   let ctxRef = null;
   let scrollButton = null;
@@ -33,8 +32,14 @@
       ctxRef = ctx;
       start();
     },
-    onStateChange() {
-      if (!isActive() && scrollButton) scrollButton.classList.remove('visible');
+    onStateChange(ctx) {
+      if (ctx) ctxRef = ctx;
+      if (!isActive()) {
+        if (scrollButton) scrollButton.classList.remove('visible');
+        return;
+      }
+      if (!resizeObserver) start();
+      else tick();
     },
     onRouteChange() {
       if (scrollButton) {
@@ -69,8 +74,6 @@
       return;
     }
 
-    tick();
-
     resizeObserver = new ResizeObserver(() => {
       if (!isActive()) return;
 
@@ -82,9 +85,11 @@
     });
 
     activeScroller = scroller;
-    io.on(activeScroller, 'scroll', handleScroll, { passive: true });
+    scrollerScope = scope();
+    scrollerScope.on(activeScroller, 'scroll', handleScroll, { passive: true });
     const content = scroller.firstElementChild || scroller;
     resizeObserver.observe(content);
+    tick();
   }
 
   function stopResizeObserver() {
@@ -92,11 +97,19 @@
       resizeObserver.disconnect();
       resizeObserver = null;
     }
-    if (activeScroller) {
-      io.dispose();
-    }
+    scrollerScope?.dispose();
+    scrollerScope = null;
+    cancelStopGenerating = null;
     activeScroller = null;
     setGenerating(false);
+  }
+
+  function scheduleStopGenerating() {
+    cancelStopGenerating?.();
+    cancelStopGenerating = scrollerScope?.timeout(() => {
+      cancelStopGenerating = null;
+      setGenerating(false);
+    }, 2000) || null;
   }
 
   function tick() {

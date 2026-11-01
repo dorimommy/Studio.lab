@@ -341,33 +341,9 @@
       return !!(host?.pane.isConnected && host.container.isConnected && host.surface.isConnected);
     }
 
-    function isThemeSection(section) {
-      if (!section) return false;
-      const testId = (section.getAttribute('data-test-id') || '').toLowerCase();
-      if (testId.includes('theme') || testId.includes('appearance')) return true;
-      const labelText = text($('.setting-label', section) || $('.title', section) || $('label', section)).toLowerCase();
-      const descText = text($('.setting-description', section)).toLowerCase();
-      if (labelText === 'theme' || labelText === 'appearance' || descText.includes('adjust the visual appearance')) return true;
-      const fullText = text(section, 400).toLowerCase();
-      if (fullText.startsWith('theme adjust the visual appearance') || fullText.includes('adjust the visual appearance')) return true;
-      return false;
-    }
-
-    function hideThemeSections() {
-      if (!host) return;
-      for (const section of $$('.setting-section', host.component)) {
-        if (isThemeSection(section)) {
-          section.hidden = true;
-          section.setAttribute('data-sl-hidden-theme', 'true');
-          section.style.setProperty('display', 'none', 'important');
-        }
-      }
-    }
-
     function sections() {
       if (!host) return [];
-      hideThemeSections();
-      return $$('.setting-section', host.component).filter(section => !isThemeSection(section) && !section.hasAttribute('data-sl-hidden-theme'));
+      return $$('.setting-section', host.component);
     }
 
     function snapshot() {
@@ -412,7 +388,6 @@
           hadComponentClass = host.component.classList.contains('sl-native-settings-component');
         }
       }
-      hideThemeSections();
       commitAttachment();
       detachNativeBackdrop();
       for (const waiter of [...waiters]) waiter.check();

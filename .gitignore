@@ -1,36 +1,46 @@
-# Publish only reviewed runtime files and repository documents.
+# Publish only reviewed source, build inputs, runtime assets and licenses.
 # Local tests, tooling, backend sources, credentials and release output stay local.
 *
 !/.gitignore
-!/README.md
-!/CHANGELOG.md
-!/SECURITY.md
-!/CODE_OF_CONDUCT.md
 !/LICENSE
 !/manifest.json
 !/package.json
 !/background.js
 !/content.js
 !/interceptor.js
+!/rpc-transport.js
 !/sl-panel.css
 !/build/
 !/build/build.mjs
 !/dist/
 !/dist/core.js
 !/dist/core-main.js
+!/dist/answers.js
+!/dist/answers-main.js
 !/packages/
 !/packages/core/
 !/packages/core/package.json
 !/packages/core/src/
 !/packages/core/src/index.js
+!/packages/answers/
+!/packages/answers/package.json
+!/packages/answers/src/
+!/packages/answers/src/index.js
+!/packages/answers/src/schema.js
+!/packages/answers/src/renderer.js
+!/packages/answers/src/generation.js
 
 !/modules/
 !/modules/registry.js
+!/modules/design-tokens.css
+!/modules/interactive-answers.js
+!/modules/interactive-answers.css
 !/modules/i18n-system.js
 !/modules/settings-select.js
 !/modules/settings-select.css
 !/modules/custom-theme.js
 !/modules/theme-presets.js
+!/modules/theme-images.js
 !/modules/theme-engine.js
 !/modules/theme-editor-ui.js
 !/modules/theme-editor.css
@@ -43,6 +53,7 @@
 !/modules/optimizer-smart.js
 !/modules/optimizer-hard.js
 !/modules/chat-cleanup.js
+!/modules/chat-tools.css
 !/modules/response-history.js
 !/modules/chat-export.js
 !/modules/scroll-bottom.js
@@ -86,8 +97,6 @@
 !/images/SL_PFP_128.png
 !/images/SL_logotype.svg
 !/images/update-space.webp
-!/images/Architecture-banner.png
-!/images/Support_Banner.png
 
 !/stylelab/
 !/stylelab/index.json

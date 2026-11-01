@@ -30,9 +30,6 @@
     ],
     init(ctx) {
       ctxRef = ctx;
-      window.addEventListener('__sl_languageChanged', () => {
-        if (isActive()) updateAllTurns();
-      });
       if (isActive()) startObserver();
     },
     onStateChange() {
@@ -252,14 +249,11 @@
       badge.append(wordsElement, charsElement);
     }
 
-    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
-    const wordsLabel = t('edit_modal_words', 'words');
-    const charsLabel = t('edit_modal_chars', 'chars');
-    const newContent = `${wordsCount}:${charsCount}:${wordsLabel}:${charsLabel}`;
+    const newContent = `${wordsCount}:${charsCount}`;
     if (badge.getAttribute('data-content') !== newContent) {
       badge.setAttribute('data-content', newContent);
-      wordsElement.textContent = `${wordsCount} ${wordsLabel}`;
-      charsElement.textContent = `${charsCount} ${charsLabel}`;
+      wordsElement.textContent = `${wordsCount} words`;
+      charsElement.textContent = `${charsCount} chars`;
     }
   }
 })();

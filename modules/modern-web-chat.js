@@ -7,7 +7,7 @@
   // window.StudioLabCore (packages/core) is bundled before this module.
   // `el` is intentionally not destructured: this file already binds `el`
   // locally (updateStyles, dispatchPointerClick, cleanup callbacks).
-  const { $, $$, waitFor, observe } = window.StudioLabCore;
+  const { $, $$, waitFor, observe, scope } = window.StudioLabCore;
 
   let ctxRef = null;
   let styleEl = null;
@@ -15,6 +15,7 @@
   let overlayObserver = null; // SDK observe() disposer (was MutationObserver)
   let updateScheduled = false;
   let globalHandlersAttached = false;
+  let globalHandlerScope = null;
   const hiddenNativeButtons = new Map();
   const viewerHandlers = new Map();
   const decoratedMediaPanels = new Set();
@@ -24,6 +25,39 @@
   let tokenExtractionTimeout = null;
   let domUpdateTimeout = null;
   let disposed = false;
+  let nativeOperationController = new AbortController();
+  let nativeOperationRoute = window.location.pathname;
+  const thinkingReadLeases = new Set();
+
+  function nativeOperation() {
+    if (nativeOperationRoute !== window.location.pathname) cancelNativeOperations();
+    return { signal: nativeOperationController.signal, route: window.location.pathname };
+  }
+
+  function operationActive(operation) {
+    return isEnabled() && !operation.signal.aborted && operation.route === window.location.pathname;
+  }
+
+  function cancelNativeOperations() {
+    nativeOperationController.abort();
+    nativeOperationController = new AbortController();
+    nativeOperationRoute = window.location.pathname;
+    featuredSyncPromise = null;
+    modelDropdownOpening = false;
+    thinkingReadLeases.clear();
+    document.body?.classList.remove('sl-reading-thinking-options', 'sl-syncing-model-picker');
+  }
+
+  function beginThinkingRead(operation) {
+    if (!operationActive(operation)) return () => {};
+    const lease = {};
+    thinkingReadLeases.add(lease);
+    document.body.classList.add('sl-reading-thinking-options');
+    return () => {
+      if (!thinkingReadLeases.delete(lease)) return;
+      if (!thinkingReadLeases.size) document.body.classList.remove('sl-reading-thinking-options');
+    };
+  }
 
   // The packaged theme preview uses the same controls and styles with a local
   // provider. It never invokes AI Studio's model picker, account, or chat APIs.
@@ -90,7 +124,11 @@
   function isEnabled() {
     if (disposed) return false;
     if (!getPreviewControls() && window.StudioLab.isExtensionActive && !window.StudioLab.isExtensionActive()) return false;
-    return true;
+    if (ctxRef?.state && typeof ctxRef.state.modernWebChatEnabled !== 'undefined') {
+      return !!ctxRef.state.modernWebChatEnabled;
+    }
+    if (ctxRef?.config) return !!(ctxRef.config['modern-web-chat'] || ctxRef.config.modernWebChatEnabled);
+    return false;
   }
 
 
@@ -131,10 +169,11 @@
     }
   }
 
-  async function ensureToolsRunSettingsMounted(toolName) {
-    if (!isEnabled()) return false;
+  async function ensureToolsRunSettingsMounted(toolName, operation = nativeOperation()) {
+    if (!operationActive(operation)) return false;
     if (getToolControl(toolName)) return true;
-    if (await waitForModelValue(() => getToolControl(toolName), 250)) return true;
+    if (await waitForModelValue(() => getToolControl(toolName), 250, operation)) return true;
+    if (!operationActive(operation)) return false;
     const panel = $('ms-run-settings');
     const openBtn = $('button.runsettings-toggle-button, button[aria-label="Toggle run settings panel"]');
     if ((!panel || !panel.classList.contains('expanded')) && openBtn) openBtn.click();
@@ -143,18 +182,19 @@
     if (toolsGroup && !toolsGroup.querySelector('mat-slide-toggle')) {
       toolsGroup.querySelector('button[aria-label*="xpand" i], button.expand-icon, .group-header')?.click();
     }
-    return !!(await waitForModelValue(() => getToolControl(toolName), 1200));
+    return !!(await waitForModelValue(() => getToolControl(toolName), 1200, operation));
   }
 
   async function toggleNativeTool(toolName) {
-    if (!(await ensureToolsRunSettingsMounted(toolName))) return false;
-    if (!isEnabled()) return false;
+    const operation = nativeOperation();
+    if (!(await ensureToolsRunSettingsMounted(toolName, operation))) return false;
+    if (!operationActive(operation)) return false;
     const control = getToolControl(toolName);
     if (!control?.button || isToolDisabled(toolName)) return false;
     const expected = !isToolActive(toolName);
     // Mixing a native click with synthetic pointer events can toggle twice.
     control.button.click();
-    return !!(await waitForModelValue(() => isToolActive(toolName) === expected, 1200));
+    return !!(await waitForModelValue(() => isToolActive(toolName) === expected, 1200, operation));
   }
 
   function syncToolsSubmenu(submenu) {
@@ -269,7 +309,7 @@
 
         const otherChevron = document.createElement('span');
         otherChevron.className = 'material-symbols-outlined';
-        otherChevron.style.cssText = 'font-size:18px; opacity:0.7;';
+        otherChevron.style.cssText = 'font-size:var(--sl-icon-compact); opacity:0.7;';
         otherChevron.textContent = 'chevron_right';
 
         otherWrap.appendChild(otherIcon);
@@ -316,11 +356,11 @@
       const divider = document.createElement('mat-divider');
       markCreated(divider);
       divider.setAttribute('role', 'separator');
-      divider.style.borderTopColor = 'var(--mat-divider-color, rgba(255,255,255,0.12))';
+      divider.style.borderTopColor = 'var(--mat-divider-color, var(--sl-chat-white-12))';
       divider.style.borderTopWidth = '1px';
       divider.style.borderTopStyle = 'solid';
       divider.style.display = 'block';
-      divider.style.margin = '4px 0';
+      divider.style.margin = 'var(--sl-space-1) 0';
       content.appendChild(divider);
       if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Divider added.', 'info');
 
@@ -347,7 +387,7 @@
 
         const toolsChevron = document.createElement('span');
         toolsChevron.className = 'material-symbols-outlined';
-        toolsChevron.style.cssText = 'font-size:18px; opacity:0.7;';
+        toolsChevron.style.cssText = 'font-size:var(--sl-icon-compact); opacity:0.7;';
         toolsChevron.textContent = 'chevron_right';
 
         toolsWrap.appendChild(toolsIcon);
@@ -378,11 +418,11 @@
           tWrap.style.cssText = 'display:flex; align-items:center; width:100%; justify-content:space-between;';
 
           const tLeft = document.createElement('div');
-          tLeft.style.cssText = 'display:flex; align-items:center; gap:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+          tLeft.style.cssText = 'display:flex; align-items:center; gap:var(--sl-space-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
 
           const tIcon = document.createElement('span');
           tIcon.className = 'material-symbols-outlined notranslate';
-          tIcon.style.fontSize = '18px';
+          tIcon.style.fontSize = 'var(--sl-icon-compact)';
           tIcon.textContent = tool.icon;
 
           const tLabel = document.createElement('span');
@@ -395,8 +435,8 @@
           const tActive = isToolActive(tool.id);
           const tCheck = document.createElement('span');
           tCheck.className = 'material-symbols-outlined notranslate sl-tool-check';
-          tCheck.style.fontSize = '18px';
-          tCheck.style.color = '#8ab4f8';
+          tCheck.style.fontSize = 'var(--sl-icon-compact)';
+          tCheck.style.color = 'var(--sl-mwc-accent, var(--sl-chat-accent))';
           tCheck.style.opacity = tActive ? '1' : '0';
           tCheck.textContent = 'check';
 
@@ -520,8 +560,8 @@
     const divider = document.createElement('div');
     divider.className = 'mat-divider sl-header-menu-divider';
     divider.setAttribute('role', 'separator');
-    divider.style.borderTop = '1px solid var(--mat-divider-color, rgba(255, 255, 255, 0.12))';
-    divider.style.margin = '4px 0';
+    divider.style.borderTop = '1px solid var(--mat-divider-color, var(--sl-chat-white-12))';
+    divider.style.margin = 'var(--sl-space-1) 0';
     menuContent.appendChild(divider);
 
     const proxyItems = [
@@ -560,16 +600,16 @@
       btn.setAttribute('mat-menu-item', '');
       btn.className = 'mat-mdc-menu-item mat-focus-indicator sl-injected-header-item';
       btn.setAttribute('role', 'menuitem');
-      btn.style.cssText = 'height: 32px; min-height: 32px; padding: 6px 8px; font-size: 14px;';
+      btn.style.cssText = 'height: var(--sl-chat-control-size); min-height: var(--sl-chat-control-size); padding: var(--sl-space-1-5) var(--sl-space-2); font-size: var(--sl-text-body);';
 
       const textSpan = document.createElement('span');
       textSpan.className = 'mat-mdc-menu-item-text';
-      textSpan.style.cssText = 'display: flex; align-items: center; font-size: 14px;';
+      textSpan.style.cssText = 'display: flex; align-items: center; font-size: var(--sl-text-body);';
 
       const iconSpan = document.createElement('span');
       iconSpan.className = 'material-symbols-outlined notranslate';
       iconSpan.textContent = item.icon;
-      iconSpan.style.cssText = 'font-size: 18px; width: 18px; height: 18px; margin-right: 8px; display: inline-flex; align-items: center; justify-content: center;';
+      iconSpan.style.cssText = 'font-size: var(--sl-icon-compact); width: var(--sl-icon-compact); height: var(--sl-icon-compact); margin-right: var(--sl-space-2); display: inline-flex; align-items: center; justify-content: center;';
 
       const labelSpan = document.createElement('span');
       labelSpan.textContent = item.label;
@@ -682,7 +722,7 @@
   loadStoredFeaturedModels();
 
   function onFeaturedModelsEvent(e) {
-    const list = e?.detail?.models;
+    const list = Array.isArray(e?.detail) ? e.detail : e?.detail?.models;
     if (Array.isArray(list) && list.length > 0) {
       const valid = list
         .map(m => ({
@@ -704,6 +744,7 @@
   }
 
   const thinkingSelectSelector = 'mat-select[aria-label="Thinking Level"], ms-thinking-level-setting mat-select, ms-run-settings mat-select[aria-label*="hinking"], ms-run-settings .thinking-level mat-select';
+  let cachedThinking = null;
 
   function getThinkingSelect() {
     return $(thinkingSelectSelector);
@@ -805,29 +846,31 @@
     return cachedModelName || t('mwc_select_model', 'Select model');
   }
 
-  function getSelectedThinkingLevel() {
-    if (getPreviewControls()) return getPreviewControls().getThinkingLevel();
-    if (window.location.pathname !== cachedThinkingRoute) {
-      cachedThinkingRoute = window.location.pathname;
-      cachedThinkingLevel = '';
-      staleThinkingDomValue = '';
-    }
+  function getThinkingState() {
+    if (getPreviewControls()) return {
+      available: getPreviewControls().getThinkingLevels().length > 0,
+      value: getPreviewControls().getThinkingLevel(),
+      disabled: false
+    };
+    getModelDisplayName();
+    const route = window.location.pathname;
+    const model = cachedModelId || cachedModelName;
+    if (cachedThinking && (cachedThinking.route !== route || cachedThinking.model !== model)) cachedThinking = null;
     const select = getThinkingSelect();
     if (select) {
       const valText = select.querySelector('.mat-mdc-select-value-text, .mat-mdc-select-value, .mat-select-value-text');
-      const domVal = valText ? valText.textContent.trim() : '';
-      if (domVal) {
-        if (staleThinkingDomValue && domVal.toLowerCase() !== staleThinkingDomValue.toLowerCase()) {
-          staleThinkingDomValue = '';
-        }
-        if (staleThinkingDomValue && domVal.toLowerCase() === staleThinkingDomValue.toLowerCase() && cachedThinkingLevel) {
-          return cachedThinkingLevel;
-        }
-        cachedThinkingLevel = domVal;
-        return domVal;
-      }
+      const value = valText?.textContent.trim() || cachedThinking?.value || '';
+      const state = { available: true, value, disabled: select.getAttribute('aria-disabled') === 'true' };
+      if (model) cachedThinking = { ...state, route, model };
+      return state;
     }
-    return cachedThinkingLevel || '';
+    // Closing native Run Settings unmounts its controls. Retain only capabilities
+    // observed for this exact chat/model, never infer support from a model name.
+    return cachedThinking || { available: false, value: '', disabled: false };
+  }
+
+  function getSelectedThinkingLevel() {
+    return getThinkingState().value;
   }
 
   function updateEmptyChatState() {
@@ -887,9 +930,9 @@
     (dropdown.querySelector('[aria-checked="true"]') || dropdown.querySelector('button:not(:disabled)'))?.focus();
   }
 
-  async function ensureRunSettingsMounted() {
+  async function ensureRunSettingsMounted(operation = nativeOperation()) {
     if (getPreviewControls()) return $('ms-model-selector button');
-    if (!isEnabled()) return null;
+    if (!operationActive(operation)) return null;
     const triggerSelector = 'ms-model-selector button.model-selector-card, ms-model-selector button';
     const nativeTrigger = $(triggerSelector);
     if (nativeTrigger) return nativeTrigger;
@@ -898,7 +941,7 @@
     if (toggleBtn) {
       toggleBtn.click();
       // Was a hand-rolled requestAnimationFrame poll for up to 800 ms.
-      return await waitFor(() => $(triggerSelector), { timeout: 800, interval: 16 });
+      return await waitForModelValue(() => $(triggerSelector), 800, operation);
     }
     return $(triggerSelector);
   }
@@ -935,6 +978,7 @@
     } else {
       document.body.classList.remove('sl-settings-open');
     }
+    $('.sl-header-settings-btn')?.setAttribute('aria-expanded', String(shouldOpen && !!$('ms-run-settings')));
   }
 
   if (window._slGlobalDrawerHandler) {
@@ -1008,34 +1052,32 @@
 
   function attachGlobalHandlers() {
     if (globalHandlersAttached) return;
-    document.addEventListener('pointerdown', window._slGlobalDrawerHandler, true);
-    document.addEventListener('click', window._slGlobalDrawerHandler, true);
-    if (!getPreviewControls() && window._slMediaPointerListener) document.addEventListener('pointerdown', window._slMediaPointerListener, true);
-    if (window._slKeydownListener) window.addEventListener('keydown', window._slKeydownListener);
+    globalHandlerScope = scope();
+    globalHandlerScope.on(document, 'pointerdown', window._slGlobalDrawerHandler, true);
+    globalHandlerScope.on(document, 'click', window._slGlobalDrawerHandler, true);
+    if (window._slThoughtFooterClickListener) globalHandlerScope.on(document, 'click', window._slThoughtFooterClickListener);
+    if (!getPreviewControls() && window._slMediaPointerListener) globalHandlerScope.on(document, 'pointerdown', window._slMediaPointerListener, true);
+    if (window._slKeydownListener) globalHandlerScope.on(window, 'keydown', window._slKeydownListener);
+    if (window._slLangListener) globalHandlerScope.on(window, '__sl_languageChanged', window._slLangListener);
     if (!getPreviewControls()) {
-      window.addEventListener('__sl_modelChanged', onModelChanged);
-      window.addEventListener('__sl_featuredModels', onFeaturedModelsEvent);
-      window.addEventListener('__sl_savingState', onSavingState);
+      globalHandlerScope.on(window, '__sl_modelChanged', onModelChanged);
+      globalHandlerScope.on(window, '__sl_featuredModels', onFeaturedModelsEvent);
+      globalHandlerScope.on(window, '__sl_savingState', onSavingState);
     }
     globalHandlersAttached = true;
   }
 
   function detachGlobalHandlers() {
     if (!globalHandlersAttached) return;
-    document.removeEventListener('pointerdown', window._slGlobalDrawerHandler, true);
-    document.removeEventListener('click', window._slGlobalDrawerHandler, true);
-    if (window._slMediaPointerListener) document.removeEventListener('pointerdown', window._slMediaPointerListener, true);
-    if (window._slKeydownListener) window.removeEventListener('keydown', window._slKeydownListener);
-    window.removeEventListener('__sl_modelChanged', onModelChanged);
-    window.removeEventListener('__sl_featuredModels', onFeaturedModelsEvent);
-    window.removeEventListener('__sl_savingState', onSavingState);
+    globalHandlerScope?.dispose();
+    globalHandlerScope = null;
     globalHandlersAttached = false;
   }
 
   function findModelDialog() {
-    return $$('mat-dialog-container, .mat-mdc-dialog-container, .ms-sliding-right-panel-dialog')
+    return [...$$('mat-dialog-container, .mat-mdc-dialog-container'), ...$$('.ms-sliding-right-panel-dialog')]
       .find(dialog =>
-        dialog.querySelector('ms-model-carousel, button[data-test-category-button], button.content-button[id^="model-carousel-row-"]')
+        findFeaturedTabButton(dialog) || dialog.querySelector('ms-model-carousel, button.content-button[id^="model-carousel-row-"]')
       ) || null;
   }
 
@@ -1064,15 +1106,15 @@
   }
 
   function findFeaturedTabButton(dialog) {
-    const buttons = Array.from(dialog?.querySelectorAll('button[data-test-category-button]') || [])
-      .filter(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true');
-    return buttons.find(button => button.textContent.trim().toLowerCase() === 'featured') || buttons[0] || null;
+    return Array.from(dialog?.querySelectorAll('button[data-test-category-button]') || [])
+      .find(button => button.textContent.trim() === 'Featured') || null;
   }
 
-  async function prepareFeaturedModels(dialog) {
-    if (!dialog || !isEnabled()) return false;
+  async function prepareFeaturedModels(dialog, operation = nativeOperation()) {
+    if (!dialog?.isConnected || !operationActive(operation)) return false;
     const search = getModelSearchInput(dialog);
-    const clearButton = dialog.querySelector('button[aria-label="Clear search query"], button[aria-label*="Clear" i]');
+    const clearButton = dialog.querySelector('button[aria-label="Clear search query"]') ||
+      dialog.querySelector('button[aria-label*="Clear" i]');
     if (search?.value || (!search && clearButton)) {
       if (clearButton && !clearButton.disabled && clearButton.getAttribute('aria-disabled') !== 'true') clearButton.click();
       const remainingSearch = getModelSearchInput(dialog);
@@ -1082,15 +1124,13 @@
         else remainingSearch.value = '';
         remainingSearch.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       }
-      if (!(await waitForModelValue(() => !getModelSearchInput(dialog)?.value, 1200))) return false;
+      if (!(await waitForModelValue(() => !getModelSearchInput(dialog)?.value, 1200, operation))) return false;
     }
-    const tab = await waitForModelValue(() => findFeaturedTabButton(dialog), 1200);
-    if (!tab || !isEnabled()) {
-      // Even if category tabs are absent, allow reading rows directly
-      return !!dialog.querySelector('button.content-button[id^="model-carousel-row-"]');
-    }
+    const tab = await waitForModelValue(() => Array.from(dialog.querySelectorAll('button[data-test-category-button]'))
+      .find(button => button.textContent.trim() === 'Featured' && !button.disabled && button.getAttribute('aria-disabled') !== 'true'), 1200, operation);
+    if (!tab?.isConnected || !dialog.isConnected || !operationActive(operation)) return false;
     if (tab.getAttribute('aria-selected') !== 'true') tab.click();
-    return !!(await waitForModelValue(() => tab.getAttribute('aria-selected') === 'true', 1200));
+    return !!(await waitForModelValue(() => tab.getAttribute('aria-selected') === 'true', 1200, operation));
   }
 
   function syncFeaturedModelsFromDialog(dialog) {
@@ -1116,27 +1156,28 @@
   }
 
   // Polls until read() is truthy. Thin wrapper over the SDK waitFor that keeps
-  // the original semantics: stops early when the module is disabled, resolves
+  // the original semantics: stops on route change or module shutdown, resolves
   // falsy on timeout, and lets read() exceptions propagate immediately.
-  async function waitForModelValue(read, timeout = 2500) {
+  async function waitForModelValue(read, timeout = 2500, operation = nativeOperation()) {
     const ABORTED = Symbol('waitForModelValue.aborted');
     let failure = null;
     const result = await waitFor(() => {
-      if (!isEnabled()) return ABORTED;
+      if (!operationActive(operation)) return ABORTED;
       try {
         return read() || null;
       } catch (error) {
         failure = error;
         return ABORTED;
       }
-    }, { timeout, interval: 16 });
+    }, { timeout, interval: 16, signal: operation.signal });
     if (failure) throw failure;
     return result === ABORTED ? null : result;
   }
 
-  async function refreshFeaturedModels() {
+  async function refreshFeaturedModels(operation = nativeOperation()) {
+    if (!operationActive(operation)) return false;
     if (featuredSyncPromise) return featuredSyncPromise;
-    featuredSyncPromise = (async () => {
+    const pending = (async () => {
       let dialog = findModelDialog();
       const openedByUs = !dialog;
       const hadNativeSelector = !!$('ms-model-selector button.model-selector-card, ms-model-selector button');
@@ -1144,27 +1185,27 @@
       document.body.classList.add('sl-syncing-model-picker');
       try {
         if (!dialog) {
-          const trigger = await ensureRunSettingsMounted();
-          if (!trigger || !isEnabled()) return false;
+          const trigger = await ensureRunSettingsMounted(operation);
+          if (!trigger || !operationActive(operation)) return false;
           trigger.click();
-          dialog = await waitForModelValue(findModelDialog, 1500);
+          dialog = await waitForModelValue(findModelDialog, 2500, operation);
         }
         if (!dialog) return false;
-        if (!(await prepareFeaturedModels(dialog))) return false;
-        const synced = await waitForModelValue(() => syncFeaturedModelsFromDialog(dialog), 1500);
+        if (!(await prepareFeaturedModels(dialog, operation))) return false;
+        const synced = await waitForModelValue(() => syncFeaturedModelsFromDialog(dialog), 2500, operation);
         return !!synced;
       } finally {
-        if (openedByUs) {
-          await closeModelDialog(dialog);
-          if (!hadNativeSelector && !document.body.classList.contains('sl-settings-open')) {
-            $('button[aria-label="Close run settings panel"]')?.click();
-          }
+        if (openedByUs && operationActive(operation)) {
+          dialog?.querySelector('button[aria-label="Close panel"]')?.click();
+          await waitForModelValue(() => !findModelDialog(), 2000, operation);
+          if (!hadNativeSelector && operationActive(operation)) $('button[aria-label="Close run settings panel"]')?.click();
         }
-        if (!wasSyncing) document.body.classList.remove('sl-syncing-model-picker');
+        if (!wasSyncing && operationActive(operation)) document.body.classList.remove('sl-syncing-model-picker');
       }
     })();
-    try { return await featuredSyncPromise; }
-    finally { featuredSyncPromise = null; }
+    featuredSyncPromise = pending;
+    try { return await pending; }
+    finally { if (featuredSyncPromise === pending) featuredSyncPromise = null; }
   }
 
   async function selectNativeModel(modelId, modelName) {
@@ -1176,42 +1217,35 @@
       reorganizeHeader();
       return changed;
     }
-
-    // Record pre-selection DOM values so getModelDisplayName() ignores stale DOM while the right drawer is closed
-    const prevDomId = ($('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() || '').replace(/^models\//, '');
-    const prevDomName = $('ms-model-selector .title')?.textContent.trim() || '';
-    staleNativeModelId = (prevDomId && prevDomId !== cleanId) ? prevDomId : '';
-    staleNativeModelName = (prevDomName && prevDomName !== displayTitle) ? prevDomName : '';
-
-    // Optimistically update cache and toolbar label immediately
-    rememberModel(cleanId, displayTitle);
-    const immediateLabel = $('.sl-header-model-btn .model-label');
-    if (immediateLabel) immediateLabel.textContent = cachedModelName;
-
-    // Direct signals work for existing text chats
+    const operation = nativeOperation();
+    if (!operationActive(operation)) return false;
+    // Direct signals require an existing text chat and native-card confirmation;
+    // new chats and specialized models need AI Studio's route flow.
     const canTryDirect = /^\/prompts\/(?!new_chat$)[^/]+$/.test(window.location.pathname) &&
       /^gemini-\d+(?:\.\d+)?-(?:flash(?:-lite)?|pro)/i.test(cleanId);
     if (canTryDirect) {
       const requestId = 'sl-model-' + Date.now() + '-' + Math.random().toString(36).slice(2);
       const directResult = await new Promise(resolve => {
+        const pending = scope();
+        let settled = false;
+        const finish = applied => {
+          if (settled) return;
+          settled = true;
+          pending.dispose();
+          resolve(applied);
+        };
         const onResult = event => {
           if (event.detail?.requestId !== requestId) return;
-          clearTimeout(timer);
-          window.removeEventListener('__sl_modelDirectResult', onResult);
-          resolve(!!event.detail.applied);
+          finish(operationActive(operation) && !!event.detail.applied);
         };
-        const timer = setTimeout(() => {
-          window.removeEventListener('__sl_modelDirectResult', onResult);
-          resolve(false);
-        }, 500);
-        window.addEventListener('__sl_modelDirectResult', onResult);
+        pending.timeout(() => finish(false), 500);
+        pending.on(window, '__sl_modelDirectResult', onResult);
+        pending.on(operation.signal, 'abort', () => finish(false), { once: true });
         window.dispatchEvent(new CustomEvent('__sl_trySetModel', { detail: { modelId: cleanId, requestId } }));
       });
-      if (directResult) {
-        await waitForModelValue(() => {
-          const domId = ($('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() || '').replace(/^models\//, '');
-          return domId === cleanId;
-        }, 250);
+      if (!operationActive(operation)) return false;
+      if (directResult && await waitForModelValue(() =>
+        $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '') === cleanId, 1000, operation)) {
         rememberModel(cleanId, displayTitle);
         const label = $('.sl-header-model-btn .model-label');
         if (label) label.textContent = cachedModelName;
@@ -1219,40 +1253,43 @@
       }
     }
 
-    // Use the native picker in the background to complete URL and capability updates
-    const hadNativeSelector = !!$('ms-model-selector button.model-selector-card, ms-model-selector button');
-    let dialog = null;
+    if (!operationActive(operation)) return false;
+
+    // The native picker completes URL and capability updates for these models.
+    const hadNativeSelector = !!$('ms-model-selector button.model-selector-card');
+    let selected = false;
     document.body.classList.add('sl-syncing-model-picker');
     try {
-      const trigger = await ensureRunSettingsMounted();
-      if (!trigger || !isEnabled()) return false;
+      const trigger = await ensureRunSettingsMounted(operation);
+      if (!trigger || !operationActive(operation)) return false;
       trigger.click();
-      dialog = await waitForModelValue(findModelDialog, 1800);
+      const dialog = await waitForModelValue(findModelDialog, 2500, operation);
       if (!dialog) return false;
-      await prepareFeaturedModels(dialog);
-      syncFeaturedModelsFromDialog(dialog);
+      if (!(await prepareFeaturedModels(dialog, operation))) return false;
+      await waitForModelValue(() => syncFeaturedModelsFromDialog(dialog), 2500, operation);
       const row = await waitForModelValue(() => Array.from(dialog.querySelectorAll('button.content-button[id]'))
-        .find(button => button.id === 'model-carousel-row-models/' + cleanId || button.id.endsWith('/' + cleanId)), 1500);
-      if (!row) return false;
+        .find(button => button.id === 'model-carousel-row-models/' + cleanId), 2500, operation);
+      if (!row?.isConnected || !dialog.isConnected || !operationActive(operation)) return false;
 
       window.dispatchEvent(new CustomEvent('__sl_clearModelOverride'));
       row.click();
-      await waitForModelValue(() => {
-        const nativeId = ($('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() || '').replace(/^models\//, '');
+      selected = !!(await waitForModelValue(() => {
+        const nativeId = $('ms-model-selector [data-test-id="model-name"]')?.textContent.trim().replace(/^models\//, '');
         const urlId = (new URLSearchParams(window.location.search).get('model') || '').replace(/^models\//, '');
-        return !findModelDialog() || nativeId === cleanId || urlId === cleanId;
-      }, 1500);
-
+        return nativeId === cleanId &&
+          (window.location.pathname !== '/prompts/new_chat' || urlId === cleanId);
+      }, 2500, operation));
+      if (!selected) return false;
       rememberModel(cleanId, displayTitle);
       const label = $('.sl-header-model-btn .model-label');
       if (label) label.textContent = cachedModelName;
       return true;
     } finally {
-      await closeModelDialog(dialog);
-      if (!hadNativeSelector && !document.body.classList.contains('sl-settings-open')) {
-        $('button[aria-label="Close run settings panel"]')?.click();
+      if (selected && operationActive(operation)) {
+        await waitForModelValue(() => !findModelDialog(), 2000, operation);
+        if (!hadNativeSelector && operationActive(operation)) $('button[aria-label="Close run settings panel"]')?.click();
       }
-      document.body.classList.remove('sl-syncing-model-picker');
+      if (operationActive(operation)) document.body.classList.remove('sl-syncing-model-picker');
     }
   }
 
@@ -1278,65 +1315,53 @@
       reorganizeHeader();
       return changed;
     }
-    await ensureRunSettingsMounted();
-    if (!isEnabled()) return false;
-    const select = getThinkingSelect();
-    if (!select || select.getAttribute('aria-disabled') === 'true') return false;
-
-    const valTextEl = select.querySelector('.mat-mdc-select-value-text, .mat-mdc-select-value, .mat-select-value-text');
-    const prevDomVal = valTextEl ? valTextEl.textContent.trim() : '';
-    if (prevDomVal && prevDomVal.toLowerCase() !== level.toLowerCase()) {
-      staleThinkingDomValue = prevDomVal;
-    } else {
-      staleThinkingDomValue = '';
-    }
-    cachedThinkingRoute = window.location.pathname;
-    cachedThinkingLevel = level;
-    const immediateLabel = $('.sl-header-thinking-btn .thinking-label');
-    if (immediateLabel) immediateLabel.textContent = level;
-
-    document.body.classList.add('sl-reading-thinking-options');
+    const operation = nativeOperation();
+    await ensureRunSettingsMounted(operation);
+    if (!operationActive(operation)) return false;
+    let select = getThinkingSelect();
+    if (!select && getThinkingState().available) select = await waitForModelValue(getThinkingSelect, 800, operation);
+    if (!operationActive(operation) || !select || select.getAttribute('aria-disabled') === 'true') return false;
+    const endThinkingRead = beginThinkingRead(operation);
     let panel = null;
     try {
       const trigger = select.querySelector('.mat-mdc-select-trigger') || select;
       trigger.click();
-      panel = await waitForModelValue(() => getThinkingPanel(select), 800);
-      if (!panel || !isEnabled()) return false;
+      panel = await waitForModelValue(() => getThinkingPanel(select), 800, operation);
+      if (!panel || !operationActive(operation)) return false;
       const target = Array.from(panel.querySelectorAll('mat-option')).find(option =>
         option.textContent.trim().toLowerCase() === level.toLowerCase() &&
         option.getAttribute('aria-disabled') !== 'true' && !option.classList.contains('mat-mdc-option-disabled'));
       if (!target) return false;
       target.click();
-      await waitForModelValue(() =>
-        target.getAttribute('aria-selected') === 'true' ||
-        !panel.isConnected ||
-        getSelectedThinkingLevel().toLowerCase() === level.toLowerCase(), 500);
-      cachedThinkingLevel = level;
-      const label = $('.sl-header-thinking-btn .thinking-label');
-      if (label) label.textContent = level;
-      return true;
+      const applied = !!(await waitForModelValue(() => getSelectedThinkingLevel().toLowerCase() === level.toLowerCase(), 800, operation));
+      if (applied) {
+        const label = $('.sl-header-thinking-btn .thinking-label');
+        if (label) label.textContent = getSelectedThinkingLevel();
+      }
+      return applied;
     } finally {
-      await dismissThinkingPanel(panel, select);
-      document.body.classList.remove('sl-reading-thinking-options');
+      try { if (operationActive(operation)) await dismissThinkingPanel(panel, select, operation); }
+      finally { endThinkingRead(); }
     }
   }
 
-  async function dismissThinkingPanel(panel, select) {
+  async function dismissThinkingPanel(panel, select, operation = nativeOperation()) {
+    if (!operationActive(operation)) return false;
     let backdrop = getOverlayBackdrop(panel);
     const isClosed = () => (!select?.isConnected || select.getAttribute('aria-expanded') === 'false') &&
       !panel?.isConnected && !backdrop?.isConnected && !getThinkingPanel(select)?.isConnected;
     if (isClosed()) return true;
     if (backdrop) {
       backdrop.click();
-      if (await waitForModelValue(isClosed, 800)) return true;
+      if (await waitForModelValue(isClosed, 800, operation)) return true;
     }
-    if (!isEnabled()) return false;
+    if (!operationActive(operation)) return false;
     panel = getThinkingPanel(select) || panel;
     backdrop = getOverlayBackdrop(panel) || backdrop;
     (panel?.isConnected ? panel : select)?.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true
     }));
-    return !!(await waitForModelValue(isClosed, 800));
+    return !!(await waitForModelValue(isClosed, 800, operation));
   }
 
   async function openModelDropdown(button) {
@@ -1349,17 +1374,17 @@
     modelDropdownOpening = true;
     closeCustomDropdowns();
     const generation = dropdownGeneration;
+    const operation = nativeOperation();
     try {
-      loadStoredFeaturedModels();
-      if (!getPreviewControls() && (featuredModels.length === 0 || Date.now() - featuredSyncedAt > 10 * 60 * 1000)) {
-        await refreshFeaturedModels();
+      if (!getPreviewControls() && (featuredModels.length !== 3 || Date.now() - featuredSyncedAt > 5 * 60 * 1000)) {
+        await refreshFeaturedModels(operation);
       }
     } catch (_) {
       // The native picker remains available through "More models" below.
     } finally {
-      modelDropdownOpening = false;
+      if (operationActive(operation)) modelDropdownOpening = false;
     }
-    if (!isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
+    if (!operationActive(operation) || generation !== dropdownGeneration || !button.isConnected) return;
 
     const currentName = getModelDisplayName();
     const rawNativeId = ($('ms-model-selector [data-test-id="model-name"]')?.textContent.trim() || '').replace(/^models\//, '');
@@ -1425,12 +1450,12 @@
     const moreLeft = document.createElement('div');
     moreLeft.style.display = 'flex';
     moreLeft.style.alignItems = 'center';
-    moreLeft.style.gap = '8px';
+    moreLeft.style.gap = 'var(--sl-space-2)';
 
     const moreIcon = document.createElement('span');
     moreIcon.className = 'material-symbols-outlined notranslate';
-    moreIcon.style.fontSize = '18px';
-    moreIcon.style.color = '#8ab4f8';
+    moreIcon.style.fontSize = 'var(--sl-icon-compact)';
+    moreIcon.style.color = 'var(--sl-mwc-accent, var(--sl-chat-accent))';
     moreIcon.textContent = 'apps';
     moreIcon.setAttribute('aria-hidden', 'true');
 
@@ -1444,8 +1469,9 @@
     moreBtn.onclick = async (e) => {
       e.stopPropagation();
       closeCustomDropdowns();
-      const nativeTrigger = await ensureRunSettingsMounted();
-      if (nativeTrigger && isEnabled()) {
+      const operation = nativeOperation();
+      const nativeTrigger = await ensureRunSettingsMounted(operation);
+      if (nativeTrigger && operationActive(operation)) {
         nativeTrigger.click();
       }
     };
@@ -1462,26 +1488,30 @@
     }
     closeCustomDropdowns();
     const generation = dropdownGeneration;
-    await ensureRunSettingsMounted();
-    if (!isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
-    const select = getThinkingSelect();
-    if (!getPreviewControls() && (!select || select.getAttribute('aria-disabled') === 'true')) return;
-    let panel = null;
+    const operation = nativeOperation();
+    const endThinkingRead = getPreviewControls() ? () => {} : beginThinkingRead(operation);
     let levels = [];
     let nativeDismissed = true;
-    if (getPreviewControls()) levels = getPreviewControls().getThinkingLevels();
-    else {
-      document.body.classList.add('sl-reading-thinking-options');
-      try {
-        (select.querySelector('.mat-mdc-select-trigger') || select).click();
-        panel = await waitForModelValue(() => getThinkingPanel(select), 800);
-        levels = getAvailableThinkingLevels(panel);
-      } finally {
-        nativeDismissed = await dismissThinkingPanel(panel, select);
-        document.body.classList.remove('sl-reading-thinking-options');
+    try {
+      await ensureRunSettingsMounted(operation);
+      if (!operationActive(operation) || generation !== dropdownGeneration || !button.isConnected) return;
+      let select = getThinkingSelect();
+      if (!select && !getPreviewControls() && getThinkingState().available) select = await waitForModelValue(getThinkingSelect, 800, operation);
+      if (!operationActive(operation)) return;
+      if (!getPreviewControls() && (!select || select.getAttribute('aria-disabled') === 'true')) return;
+      if (getPreviewControls()) levels = getPreviewControls().getThinkingLevels();
+      else {
+        let panel = null;
+        try {
+          (select.querySelector('.mat-mdc-select-trigger') || select).click();
+          panel = await waitForModelValue(() => getThinkingPanel(select), 800, operation);
+          levels = getAvailableThinkingLevels(panel);
+        } finally {
+          nativeDismissed = await dismissThinkingPanel(panel, select, operation);
+        }
       }
-    }
-    if (!nativeDismissed || !levels.length || !isEnabled() || generation !== dropdownGeneration || !button.isConnected) return;
+    } finally { endThinkingRead(); }
+    if (!nativeDismissed || !levels.length || !operationActive(operation) || generation !== dropdownGeneration || !button.isConnected) return;
 
     const currentThinking = getSelectedThinkingLevel();
     const dropdown = document.createElement('div');
@@ -1534,26 +1564,26 @@
 
     const actions = [
       {
-        label: t('btn_delete_thoughts', 'Xoá all Think block'),
+        label: 'Delete loaded turns with thoughts',
         svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block;"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04Z"/></svg>`,
         color: '#a8c7fa',
-        onClick: () => window.StudioLab?.ChatCleanup?.deleteAllThoughts?.({ showProgress: true })
+        onClick: () => window.StudioLab?.ChatCleanup?.deleteAllThoughts?.()
       },
       {
-        label: t('btn_delete_media', 'Xoá all Media'),
+        label: 'Delete loaded turns with media',
         svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block;"><rect width="18" height="18" x="3" y="3" rx="3" ry="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`,
         color: '#a8c7fa',
         onClick: () => window.StudioLab?.ChatCleanup?.deleteAllMedia?.()
       },
       {
-        label: t('btn_delete_code', 'Xoá all Block Code'),
+        label: 'Delete loaded turns with code execution',
         svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
         color: '#a8c7fa',
         onClick: () => window.StudioLab?.ChatCleanup?.deleteAllCodeExecutions?.()
       },
       { divider: true },
       {
-        label: t('btn_fix_share', 'Fix lỗi Share đoạn chat'),
+        label: 'Delete loaded turns with media or code execution',
         svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
         color: '#81c995',
         onClick: () => window.StudioLab?.ChatCleanup?.fixShareChatError?.()
@@ -1633,11 +1663,14 @@
     });
 
     let trashBtn = toolbarRight.querySelector('.sl-header-trash-btn');
-    if (!trashBtn) {
+    if (getPreviewControls()) {
+      trashBtn?.remove();
+      trashBtn = null;
+    } else if (!trashBtn) {
       trashBtn = document.createElement('button');
       trashBtn.type = 'button';
       trashBtn.className = 'sl-header-btn sl-header-trash-btn';
-      const trashTitle = t('toolbar_trash_title', 'Dọn dẹp & Sửa lỗi Chat');
+      const trashTitle = 'Delete loaded turns';
       trashBtn.title = trashTitle;
       trashBtn.setAttribute('aria-label', trashTitle);
       trashBtn.setAttribute('aria-haspopup', 'menu');
@@ -1656,7 +1689,7 @@
       };
       toolbarRight.appendChild(trashBtn);
     } else {
-      const trashTitle = t('toolbar_trash_title', 'Dọn dẹp & Sửa lỗi Chat');
+      const trashTitle = 'Delete loaded turns';
       if (trashBtn.title !== trashTitle) {
         trashBtn.title = trashTitle;
         trashBtn.setAttribute('aria-label', trashTitle);
@@ -1704,8 +1737,7 @@
     }
 
     let thinkingBtn = toolbarRight.querySelector('.sl-header-thinking-btn');
-    const thinkingSelect = getThinkingSelect();
-    const hasThinkingSetting = getPreviewControls() ? getPreviewControls().getThinkingLevels().length > 0 : !!thinkingSelect;
+    const thinkingState = getThinkingState();
     if (!thinkingBtn) {
       thinkingBtn = document.createElement('button');
       thinkingBtn.type = 'button';
@@ -1741,8 +1773,8 @@
     }
     if (thinkingBtn) {
       const isMobile = window.innerWidth <= 768;
-      thinkingBtn.hidden = !hasThinkingSetting || isMobile;
-      thinkingBtn.disabled = thinkingSelect?.getAttribute('aria-disabled') === 'true';
+      thinkingBtn.hidden = !thinkingState.available || isMobile;
+      thinkingBtn.disabled = thinkingState.disabled;
     }
 
     let settingsBtn = toolbarRight.querySelector('.sl-header-settings-btn');
@@ -1773,6 +1805,8 @@
         settingsBtn.setAttribute('aria-label', settingsTitle);
       }
     }
+    settingsBtn.setAttribute('aria-expanded', String(document.body.classList.contains('sl-settings-open') &&
+      (!!getPreviewControls() || !!$('ms-run-settings'))));
   }
 
 
@@ -1814,7 +1848,7 @@
 
     if (maxLabel) {
       const maxSpan = document.createElement('span');
-      maxSpan.style.cssText = 'font-size: 10px; font-weight: 400; color: #707070; margin-left: 4px;';
+      maxSpan.style.cssText = 'font-size: var(--sl-chat-token-limit-size); font-weight: 400; color: var(--sl-chat-token-limit-text); margin-left: var(--sl-space-1);';
       maxSpan.textContent = maxLabel;
       usageVal.appendChild(maxSpan);
     }
@@ -2538,13 +2572,17 @@
   }
 
   function scheduleThoughtChunkCollapseFallback(thoughtChunk) {
-    if (!thoughtChunk) return;
-    if (thoughtChunk._slCollapseFallbackTimer) {
-      clearTimeout(thoughtChunk._slCollapseFallbackTimer);
-    }
-    thoughtChunk._slCollapseFallbackTimer = setTimeout(() => {
-      thoughtChunk._slCollapseFallbackTimer = null;
-      if (!thoughtChunk.isConnected) return;
+    if (!thoughtChunk || !globalHandlerScope) return;
+    thoughtChunk._slCollapseFallbackCancel?.();
+    const operation = nativeOperation();
+    const work = scope();
+    const cancel = globalHandlerScope.add(() => work.dispose());
+    thoughtChunk._slCollapseFallbackCancel = cancel;
+    work.on(operation.signal, 'abort', cancel, { once: true });
+    work.timeout(() => {
+      cancel();
+      thoughtChunk._slCollapseFallbackCancel = null;
+      if (!thoughtChunk.isConnected || !operationActive(operation)) return;
       const mainPanel =
         thoughtChunk.querySelector('mat-expansion-panel.thought-panel') ||
         thoughtChunk.querySelector('mat-expansion-panel:not([disabled])');
@@ -2692,6 +2730,8 @@
   }
 
   function cleanup() {
+    cancelNativeOperations();
+    cachedThinking = null;
     detachGlobalHandlers();
     detachTurnNavigatorListeners();
     closeCustomDropdowns();
@@ -2737,7 +2777,7 @@
     if (otherBtn) otherBtn.remove();
     const divider = $('.sl-divider');
     if (divider) divider.remove();
-    $$('.sl-injected-header-item, .sl-header-menu-divider, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, .sl-custom-dropdown, .sl-drawer-backdrop').forEach(el => el.remove());
+    $$('.sl-injected-header-item, .sl-header-menu-divider, .sl-header-trash-btn, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, .sl-custom-dropdown, .sl-drawer-backdrop').forEach(el => el.remove());
     document.body?.classList.remove('sl-settings-open', 'sl-empty-chat', 'sl-reading-thinking-options', 'sl-switching-model', 'sl-syncing-model-picker');
     $$('.sl-backdrop-tint').forEach(node => node.classList.remove('sl-backdrop-tint'));
     const tokenHeader = $('.sl-token-section-header');
@@ -2770,11 +2810,11 @@
     id: 'modern-web-chat',
     group: 'modules',
     order: 40,
-    title: 'Modern Web Chat',
-    subtitle: 'Gemini-style chat stream, input bar & media gallery',
+    title: 'New layout',
+    subtitle: 'Responsive chat, input bar, media gallery, and interactive answers',
     icon: 'forum',
     stateKey: 'modernWebChatEnabled',
-    defaults: { modernWebChatEnabled: true },
+    defaults: { modernWebChatEnabled: false },
     init(ctx) {
       disposed = false;
       detachGlobalHandlers();
@@ -2792,7 +2832,6 @@
           scheduleThoughtChunkCollapseFallback(thoughtChunk);
         }
       };
-      document.addEventListener('click', window._slThoughtFooterClickListener, false);
 
       if (window._slMediaPointerListener) {
         document.removeEventListener('pointerdown', window._slMediaPointerListener, true);
@@ -2805,7 +2844,7 @@
           closeCustomDropdowns();
         }
         if (e.target.closest('ms-prompt-box button, .prompt-box-button, button[aria-haspopup="menu"]')) {
-          requestAnimationFrame(() => {
+          globalHandlerScope?.frame(() => {
             if (!isEnabled()) return;
             modifyPlusMenu();
             modifyHeaderMenu();
@@ -2832,7 +2871,7 @@
         if (!isEnabled()) return;
         const trashBtn = $('.sl-header-trash-btn');
         if (trashBtn) {
-          const trashTitle = t('toolbar_trash_title', 'Dọn dẹp & Sửa lỗi Chat');
+          const trashTitle = 'Delete loaded turns';
           trashBtn.title = trashTitle;
           trashBtn.setAttribute('aria-label', trashTitle);
         }
@@ -2858,14 +2897,18 @@
         modifiedMenuContents.clear();
         syncTurnTimestampsAndStatus();
       };
-      window.addEventListener('__sl_languageChanged', window._slLangListener);
       this.updateStyles();
     },
-    onStateChange() {
+    onStateChange(ctx) {
+      if (ctx) ctxRef = ctx;
       this.updateStyles();
     },
     onRouteChange(ctx) {
       cancelPendingTurnJump();
+      if (nativeOperationRoute !== window.location.pathname) {
+        cancelNativeOperations();
+        cachedThinking = null;
+      }
       if (getPreviewControls()) return;
       closeCustomDropdowns();
       pendingMediaMenu = null;
@@ -2953,7 +2996,7 @@
             throw error;
           }
           el.onload = () => {
-            try { performDOMUpdates(); } catch (e) { }
+            if (isEnabled()) try { performDOMUpdates(); } catch (e) { }
           };
           (document.head || document.documentElement).appendChild(el);
         }

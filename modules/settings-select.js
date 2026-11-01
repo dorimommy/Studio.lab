@@ -214,7 +214,7 @@
     if (view.visualViewport) { listen(view.visualViewport, 'resize', close); listen(view.visualViewport, 'scroll', close); }
     listen(select, 'change', refresh); listen(select, 'input', refresh);
     listen(popup, 'toggle', event => { if (event.newState === 'closed' && opened) close(); });
-    // view.MutationObserver навмисно: селект може жити в чужому document (settings frame).
+    // Observe through the select's window because private Settings use another document.
     const observer = new view.MutationObserver(refresh);
     observer.observe(select, { subtree: true, childList: true, characterData: true, attributes: true,
       attributeFilter: ['disabled', 'label', 'selected', 'value', 'hidden', 'aria-disabled', 'aria-describedby',

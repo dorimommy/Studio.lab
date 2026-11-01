@@ -126,6 +126,7 @@
   let typingInProgress = false;
   let typingInterval = null;
   let namePoll = null;
+  let namePollController = null;
   let namePollGen = 0;
   let nameRefresh = null;
   const POLL_CANCELLED = {};
@@ -162,6 +163,8 @@
 
   function stopWelcome() {
     namePollGen++;
+    namePollController?.abort();
+    namePollController = null;
     namePoll = null;
     clearInterval(nameRefresh);
     clearInterval(typingInterval);
@@ -180,14 +183,14 @@
     if (nameRefresh !== null) return;
 
     if (!updateUserName()) {
-      // Було: ручний setInterval з лічильником (100 спроб × 100 мс).
-      // waitFor робить те саме; покоління скасовує застарілий полл.
       const gen = ++namePollGen;
+      const controller = new AbortController();
+      namePollController = controller;
       namePoll = waitFor(() => {
         if (gen !== namePollGen) return POLL_CANCELLED;
         return updateUserName() || null;
-      }, { timeout: 10000, interval: 100 }).then(() => {
-        if (gen === namePollGen) namePoll = null;
+      }, { timeout: 10000, interval: 100, signal: controller.signal }).then(() => {
+        if (gen === namePollGen) { namePoll = null; namePollController = null; }
       });
     }
     nameRefresh = setInterval(updateUserName, 10000);

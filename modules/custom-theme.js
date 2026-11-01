@@ -1,7 +1,7 @@
 (function (root, factory) {
   'use strict';
   const commonJS = typeof module === 'object' && module.exports;
-  const schema = root.StudioLabCatalogSchema || null;
+  const schema = commonJS ? require('../account/catalog-schema.js') : root.StudioLabCatalogSchema;
   const api = factory(schema);
   if (commonJS) module.exports = api;
   else {
@@ -305,10 +305,13 @@
       ${scope} .sl-toc-dash.active{background:var(--sl-mwc-accent) !important;}
       @media (forced-colors:active){${scope}{--sl-mwc-surface:Canvas !important;--sl-mwc-raised:Canvas !important;--sl-mwc-hover:Canvas !important;--sl-mwc-border:ButtonText !important;--sl-mwc-text:CanvasText !important;--sl-mwc-muted:CanvasText !important;--sl-mwc-accent:LinkText !important;}}`;
   }
-  function start(root) {
+  function start(root, options = {}) {
     const { document, chrome } = root;
-    if (root.location?.protocol === 'chrome-extension:') return { apply() {}, preview() {}, endPreview() {} };
+    const isolatedPreview = options.isolatedPreview === true && /\/account\/theme-preview\.html$/.test(root.location?.pathname || '') &&
+      document.body?.getAttribute('data-sl-theme-preview') === 'true';
+    if (root.location?.protocol === 'chrome-extension:' && !isolatedPreview) return { apply() {}, preview() {}, endPreview() {} };
     activeRoot = root;
+    const lifetime = root.StudioLabCore?.scope();
     let style = null, sheet = null, generation = 0, pendingAsset = null, storedAsset = null, previewing = false;
     const canAdopt = typeof root.CSSStyleSheet === 'function' && 'adoptedStyleSheets' in document;
     const privateDocument = root.location?.protocol === 'chrome-extension:';
@@ -339,9 +342,11 @@
     function paint(value) {
       pendingAsset = value;
       if (!document.body || !document.head) return;
-      // Yield completely to the 4-Tab Custom Theme Engine (theme-engine.js) when present
-      if (root.StudioLab?.themeEngine) {
+      // The editor's saved selection owns its own marker and stylesheet.
+      if (!isolatedPreview && root.StudioLab?.themeEngine?.getActiveConfig?.()) {
         removeStyle();
+        document.body.removeAttribute('data-sl-custom-theme');
+        activeMode = null;
         return;
       }
       let css = null, mode = null;
@@ -375,16 +380,24 @@
         updated_at: '2026-10-11T00:00:00.000Z', payload: clean });
     }
     function endPreview() { previewing = false; paint(storedAsset); }
-    const initialGeneration = generation;
-    chrome.storage.local.get(['slActiveTheme'], stored => {
-      if (!chrome.runtime?.lastError && generation === initialGeneration) apply(stored?.slActiveTheme || null);
-    });
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && Object.prototype.hasOwnProperty.call(changes, 'slActiveTheme')) {
-        generation++; apply(changes.slActiveTheme.newValue || null);
-      }
-    });
-    if (!document.body) document.addEventListener('DOMContentLoaded', () => paint(pendingAsset), { once: true });
+    if (!isolatedPreview && root.StudioLabCore?.store) {
+      const store = root.StudioLabCore.store;
+      const initialGeneration = generation;
+      store.get('slActiveTheme', null).then(stored => {
+        if (generation === initialGeneration) apply(stored || null);
+      }).catch(() => {});
+      lifetime?.add(store.onChange((changes, area) => {
+        if (area === 'local' && Object.prototype.hasOwnProperty.call(changes, 'slActiveTheme')) {
+          generation++; apply(changes.slActiveTheme.newValue || null);
+        }
+      }));
+      lifetime?.on(root, 'sl-editor-theme-changed', () => paint(previewing ? pendingAsset : storedAsset));
+      lifetime?.add(root.StudioLab?.onExtensionInvalidated?.(() => {
+        generation++; removeStyle(); document.body?.removeAttribute('data-sl-custom-theme'); lifetime.dispose();
+      }));
+    }
+    if (!document.body) lifetime?.on(document, 'DOMContentLoaded', () => paint(pendingAsset), { once: true });
+    root.StudioLabThemePreview = Object.freeze({ preview, endPreview });
     return { apply, preview, endPreview };
   }
   return Object.freeze({ buildThemeCSS, start, mode: () => {

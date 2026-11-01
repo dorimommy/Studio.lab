@@ -37,19 +37,36 @@ var StudioLabCore = (() => {
     t.innerHTML = html.trim();
     return t.content.firstElementChild;
   }
-  function waitFor(read, { timeout = 2500, interval = 50 } = {}) {
+  function waitFor(read, { timeout = 2500, interval = 50, signal } = {}) {
     return new Promise((resolve) => {
       const t0 = performance.now();
-      (function tick() {
+      let timer = null;
+      let settled = false;
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
+        resolve(value);
+      }
+      function abort() {
+        finish(null);
+      }
+      function tick() {
+        if (settled) return;
         let v = null;
         try {
           v = read();
         } catch {
         }
-        if (v) return resolve(v);
-        if (performance.now() - t0 >= timeout) return resolve(null);
-        setTimeout(tick, interval);
-      })();
+        if (settled) return;
+        if (v) return finish(v);
+        if (performance.now() - t0 >= timeout) return finish(null);
+        timer = setTimeout(tick, interval);
+      }
+      if (signal?.aborted) return finish(null);
+      signal?.addEventListener("abort", abort, { once: true });
+      tick();
     });
   }
   function debounce(fn, ms = 200) {

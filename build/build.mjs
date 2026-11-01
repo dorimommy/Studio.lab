@@ -17,5 +17,16 @@ const common = {
 
 await build({ ...common, outfile: 'dist/core.js' });
 await build({ ...common, outfile: 'dist/core-main.js' });
+await build({ ...common,
+  entryPoints: ['packages/answers/src/index.js'],
+  globalName: 'StudioLabAnswers',
+  outfile: 'dist/answers.js'
+});
 
-console.log('built dist/core.js + dist/core-main.js');
+await build({ ...common,
+  entryPoints: ['packages/answers/src/generation.js'],
+  globalName: 'StudioLabAnswerGeneration',
+  outfile: 'dist/answers-main.js'
+});
+
+console.log('built dist/core.js + dist/core-main.js + dist/answers.js + dist/answers-main.js');

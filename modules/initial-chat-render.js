@@ -104,10 +104,15 @@
 
   function observeDirectiveExport(namespace) {
     if (!namespace || typeof namespace !== 'object') { finish('unsupported'); return; }
-    const descriptor = Object.getOwnPropertyDescriptor(namespace, 'ne');
+    const retain = ['ne', 'me'].map(name => watchDirectiveExport(namespace, name)).filter(Boolean);
+    if (!retain.length) { finish('unsupported'); return; }
+    retainDirectiveWatch = () => retain.reduce((active, watch) => watch() || active, false);
+  }
+
+  function watchDirectiveExport(namespace, name) {
+    const descriptor = Object.getOwnPropertyDescriptor(namespace, name);
     if (descriptor && (!('value' in descriptor) || !descriptor.configurable || !descriptor.writable)) {
-      finish('unsupported');
-      return;
+      return null;
     }
     let value = descriptor?.value;
     let wrapper = null;
@@ -133,21 +138,21 @@
       original = next;
       value = wrap(next);
     };
-    Object.defineProperty(namespace, 'ne', { configurable: true, enumerable: descriptor?.enumerable ?? true,
+    Object.defineProperty(namespace, name, { configurable: true, enumerable: descriptor?.enumerable ?? true,
       get: getter, set: setter });
     cleanups.push(() => {
-      const current = Object.getOwnPropertyDescriptor(namespace, 'ne');
+      const current = Object.getOwnPropertyDescriptor(namespace, name);
       const ownedAccessor = current?.get === getter && current.set === setter;
       if (!ownedAccessor && current?.value !== wrapper) return;
-      if (!assigned) delete namespace.ne;
-      else Object.defineProperty(namespace, 'ne', { value: original, configurable: true,
+      if (!assigned) delete namespace[name];
+      else Object.defineProperty(namespace, name, { value: original, configurable: true,
         enumerable: descriptor?.enumerable ?? true, writable: true });
     });
-    retainDirectiveWatch = () => {
+    return () => {
       if (typeof original !== 'function' || typeof wrapper !== 'function') return false;
-      const current = Object.getOwnPropertyDescriptor(namespace, 'ne');
+      const current = Object.getOwnPropertyDescriptor(namespace, name);
       if (current?.get === getter && current.set === setter) {
-        Object.defineProperty(namespace, 'ne', { value: wrapper, configurable: true,
+        Object.defineProperty(namespace, name, { value: wrapper, configurable: true,
           enumerable: descriptor?.enumerable ?? true, writable: true });
         return true;
       }

@@ -276,14 +276,14 @@
         return;
       }
       btn.click();
-      // Was: hand-rolled waitForPanel with an attempts counter (30 × 50 ms).
-      // waitFor keeps the same timing; a failed guard resolves null → callback(false),
-      // exactly like the original guard-fail and timeout paths (apply(null) === false).
+      const cancelled = {};
+      // Include the initial 50 ms delay in the original 1500 ms deadline.
       setTimeout(async () => {
-        textarea = await waitFor(() => {
-          if (!guard()) return null;
+        const result = await waitFor(() => {
+          if (!guard()) return cancelled;
           return $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
-        }, { timeout: 1500, interval: 50 });
+        }, { timeout: 1450, interval: 50 });
+        textarea = result === cancelled ? null : result;
         const applied = apply(textarea);
         const closeBtn = $('button[aria-label="Close panel"]');
         if (textarea && guard() && closeBtn) closeBtn.click();
@@ -529,6 +529,23 @@
     });
   });
 
+  let catalogNavigation = 0;
+  window.addEventListener('__sl_routeChanged', () => { catalogNavigation++; });
+  window.addEventListener('__sl_applyCatalogPrompt', (event) => {
+    const { requestId, text, route } = event.detail || {};
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
+        typeof text !== 'string' || !text.trim() || text.length > 16000 ||
+        route !== location.href) return;
+    const epoch = chatEpoch;
+    const navigation = catalogNavigation;
+    const guard = () => location.href === route && chatEpoch === epoch && catalogNavigation === navigation;
+    DynamicStudioAPI.setSystemInstructions(text, applied => {
+      window.dispatchEvent(new CustomEvent('__sl_catalogPromptResult_' + requestId,
+        { detail: { ok: applied === true && guard() } }));
+    }, guard);
+  });
+
+
   const URL_MARKER = 'GenerateContent';
   const EVENT_NAME = '__aisu_xhrCapture';
 
@@ -596,10 +613,33 @@
   }
 
   let responseRecoveryEnabled = true;
+  let interactiveAnswersEnabled = false;
 
   window.addEventListener('__sl_responseRecoveryToggle', (e) => {
     responseRecoveryEnabled = !!e.detail;
   });
+  window.addEventListener('__sl_interactiveAnswersToggle', (event) => {
+    if (typeof event.detail === 'boolean') interactiveAnswersEnabled = event.detail;
+  });
+
+  function interactiveRequestBody(body, rawUrl, method, route) {
+    if (!interactiveAnswersEnabled || typeof body !== 'string' || method !== 'POST' ||
+        route !== window.location.pathname || !/^\/prompts\/(?:new_chat|(?!new_)[A-Za-z0-9_-]+)\/?$/.test(route || '')) return body;
+    try {
+      const url = new URL(rawUrl, 'https://aistudio.google.com');
+      if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return body;
+      const native = ['aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com'].includes(url.hostname) &&
+        /^\/\$rpc\/google\.internal\.alkali\.applications\.makersuite\.v1\.MakerSuiteService\/GenerateContent$/.test(url.pathname);
+      const restModel = /^\/v1(?:beta)?\/models\/([A-Za-z0-9._-]+):(?:generateContent|streamGenerateContent)$/.exec(url.pathname);
+      const rest = url.hostname === 'generativelanguage.googleapis.com' && restModel &&
+        !/(?:image|imagen|video|veo|audio|tts|live)/i.test(restModel[1]);
+      if (!native && !rest) return body;
+      const rewrite = window.StudioLabAnswerGeneration?.rewriteRequest;
+      if (typeof rewrite !== 'function') return body;
+      const next = rewrite(body);
+      return typeof next === 'string' ? next : body;
+    } catch (_) { return body; }
+  }
 
   // Capture native methods before Angular patches them.
   const _origOpen  = XMLHttpRequest.prototype.open;
@@ -619,7 +659,6 @@
   // A content-script event supplies the fallback model for outgoing generation requests.
   let overrideModelId = null;
   let overrideBaseModel = null;
-  let stealthOverrideModelId = null;
   const activeGenerationXhrs = new Set();
 
   function clearModelOverride() {
@@ -638,7 +677,6 @@
   }
 
   function currentModelOverride() {
-    if (stealthOverrideModelId) return stealthOverrideModelId;
     if (!overrideModelId) return null;
     const nativeModel = DynamicStudioAPI.getModel();
     if (nativeModel && !overrideBaseModel) {
@@ -651,35 +689,10 @@
     return overrideModelId;
   }
 
-  function resolveStealthModelId(requestedId) {
-    const cleanReq = String(requestedId || 'gemini-3.1-flash-lite').replace(/^models\//, '').trim();
-    if (cleanReq === 'gemini-3.1-flash-lite') {
-      return 'gemini-3.1-flash-lite';
-    }
-    try {
-      const rawFeatured = window.localStorage && window.localStorage.getItem('sl_featured_models');
-      if (rawFeatured) {
-        const list = JSON.parse(rawFeatured);
-        if (Array.isArray(list) && list.length > 0) {
-          const exact = list.find(m => m && m.id === cleanReq);
-          if (exact && exact.id) return exact.id;
-          const previewMatch = list.find(m => m && m.id === cleanReq + '-preview');
-          if (previewMatch && previewMatch.id) return previewMatch.id;
-          const prefixMatch = list.find(m => m && typeof m.id === 'string' && m.id.startsWith(cleanReq));
-          if (prefixMatch && prefixMatch.id) return prefixMatch.id;
-        }
-      }
-    } catch (_) {}
-    return cleanReq;
-  }
-
   window.addEventListener('__sl_routeChanged', (event) => {
     const current = event.detail?.current?.key;
     const previous = event.detail?.previous?.key;
-    if (current && previous && current !== previous) {
-      stealthOverrideModelId = null;
-      clearModelOverride();
-    }
+    if (current && previous && current !== previous) clearModelOverride();
   });
   document.addEventListener('click', event => {
     const resetButton = event.target?.closest?.('button[data-test-clear="outside"][aria-label="New chat"]');
@@ -724,61 +737,6 @@
     window.dispatchEvent(new CustomEvent('__sl_modelDirectResult', {
       detail: { requestId, applied }
     }));
-  });
-
-  window.addEventListener('__sl_stealthSwitchModel', (e) => {
-    const requestId = e.detail?.requestId;
-    const targetModel = e.detail?.modelId || 'gemini-3.1-flash-lite';
-    const originalSignalModel = DynamicStudioAPI.getModel() || '';
-    const originalOverrideModel = overrideModelId || null;
-    const resolvedModelId = resolveStealthModelId(targetModel);
-
-    let signalApplied = false;
-    try {
-      signalApplied = DynamicStudioAPI.setModel(resolvedModelId);
-      if (!signalApplied && resolvedModelId !== targetModel) {
-        signalApplied = DynamicStudioAPI.setModel(targetModel);
-      }
-    } catch (_) {}
-
-    stealthOverrideModelId = resolvedModelId;
-
-    if (requestId) {
-      window.dispatchEvent(new CustomEvent('__sl_stealthSwitchModelResult', {
-        detail: {
-          requestId,
-          originalSignalModel,
-          originalOverrideModel,
-          appliedModel: resolvedModelId,
-          signalApplied
-        }
-      }));
-    }
-  });
-
-  window.addEventListener('__sl_stealthRestoreModel', (e) => {
-    const requestId = e.detail?.requestId;
-    const originalSignalModel = e.detail?.originalSignalModel || '';
-    const originalOverrideModel = e.detail?.originalOverrideModel || null;
-
-    stealthOverrideModelId = null;
-
-    let restoredSignal = false;
-    if (originalSignalModel) {
-      try {
-        restoredSignal = DynamicStudioAPI.setModel(originalSignalModel);
-      } catch (_) {}
-    }
-    overrideModelId = originalOverrideModel;
-    if (originalOverrideModel) {
-      overrideBaseModel = DynamicStudioAPI.getModel();
-    }
-
-    if (requestId) {
-      window.dispatchEvent(new CustomEvent('__sl_stealthRestoreModelResult', {
-        detail: { requestId, restoredSignal }
-      }));
-    }
   });
 
   window.addEventListener('__sl_setModel', (e) => {
@@ -964,6 +922,7 @@
     }));
 
     this.__aisuUrl = processedUrl;
+    this.__slRequestMethod = String(method).toUpperCase();
     this.__aisuIsGen = isGenerateContentUrl(processedUrl);
     this.__slPromptOperation = String(method).toUpperCase() === 'POST' ? promptOperation(processedUrl) : null;
     this.__slModelOverride = modelOverride;
@@ -1057,6 +1016,7 @@
 
     const request = requestMeta();
     emitRequest(request, modifiedBody);
+    const wireBody = interactiveRequestBody(modifiedBody, this.__aisuUrl, this.__slRequestMethod, request.route);
 
     window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
       detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
@@ -1150,7 +1110,7 @@
     });
 
     try {
-      return _origSend.call(this, modifiedBody);
+      return _origSend.call(this, wireBody);
     } catch (error) {
       finish(false);
       throw error;
@@ -1315,9 +1275,10 @@
     let url = typeof input === 'string' ? input
       : (input && (input.url || input.href)) || '';
     const isGen = isGenerateContentUrl(url);
+    const method = String(init?.method || input?.method || 'GET').toUpperCase();
     // Capture ownership before reading a Request body asynchronously.
     const request = isGen ? requestMeta() : null;
-    const operation = String(init?.method || input?.method || 'GET').toUpperCase() === 'POST' ? promptOperation(url) : null;
+    const operation = method === 'POST' ? promptOperation(url) : null;
     const save = operation ? promptSaveMeta(operation) : null;
     const modelOverride = isGen ? currentModelOverride() : null;
     let requestBody = init && typeof init.body === 'string' ? init.body : null;
@@ -1330,21 +1291,21 @@
       } catch (_) { /* A disturbed/unreadable body retains native fetch behavior. */ }
     }
 
+    const rewrittenUrl = modelOverride ? rewriteModelUrl(url, modelOverride) : url;
+    const canonicalBody = modelOverride ? rewriteModelBody(requestBody, modelOverride) : requestBody;
+    const supportedBody = !init || init.body === undefined || typeof init.body === 'string';
+    const wireBody = request && supportedBody ? interactiveRequestBody(canonicalBody, rewrittenUrl, method, request.route) : canonicalBody;
+    if (isRequest && effectiveRequest && (rewrittenUrl !== url || wireBody !== requestBody)) {
+      const redirected = rewrittenUrl !== url ? new Request(rewrittenUrl, effectiveRequest) : effectiveRequest;
+      input = wireBody !== requestBody ? new Request(redirected, { body: wireBody }) : redirected;
+      init = undefined;
+    } else {
+      if (modelOverride && (typeof input === 'string' || typeof URL !== 'undefined' && input instanceof URL)) input = rewrittenUrl;
+      if (init && typeof init.body === 'string' && wireBody !== requestBody) init = { ...init, body: wireBody };
+    }
+    url = rewrittenUrl;
+    requestBody = canonicalBody;
     if (modelOverride) {
-      const rewrittenUrl = rewriteModelUrl(url, modelOverride);
-      const rewrittenBody = rewriteModelBody(requestBody, modelOverride);
-      if (typeof input === 'string') {
-        input = rewrittenUrl;
-      } else if (typeof URL !== 'undefined' && input instanceof URL) {
-        input = rewrittenUrl;
-      } else if (isRequest && effectiveRequest) {
-        const redirected = new Request(rewrittenUrl, effectiveRequest);
-        input = rewrittenBody !== requestBody ? new Request(redirected, { body: rewrittenBody }) : redirected;
-        init = undefined; // The caller's init was merged into effectiveRequest.
-      }
-      url = rewrittenUrl;
-      if (init && typeof init.body === 'string' && rewrittenBody !== requestBody) init = { ...init, body: rewrittenBody };
-      requestBody = rewrittenBody;
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in fetch request: ' + overrideModelId,
         'color:#87a9ff;font-weight:bold'

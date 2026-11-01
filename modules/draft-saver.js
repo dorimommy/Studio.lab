@@ -1,8 +1,3 @@
-/**
- * draft-saver.js — Migrated to @studiolab/core (SDK testing branch).
- * Публічний інтерфейс той самий: registerModule({ id: 'draft-saver', ... }) — drop-in заміна.
- * Поведінка збережена 1:1, прибрано тільки бойлерплейт (observer/poll/storage/listeners).
- */
 
 // Drafts belong to one AI Studio route and use extension-private storage, never host localStorage.
 (function () {
@@ -16,7 +11,6 @@
   const MAX_DRAFTS = 20;
   const MAX_BYTES = 4 * 1024 * 1024;
 
-  // Усі підписки модуля живуть тут; io.dispose() відписує все разом.
   const io = scope();
 
   let ctxRef, activeTextarea, indicatorEl, saveTimer, pendingSave, disposeObserver;
@@ -25,6 +19,7 @@
   let restoring = false;
   let enabled = false;
   let storageQueue = Promise.resolve();
+  let textareaWait = null;
   const sentAt = new Map();
   const requests = new Map();
 
@@ -41,13 +36,9 @@
     });
     return storageQueue;
   }
-  function isStealthDraftText(txt) {
-    if (typeof txt !== 'string') return false;
-    return txt.includes('[[SL_HIDDEN_SUGGEST_REQ]]') || txt.includes('[[SL_HIDDEN_IMPROVE_REQ]]');
-  }
   function validDraft(value, path) {
     return !!(value && value.version === 2 && value.route === path &&
-      typeof value.text === 'string' && value.text.trim() && !isStealthDraftText(value.text) && value.text.length <= MAX_TEXT &&
+      typeof value.text === 'string' && value.text.trim() && value.text.length <= MAX_TEXT &&
       Number.isFinite(value.ts) && value.ts <= Date.now() + 60000 &&
       Date.now() - value.ts <= MAX_AGE && value.ts > (sentAt.get(path) || 0));
   }
@@ -75,7 +66,7 @@
     pendingSave = null;
     if (!draft) return;
     enqueue(async () => {
-      if (!draft.text.trim() || isStealthDraftText(draft.text)) await store.remove(keyFor(draft.route));
+      if (!draft.text.trim()) await store.remove(keyFor(draft.route));
       else if (draft.text.length <= MAX_TEXT && draft.ts > (sentAt.get(draft.route) || 0)) {
         // Make room before writing so the new draft does not first hit Chrome's quota.
         await pruneDrafts(draft);
@@ -85,7 +76,8 @@
   }
   function onInput(event) {
     if (!enabled || restoring || !isPromptTextarea(event.target) || !route()) return;
-    if (document.body?.classList?.contains('aistu-stealth-sending-prompt') || isStealthDraftText(event.target.value || '')) return;
+    textareaWait?.abort();
+    textareaWait = null;
     revision++;
     activeTextarea = event.target;
     activeRoute = route();
@@ -169,15 +161,18 @@
     return !!(element && element.tagName === 'TEXTAREA' && element.closest('ms-prompt-box'));
   }
 
-  // Було: ручний poll() з лічильником спроб + restoreTimer, який треба було
-  // чистити в трьох місцях. Стало: waitFor, скасування — через revision-guard.
   async function watchTextarea() {
+    textareaWait?.abort();
+    textareaWait = null;
     if (!enabled || !route()) return;
+    const controller = new AbortController();
+    textareaWait = controller;
     const expectedRoute = route(), expectedRevision = revision;
     const textarea = await waitFor(() => {
       if (!enabled || route() !== expectedRoute || revision !== expectedRevision) return null;
       return $('ms-prompt-box textarea');
-    }, { timeout: 10000, interval: 250 }); // було: 40 спроб × 250 мс
+    }, { timeout: 10000, interval: 250, signal: controller.signal });
+    if (textareaWait === controller) textareaWait = null;
     if (!textarea || !enabled || route() !== expectedRoute || revision !== expectedRevision) return;
     activeTextarea = textarea;
     activeRoute = expectedRoute;
@@ -207,13 +202,12 @@
     removeIndicator();
     const promptBox = textarea.closest('ms-prompt-box');
     if (!promptBox) return;
-    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
     indicatorEl = el(
       '<div class="sl-draft-indicator">' +
       '<span class="material-symbols-outlined notranslate sl-draft-icon">history</span>' +
-      `<span class="sl-draft-indicator-text">${t('draft_restored_text', 'Restored unsaved draft')}</span>` +
-      `<button type="button" class="sl-draft-discard-btn">${t('draft_discard_btn', 'Discard')}</button>` +
-      `<button type="button" class="sl-draft-close-btn" title="${t('draft_dismiss_title', 'Dismiss')}">×</button>` +
+      '<span class="sl-draft-indicator-text">Restored unsaved draft</span>' +
+      '<button type="button" class="sl-draft-discard-btn">Discard</button>' +
+      '<button type="button" class="sl-draft-close-btn" title="Dismiss">×</button>' +
       '</div>'
     );
     $('.sl-draft-discard-btn', indicatorEl).onclick = event => {
@@ -237,13 +231,13 @@
     indicatorEl = null;
   }
 
-  // Було: ручний MutationObserver + observer.disconnect() в трьох місцях.
-  // Стало: onAdded повертає dispose(), один виклик — і все відписано.
   function updateEnabled() {
     const next = !!(ctxRef && ctxRef.state.draftSaverEnabled);
     if (next === enabled) return;
     revision++;
     enabled = next;
+    textareaWait?.abort();
+    textareaWait = null;
     if (disposeObserver) { disposeObserver(); disposeObserver = null; }
     if (!enabled) {
       savePending();
@@ -268,7 +262,6 @@
     ],
     init(ctx) {
       ctxRef = ctx;
-      // Було: ручний listen() + масив listeners. Стало: все в скоупі io.
       io.on(document, 'input', onInput);
       io.on(window, '__sl_requestPayload', onRequest);
       io.on(window, '__sl_requestFinished', onFinished);
@@ -291,6 +284,8 @@
       savePending();
       enabled = false;
       revision++;
+      textareaWait?.abort();
+      textareaWait = null;
       if (disposeObserver) { disposeObserver(); disposeObserver = null; }
       io.dispose();
       requests.clear();

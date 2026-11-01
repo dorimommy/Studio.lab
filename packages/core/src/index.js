@@ -19,16 +19,31 @@ export function el(html) {
  * Дочекатися, поки read() поверне truthy. Резолвиться значенням або null по таймауту.
  * Замінює ручні poll-цикли (draft-saver) і waitForModelValue (modern-web-chat).
  */
-export function waitFor(read, { timeout = 2500, interval = 50 } = {}) {
+export function waitFor(read, { timeout = 2500, interval = 50, signal } = {}) {
   return new Promise(resolve => {
     const t0 = performance.now();
-    (function tick() {
+    let timer = null;
+    let settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      resolve(value);
+    }
+    function abort() { finish(null); }
+    function tick() {
+      if (settled) return;
       let v = null;
       try { v = read(); } catch { /* ignore */ }
-      if (v) return resolve(v);
-      if (performance.now() - t0 >= timeout) return resolve(null);
-      setTimeout(tick, interval);
-    })();
+      if (settled) return;
+      if (v) return finish(v);
+      if (performance.now() - t0 >= timeout) return finish(null);
+      timer = setTimeout(tick, interval);
+    }
+    if (signal?.aborted) return finish(null);
+    signal?.addEventListener('abort', abort, { once: true });
+    tick();
   });
 }
 
