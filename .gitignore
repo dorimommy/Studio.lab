@@ -1,7 +1,11 @@
-# Publish only reviewed source, build inputs, runtime assets and licenses.
+# Publish reviewed source, build inputs, runtime assets and project documentation.
 # Local tests, tooling, backend sources, credentials and release output stay local.
 *
 !/.gitignore
+!/README.md
+!/CHANGELOG.md
+!/SECURITY.md
+!/CODE_OF_CONDUCT.md
 !/LICENSE
 !/manifest.json
 !/package.json
@@ -97,6 +101,8 @@
 !/images/SL_PFP_128.png
 !/images/SL_logotype.svg
 !/images/update-space.webp
+!/images/Architecture-banner.png
+!/images/Support_Banner.png
 
 !/stylelab/
 !/stylelab/index.json
