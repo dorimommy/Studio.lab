@@ -33,26 +33,7 @@
 .sl-history-capacity { position: fixed; inset: auto var(--sl-space-4, 16px) var(--sl-space-4, 16px) auto; z-index: 9999; max-width: min(360px, calc(100vw - 32px)); padding: var(--sl-space-3, 12px); border-radius: var(--sl-radius-md, 8px); background: var(--sl-mwc-raised, #292a2d); color: var(--sl-mwc-text, #e3e3e3); }
 .sl-response-history-text :is(pre, table) { max-width: 100%; overflow: auto; }
 .sl-response-history-text :is(p, ul, ol, blockquote, pre, table) { margin: .5em 0; }
-.sl-response-tools { margin: var(--sl-space-2, 8px) var(--sl-space-3, 12px); max-width: 100%; }
-.sl-improve-trigger, .sl-improve-helper button {
-  min-height: var(--sl-target-min, 44px);
-  padding: 0 var(--sl-space-3, 12px);
-  border: 0;
-  border-radius: var(--sl-radius-md, 8px);
-  background: var(--sl-mwc-raised, #292a2d);
-  color: var(--sl-mwc-text, #e3e3e3);
-  font: inherit;
-  cursor: pointer;
-}
-.sl-improve-trigger:hover, .sl-improve-helper button:hover:not(:disabled) { background: var(--sl-mwc-hover, #45474a); }
-.sl-improve-trigger:focus-visible, .sl-improve-helper :is(button, textarea):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.sl-improve-helper { width: min(420px, calc(100vw - 32px)); max-width: 100%; box-sizing: border-box; padding: var(--sl-space-3, 12px); border-radius: var(--sl-radius-lg, 16px); background: var(--sl-mwc-raised, #292a2d); color: var(--sl-mwc-text, #e3e3e3); }
-.sl-improve-helper p { margin: var(--sl-space-2, 8px) 0; }
-.sl-improve-helper label { display: grid; gap: var(--sl-space-1, 4px); margin: var(--sl-space-2, 8px) 0; }
-.sl-improve-helper textarea { box-sizing: border-box; width: 100%; min-height: 72px; resize: vertical; padding: var(--sl-space-2, 8px); border: 1px solid var(--sl-mwc-border, #747775); border-radius: var(--sl-radius-md, 8px); background: transparent; color: inherit; font: inherit; }
-.sl-improve-choices, .sl-improve-actions { display: flex; flex-wrap: wrap; gap: var(--sl-space-2, 8px); }
-.sl-improve-helper button { background: var(--sl-mwc-hover, #45474a); }
-.sl-improve-helper button:disabled { opacity: .55; cursor: default; }
+
 @media (forced-colors: active) {
   .sl-chat-cleanup-progress { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
   .sl-chat-cleanup-progress button:focus-visible { outline-color: Highlight; }

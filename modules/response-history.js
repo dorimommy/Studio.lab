@@ -6,9 +6,7 @@
   const allowedTags = new Set(['P', 'BR', 'UL', 'OL', 'LI', 'PRE', 'CODE', 'STRONG', 'B', 'EM', 'I', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'HR']);
   const blockTags = new Set(['p', 'br', 'li', 'pre', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'tr', 'hr']);
   const chats = new Map();
-  let ctx = null, owner = null, activeRoute = '', orphanRoot = null, pendingRefresh = null, helper = null;
-  const improveButtons = new Map();
-  const improveByNative = new WeakMap();
+  let ctx = null, owner = null, activeRoute = '', orphanRoot = null, pendingRefresh = null;
   let sequence = 0;
   const MAX_CHATS = 8, MAX_TURNS = 50, MAX_VERSIONS = 20, MAX_CHARS = 50000, MAX_NODES = 3000, MAX_CHAT_CHARS = 2000000;
   const enabled = () => ctx?.state?.multipleResponseEnabled !== false;
@@ -108,101 +106,7 @@
     for (const list of chats.values()) for (const item of list) disposeView(item);
     orphanRoot?.remove(); orphanRoot = null;
   }
-  function closeHelper() {
-    helper?.dispose();
-    helper = null;
-  }
-  function nativeComposer() {
-    const matches = [...new Set(document.querySelectorAll('ms-prompt-input textarea, ms-prompt-box textarea'))]
-      .filter(node => node.isConnected && !node.disabled && !node.readOnly);
-    return matches.length === 1 ? matches[0] : null;
-  }
-  function openHelper(trigger) {
-    closeHelper();
-    if (!owner || owner.disposed || route() !== activeRoute || !trigger.isConnected) return;
-    const view = scope();
-    const release = owner.add(() => view.dispose());
-    helper = { dispose: release, trigger };
-    const panel = document.createElement('section'); panel.className = 'sl-improve-helper';
-    panel.setAttribute('aria-label', 'Improve response');
-    const intro = document.createElement('p'); intro.textContent = 'Choose a fixed shortcut or write your own instruction. Review the prompt before sending.';
-    const choices = document.createElement('div'); choices.className = 'sl-improve-choices';
-    const shortcuts = [
-      ['More detail', 'Explain the answer in more detail.'],
-      ['More concise', 'Make the answer more concise.'],
-      ['Add examples', 'Add practical examples.']
-    ];
-    const label = document.createElement('label'); label.textContent = 'Improvement instruction';
-    const input = document.createElement('textarea'); input.rows = 3; input.maxLength = 2000;
-    label.appendChild(input);
-    const actions = document.createElement('div'); actions.className = 'sl-improve-actions';
-    const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add to prompt'; add.disabled = true;
-    const close = document.createElement('button'); close.type = 'button'; close.textContent = 'Close';
-    const status = document.createElement('p'); status.setAttribute('role', 'status');
-    for (const [name, text] of shortcuts) {
-      const choice = document.createElement('button'); choice.type = 'button'; choice.textContent = name;
-      view.on(choice, 'click', () => { input.value = text; add.disabled = false; status.textContent = ''; input.focus(); });
-      choices.appendChild(choice);
-    }
-    view.on(input, 'input', () => { add.disabled = !input.value.trim(); status.textContent = ''; });
-    view.on(close, 'click', () => { closeHelper(); if (trigger.isConnected) trigger.focus(); });
-    view.on(panel, 'keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); closeHelper(); if (trigger.isConnected) trigger.focus(); }
-    });
-    view.on(add, 'click', () => {
-      if (!owner || owner.disposed || route() !== activeRoute || !trigger.isConnected) return;
-      const instruction = input.value.trim();
-      if (!instruction) return;
-      const composer = nativeComposer();
-      if (!composer) { status.textContent = 'Open the chat prompt box, then try again.'; return; }
-      const native = improveButtons.get(trigger);
-      const turn = native?.closest('ms-chat-turn') || native?.closest('.chat-turn-container');
-      if (!turn?.isConnected) { status.textContent = 'The response is no longer available. Open it and try again.'; return; }
-      const response = snapshot(turn).text.trim();
-      if (!response) { status.textContent = 'This response has no text to add. Open a text response and try again.'; return; }
-      const shortened = response.length > 12000;
-      const excerpt = response.slice(0, 12000) + (shortened ? '\n[Response excerpt shortened]' : '');
-      const draft = composer.value;
-      const next = `${draft}${draft ? '\n\n' : ''}Please improve this response:\n\n${excerpt}\n\nInstruction: ${instruction}`;
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-      if (setter) setter.call(composer, next); else composer.value = next;
-      composer.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      composer.focus();
-      add.disabled = true;
-      status.textContent = shortened ? 'Added a shortened response excerpt to the prompt. Review it before sending.' : 'Added to the prompt. Review it before sending.';
-    });
-    actions.append(add, close); panel.append(intro, choices, label, actions, status);
-    trigger.parentNode.insertBefore(panel, trigger.nextSibling);
-    view.add(() => panel.remove());
-    input.focus();
-  }
-  function installImprove(button) {
-    const native = button?.tagName !== 'BUTTON' ? button?.querySelector?.('button') || button : button;
-    if (!native?.isConnected || !native.parentNode || improveByNative.has(native)) return;
-    const turn = native.closest('ms-chat-turn') || native.closest('.chat-turn-container');
-    if (!turn?.isConnected) return;
-    const tools = document.createElement('div');
-    tools.className = 'sl-response-tools';
-    const trigger = document.createElement('button');
-    trigger.type = 'button'; trigger.className = 'sl-improve-trigger';
-    trigger.setAttribute('data-sl-improve-trigger', ''); trigger.textContent = 'Improve response';
-    tools.appendChild(trigger);
-    turn.appendChild(tools);
-    improveButtons.set(trigger, native);
-    improveByNative.set(native, trigger);
-  }
-  function discoverImproveButtons(root) {
-    if (root?.nodeType === 1 && root.matches?.(rerunSelector)) installImprove(root);
-    root?.querySelectorAll?.(rerunSelector).forEach(installImprove);
-  }
-  function pruneImproveButtons() {
-    for (const [trigger, native] of improveButtons) {
-      if (native.isConnected && trigger.isConnected) continue;
-      if (helper?.trigger === trigger) closeHelper();
-      improveByNative.delete(native);
-      (trigger.closest('.sl-response-tools') || trigger).remove(); improveButtons.delete(trigger);
-    }
-  }
+
   function render(item) {
     if (!item.viewScope || item.viewScope.disposed) return;
     const live = item.turn?.isConnected;
@@ -307,30 +211,11 @@
     if (!enabled() || owner) return;
     const session = owner = scope(); activeRoute = route();
     session.on(document, 'click', rememberBeforeRerun, true);
-    session.on(document, 'click', event => {
-      const trigger = event.target?.closest?.('[data-sl-improve-trigger]');
-      if (!trigger || !improveButtons.has(trigger)) return;
-      event.preventDefault(); event.stopPropagation();
-      if (helper) closeHelper(); else openHelper(trigger);
-    }, true);
-    session.add(() => {
-      closeHelper();
-      for (const [trigger, native] of improveButtons) {
-        improveByNative.delete(native);
-        (trigger.closest('.sl-response-tools') || trigger).remove();
-      }
-      improveButtons.clear();
-    });
     function observeBody(body) {
       if (session.disposed || owner !== session || !body) return;
-      discoverImproveButtons(body);
       const observer = new MutationObserver(records => {
-        const relevant = records.filter(record => !record.target.closest?.('.sl-response-history, .sl-history-orphans, .sl-response-tools'));
+        const relevant = records.filter(record => !record.target.closest?.('.sl-response-history, .sl-history-orphans'));
         if (!relevant.length) return;
-        for (const record of relevant) for (const node of record.addedNodes || []) {
-          if (node.nodeType === 1 && !node.matches?.('.sl-response-tools, .sl-response-history, .sl-history-orphans')) discoverImproveButtons(node);
-        }
-        if (relevant.some(record => record.removedNodes?.length)) pruneImproveButtons();
         if (pendingRefresh || !chats.get(activeRoute)?.length) return;
         pendingRefresh = session.frame(refresh);
       });
