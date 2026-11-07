@@ -3,6 +3,7 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, $$, el } = window.StudioLabCore;
 
   const AUTO_KEEP = 15;
   const BUFFERED_ATTRIBUTE = 'data-sl-buffered-turn';
@@ -67,8 +68,7 @@
 
   function start() {
     watcherScope = window.StudioLab.createScope();
-    style = document.createElement('style');
-    style.id = STYLE_ID;
+    style = el(`<style id="${STYLE_ID}"></style>`);
     style.textContent = `ms-chat-turn[${BUFFERED_ATTRIBUTE}]{display:none!important}`;
     (document.head || document.documentElement).appendChild(style);
     setupWatchers();
@@ -109,7 +109,7 @@
   }
 
   function findCurrentTurns() {
-    const all = Array.from(document.querySelectorAll(turnSelector()));
+    const all = $$(turnSelector());
     const parent = all[all.length - 1]?.parentNode || null;
     if (parent !== currentParent || parentRoute !== currentRoute()) {
       const revealBeforeMount = !currentParent && parentRoute === currentRoute() && manualReveal;
@@ -130,9 +130,9 @@
   }
 
   function isSearchDialogOpen() {
-    const omnibar = document.querySelector(window.StudioLab.SELECTORS?.OMNIBAR || 'ms-omnibar');
+    const omnibar = $(window.StudioLab.SELECTORS?.OMNIBAR || 'ms-omnibar');
     return !!(omnibar?.querySelector('.overlay-backdrop, .overlay-content') ||
-      document.querySelector('[role="dialog"][aria-label="Command Palette"], [aria-label="Command Palette"] [role="dialog"]'));
+      $('[role="dialog"][aria-label="Command Palette"], [aria-label="Command Palette"] [role="dialog"]'));
   }
 
   function isProtectedTurn(turn) {
@@ -220,8 +220,7 @@
       return;
     }
     if (!banner) {
-      banner = document.createElement('div');
-      banner.className = 'sl-load-banner';
+      banner = el('<div class="sl-load-banner"></div>');
       currentParent.insertBefore(banner, currentParent.firstChild);
     }
     const signature = `${count}:${earlier}:${manualReveal}`;
@@ -231,8 +230,7 @@
     const owner = currentParent;
     const route = parentRoute;
     const addButton = (text, action) => {
-      const button = document.createElement('button');
-      button.type = 'button';
+      const button = el('<button type="button"></button>');
       button.textContent = text;
       button.addEventListener('click', () => {
         if (!isActive() || currentParent !== owner || !owner.isConnected || route !== currentRoute()) return;
@@ -294,7 +292,7 @@
     watcherScope.listen(document, 'keydown', event => {
       if (event.key !== 'Enter') return;
       const selector = resultsSelector();
-      if (document.querySelector(`${selector} .result-item[aria-selected="true"], ${selector} [role="option"][aria-selected="true"]`) ||
+      if ($(`${selector} .result-item[aria-selected="true"], ${selector} [role="option"][aria-selected="true"]`) ||
         document.activeElement?.closest(`${selector} .result-item, ${selector} [role="option"]`)) restoreBuffered();
     }, { capture: true });
     watcherScope.listen(document, 'focusin', event => {

@@ -3,6 +3,7 @@
   const embedded = window.self !== window.top;
   document.documentElement.classList.toggle('embedded', embedded);
   const $ = id => document.getElementById(id);
+  const { $$, el, debounce } = window.StudioLabCore;
   const schema = window.StudioLabCatalogSchema;
   let view = window.location.hash === '#profile' ? 'profile' : window.location.hash === '#library' ? 'library' : 'market';
   const searchState = { market: { query: '', kind: 'all' }, library: { query: '', kind: 'all' }, profile: { query: '', kind: 'all' } };
@@ -37,7 +38,10 @@
   let layoutFrame = null;
   let layoutObserver = null;
   let viewport = null;
-  let contrastTimer = null;
+  const showContrastFeedback = debounce((ok, feedback) => {
+    text($('contrast-status'), feedback);
+    $('contrast-status').dataset.invalid = String(!ok);
+  }, 250);
   let editorOwnerId = null;
   let pausedDraft = null;
   let discardPaused = false;
@@ -238,7 +242,7 @@
     ++socialReadGeneration; social.set(asset.id, result.item); renderDetailSocial(); renderMarket(); renderOwn(); if (publicProfile) renderPublicProfile();
     if (restoreFocus) {
       const key = kind === 'like' ? 'like' : 'bookmark';
-      const replacement = control.closest('[data-asset-id]') ? [...document.querySelectorAll('[data-asset-id]')].find(node => node.dataset.assetId === asset.id)?.querySelector('[data-control=' + key + ']') : $('detail-social').querySelector('[data-control=' + key + ']');
+      const replacement = control.closest('[data-asset-id]') ? $$('[data-asset-id]').find(node => node.dataset.assetId === asset.id)?.querySelector('[data-control=' + key + ']') : $('detail-social').querySelector('[data-control=' + key + ']');
       focus(replacement);
     }
     if (kind === 'save') refreshSaved().catch(showError);
@@ -290,13 +294,13 @@
   function showError(error, editor = false) {
     const current = editor ? $('editor-dialog') : topDialog();
     let node = current?.querySelector('[role=alert]');
-    if (!node && current) { node = document.createElement('div'); node.className = 'notice error'; node.setAttribute('role', 'alert'); current.prepend(node); }
+    if (!node && current) { node = el('<div class="notice error" role="alert"></div>'); current.prepend(node); }
     node ||= $('catalog-error'); text(node, message(error)); node.hidden = false;
     if (node.id === 'catalog-error') $('catalog-retry').hidden = false;
     announce(message(error)); scheduleLayout();
   }
   function clearError(editor = false) {
-    const nodes = editor ? [$('editor-error')] : [...document.querySelectorAll('.notice.error')];
+    const nodes = editor ? [$('editor-error')] : $$('.notice.error');
     for (const node of nodes) { text(node, ''); node.hidden = true; }
     if (!editor) $('catalog-retry').hidden = true;
   }
@@ -304,7 +308,7 @@
   function notice(value) {
     const current = topDialog();
     let node = current?.querySelector('.view-notice');
-    if (!node && current) { node = document.createElement('div'); node.className = 'notice view-notice'; node.setAttribute('role', 'status'); node.setAttribute('aria-live', 'polite'); current.append(node); }
+    if (!node && current) { node = el('<div class="notice view-notice" role="status" aria-live="polite"></div>'); current.append(node); }
     node ||= $('catalog-notice'); text(node, value); node.hidden = !value;
     scheduleLayout();
   }
@@ -428,7 +432,7 @@
     for (const [id, target] of [['browse-tab', 'market'], ['library-tab', 'library'], ['profile-tab', 'profile']]) { $(id).setAttribute('aria-selected', String(target === view)); $(id).tabIndex = target === view ? 0 : -1; }
     $('market-query').value = searchState[view].query;
     $('toolbar-create').hidden = view === 'profile';
-    for (const radio of document.querySelectorAll('input[name=market-kind]')) radio.checked = radio.value === searchState[view].kind;
+    for (const radio of $$('input[name=market-kind]')) radio.checked = radio.value === searchState[view].kind;
     const label = view === 'library' ? 'Search saved items' : view === 'profile' ? 'Search your creations' : 'Search themes, prompts, or @creators';
     $('market-query').placeholder = label; text($('catalog-query-label'), label); $('market-search').setAttribute('aria-label', label);
     renderProfile(); syncInlineViews();
@@ -440,7 +444,7 @@
     await refreshCurrent();
   }
   function getFocusable(container) {
-    return Array.from(container.querySelectorAll('button, a[href], input, select, textarea, summary, [tabindex]'))
+    return $$('button, a[href], input, select, textarea, summary, [tabindex]', container)
       .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0 &&
         getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'));
   }
@@ -469,7 +473,7 @@
     const target = dialogTrigger;
     dialogTrigger = null;
     if (focus(target?.node)) return;
-    const buttons = [...document.querySelectorAll('[data-asset-id] button')];
+    const buttons = $$('[data-asset-id] button');
     const match = buttons.find(node => node.closest('[data-asset-id]').dataset.assetId === target?.id &&
       node.dataset.control === target?.control);
     focus(match) || focus($(view === 'market' ? 'market-query' : 'own-heading')) || focus($('main'));
@@ -485,8 +489,8 @@
     const controlKey = control?.dataset.control;
     clearError(editor);
     notice('');
-    const buttons = [...document.querySelectorAll('button')].map(node => [node, node.getAttribute('aria-disabled')]);
-    const inputs = [...document.querySelectorAll('input, textarea, select')].map(node => [node, node.disabled]);
+    const buttons = $$('button').map(node => [node, node.getAttribute('aria-disabled')]);
+    const inputs = $$('input, textarea, select').map(node => [node, node.disabled]);
     for (const [node] of buttons) node.setAttribute('aria-disabled', 'true');
     for (const [node] of inputs) node.disabled = true;
     if (!embedded || !$('editor-dialog').open) $('main').setAttribute('aria-busy', 'true');
@@ -514,7 +518,7 @@
       if ($('detail-dialog').open) renderDetailActions();
       scheduleLayout();
       if (hasUiFocus() && topDialog() && controlDialog?.open && (document.activeElement === document.body || document.activeElement === control)) {
-        const replacement = controlKey && [...controlDialog.querySelectorAll('[data-control]')].find(node => node.dataset.control === controlKey);
+        const replacement = controlKey && $$('[data-control]', controlDialog).find(node => node.dataset.control === controlKey);
         focus(control) || focus(replacement) || focus(getFocusable(controlDialog)[0]);
       }
       if (hasUiFocus() && !topDialog() && (document.activeElement === document.body || document.activeElement === control)) {
@@ -968,7 +972,7 @@
   function fillTheme(value) {
     const theme = schema.upgradeTheme(value);
     editorThemeMode = theme.mode;
-    for (const node of document.querySelectorAll('input[name=theme-mode]')) node.checked = node.value === theme.mode;
+    for (const node of $$('input[name=theme-mode]')) node.checked = node.value === theme.mode;
     for (const key of Object.keys(colorNames)) { $('color-' + key).value = theme.tokens[key]; $('picker-' + key).value = theme.tokens[key]; }
     for (const key of schema.THEME_OPACITY_TOKENS) $('opacity-' + key).value = Number((theme.opacity[key] * 100).toPrecision(15));
     updateThemePreview();
@@ -1018,8 +1022,7 @@
     let feedback = '';
     try { schema.validateTheme(theme); if (valid) applyPreview($('theme-preview'), theme); feedback = 'Readable contrast. Your theme is ready to save.'; }
     catch (error) { valid = false; feedback = message(error); }
-    clearTimeout(contrastTimer);
-    contrastTimer = setTimeout(() => { text($('contrast-status'), feedback); $('contrast-status').dataset.invalid = String(!valid); }, 250);
+    showContrastFeedback(valid, feedback);
   }
   function setEditorKind() {
     const kind = $('asset-kind').value;
@@ -1080,7 +1083,7 @@
     if (!fromDetail) rememberTrigger(!asset && ['create-theme','create-prompt'].includes(control?.id) ? $('create-asset') : control, asset);
     clearError(true);
     $('editor-form').reset();
-    for (const node of document.querySelectorAll('input[name=asset-visibility]')) node.checked = node.value === (!copy && full?.visibility === 'public' && !moderationStates.get(full.id)?.removed ? 'public' : 'private');
+    for (const node of $$('input[name=asset-visibility]')) node.checked = node.value === (!copy && full?.visibility === 'public' && !moderationStates.get(full.id)?.removed ? 'public' : 'private');
     $('asset-kind').value = full?.kind || createKind;
     $('asset-kind').disabled = !!full && !copy;
     $('asset-title').value = copy ? (full.title + ' copy').slice(0, 80) : full?.title || '';
@@ -1160,7 +1163,7 @@
       closeDetail(false);
       showEditor(asset, control, true).then(() => {
         if (!$('editor-dialog').open) return;
-        for (const node of document.querySelectorAll('input[name=asset-visibility]')) node.checked = node.value === 'public';
+        for (const node of $$('input[name=asset-visibility]')) node.checked = node.value === 'public';
         syncEditorPublishing(); focus($('editor-save'));
       });
       return;
@@ -1288,7 +1291,7 @@
   $('next-local').addEventListener('click', () => { if (!busy && localOffset + pageSize < localItems.filter(matchesLibrary).length) { localOffset += pageSize; renderLocal(); focusPage($('local-heading')); } });
   function searchCurrent() { if (busy) return; rememberSearch(); if (view === 'market') refreshMarket(); else if (view === 'library') { localOffset = 0; renderLocal(); refreshSaved().catch(showError); } else refreshOwn().catch(showError); }
   $('market-search').addEventListener('submit', event => { event.preventDefault(); searchCurrent(); });
-  for (const radio of document.querySelectorAll('input[name=market-kind]')) radio.addEventListener('change', searchCurrent);
+  for (const radio of $$('input[name=market-kind]')) radio.addEventListener('change', searchCurrent);
   $('reset-theme').addEventListener('click', () => act($('reset-theme'), async () => { const response = await send('catalogResetTheme'); activeTheme = null; renderLocal(); await refreshLocal().catch(error => showError('The theme was reset, but the library could not refresh. ' + message(error))); return response; }, 'Custom theme reset. Google AI Studio’s appearance is active.'));
   $('import-asset').addEventListener('click', () => { if (!busy) $('import-json').click(); });
   $('import-json').addEventListener('change', importAsset);
@@ -1302,7 +1305,7 @@
     $('asset-kind').value = held.value.kind;
     $('asset-title').value = held.value.title; $('asset-description').value = held.value.description;
     $('asset-author').value = held.value.author_name; $('asset-tags').value = held.value.tags.join(', ');
-    for (const node of document.querySelectorAll('input[name=asset-visibility]')) node.checked = node.value === held.value.visibility;
+    for (const node of $$('input[name=asset-visibility]')) node.checked = node.value === held.value.visibility;
     if (held.value.kind === 'theme') { if (!desktopDevice()) return; fillTheme(held.value.payload); }
     else $('prompt-text').value = held.value.payload.text;
     setEditorKind(); syncEditorPublishing(); editorOriginal = held.original;
@@ -1316,9 +1319,9 @@
   });
   $('asset-kind').addEventListener('change', setEditorKind);
   $('theme-preset').addEventListener('click', () => { if (!busy) fillTheme(defaultTheme(themeMode())); });
-  for (const radio of document.querySelectorAll('input[name=theme-mode]')) radio.addEventListener('change', switchThemeMode);
+  for (const radio of $$('input[name=theme-mode]')) radio.addEventListener('change', switchThemeMode);
   $('prompt-text').addEventListener('input', () => text($('prompt-count'), $('prompt-text').value.length.toLocaleString() + ' / 16,000 characters'));
-  for (const node of document.querySelectorAll('input[name=asset-visibility]')) node.addEventListener('change', syncEditorPublishing);
+  for (const node of $$('input[name=asset-visibility]')) node.addEventListener('change', syncEditorPublishing);
   $('editor-form').addEventListener('submit', saveEditor);
   $('editor-close').addEventListener('click', () => closeEditor());
   $('editor-cancel').addEventListener('click', () => closeEditor());
@@ -1426,7 +1429,7 @@
   }
   window.addEventListener('resize', () => { placeDialogs(); scheduleLayout(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCurrent(!!topDialog()); });
-  window.addEventListener('pagehide', () => { stopped = true; layoutObserver?.disconnect(); clearTimeout(contrastTimer); clearTimeout(searchTimer); if (layoutFrame !== null) cancelAnimationFrame(layoutFrame); layoutFrame = null; });
+  window.addEventListener('pagehide', () => { stopped = true; layoutObserver?.disconnect(); clearTimeout(searchTimer); if (layoutFrame !== null) cancelAnimationFrame(layoutFrame); layoutFrame = null; });
   window.addEventListener('pageshow', () => { if (stopped) { stopped = false; layoutObserver?.observe(document.querySelector('.page')); refreshCurrent(); scheduleLayout(); } });
   renderView();
   text($('page-title'), 'Market');

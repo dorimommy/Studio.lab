@@ -3,6 +3,7 @@
   const embedded = window.self !== window.top;
   document.documentElement.classList.toggle('embedded', embedded);
   const $ = (id) => document.getElementById(id);
+  const { $$, el } = window.StudioLabCore;
   const nodes = Object.fromEntries([
     'main', 'account-live', 'sessions-section', 'sync-heading',
     'message', 'error', 'retry', 'account-badge', 'account-heading', 'identity-description',
@@ -165,14 +166,14 @@
     nodes['owner-applications-previous'].hidden = applicationsOffset === 0; nodes['owner-applications-next'].hidden = applicationsNext === null;
     nodes['owner-applications-previous'].disabled = busy || applicationsReading; nodes['owner-applications-next'].disabled = busy || applicationsReading;
     nodes['owner-applications-empty'].hidden = applications.length > 0 || applicationsReading;
-    for (const control of nodes['owner-applications'].querySelectorAll('button,textarea')) control.disabled = busy || !owner;
+    for (const control of $$('button,textarea', nodes['owner-applications'])) control.disabled = busy || !owner;
     nodes['owner-removed-list'].setAttribute('aria-busy', String(removedCatalogReading));
     nodes['owner-removed-refresh'].disabled = busy || !owner || removedCatalogReading;
     nodes['owner-removed-previous'].hidden = removedCatalogOffset === 0; nodes['owner-removed-next'].hidden = removedCatalogNext === null;
     nodes['owner-removed-previous'].disabled = busy || !owner || removedCatalogReading; nodes['owner-removed-next'].disabled = busy || !owner || removedCatalogReading;
     nodes['owner-removed-empty'].hidden = removedCatalog.length > 0 || removedCatalogReading || !!removedCatalogError;
     setText(nodes['owner-removed-error'], removedCatalogError); nodes['owner-removed-error'].hidden = !removedCatalogError;
-    for (const control of nodes['owner-removed-list'].querySelectorAll('button,input')) control.disabled = busy || !owner || removedCatalogReading || control.dataset.restoreAllowed !== 'true';
+    for (const control of $$('button,input', nodes['owner-removed-list'])) control.disabled = busy || !owner || removedCatalogReading || control.dataset.restoreAllowed !== 'true';
   }
   async function refreshMembership(force = false) {
     const owner = accountOwner(); if (!owner || stopped || busy || membershipReading || !force && Date.now() - membershipReadAt < 15000) return;
@@ -343,12 +344,9 @@
     if (node.dataset.preferences === signature) return;
     node.dataset.preferences = signature;
     node.replaceChildren(...entries.map(([label, value]) => {
-      const row = document.createElement('div');
-      const term = document.createElement('dt');
-      const description = document.createElement('dd');
-      term.textContent = label;
-      description.textContent = value;
-      row.append(term, description);
+      const row = el('<div><dt></dt><dd></dd></div>');
+      row.children[0].textContent = label;
+      row.children[1].textContent = value;
       return row;
     }));
   }
@@ -579,7 +577,7 @@
     if (!response?.settings) return;
     const output = new Blob([JSON.stringify({ schemaVersion: 1, settings: response.settings }, null, 2) + '\n'], { type: 'application/json' });
     const url = URL.createObjectURL(output);
-    const link = document.createElement('a');
+    const link = el('<a></a>');
     link.href = url;
     link.download = 'studio-lab-settings.json';
     document.body.appendChild(link);
@@ -699,7 +697,7 @@
     if (event.defaultPrevented) return;
     if (nodes['confirm-dialog'].open) {
       if (event.key !== 'Tab') return;
-      const controls = Array.from(nodes['confirm-dialog'].querySelectorAll('button, input, [tabindex]'))
+      const controls = $$('button, input, [tabindex]', nodes['confirm-dialog'])
         .filter(element => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length > 0);
       const current = controls.indexOf(document.activeElement);
       if (event.shiftKey && current <= 0) {
@@ -718,9 +716,8 @@
       return;
     }
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(document.querySelectorAll(
-      'button, a[href], input, select, textarea, summary, [tabindex]'
-    )).filter(element => !element.disabled && element.tabIndex >= 0 &&
+    const focusable = $$('button, a[href], input, select, textarea, summary, [tabindex]')
+      .filter(element => !element.disabled && element.tabIndex >= 0 &&
       element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
     const index = focusable.indexOf(document.activeElement);
     if (event.shiftKey && (index <= 0)) {

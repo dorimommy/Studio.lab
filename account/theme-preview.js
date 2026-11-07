@@ -1,11 +1,15 @@
 (function () {
   'use strict';
+  const { $$, scope } = window.StudioLabCore;
+  const lifetime = scope();
 
   // The preview registers only the production MWC module; it loads no main
   // extension registry, storage, network or GAIS application code.
   let modernChat = null;
   let themePreview = null;
-  let feedbackTimer = null;
+  let disposed = false;
+  let previewGeneration = 0;
+  let hideFeedback = null;
   const parameters = new URLSearchParams(location.hash.slice(1));
   const requestId = parameters.get('request') || '';
   const validRequest = /^[a-zA-Z0-9_-]{1,120}$/.test(requestId);
@@ -30,19 +34,19 @@
   let model = models[0];
   let thinkingLevel = 'High';
   const thinkingLevels = Object.freeze(['Low', 'Medium', 'High']);
-  window.StudioLab = Object.freeze({ registerModule(value) {
+  window.StudioLab = { registerModule(value) {
     if (value?.id === 'modern-web-chat') modernChat = value;
-  } });
+  } };
 
   function reply(type, extra = {}) {
-    if (embedded) parent.postMessage({ type, requestId, ...extra }, parentOrigin);
+    if (embedded && !disposed) parent.postMessage({ type, requestId, ...extra }, parentOrigin);
   }
   function feedback(message) {
     const node = document.getElementById('preview-feedback');
     node.textContent = message;
     node.hidden = false;
-    clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => { node.hidden = true; }, 1800);
+    hideFeedback?.();
+    hideFeedback = lifetime.timeout(() => { document.getElementById('preview-feedback').hidden = true; }, 1800);
   }
   const controls = Object.freeze({
     getModel: () => model,
@@ -70,20 +74,34 @@
 
   function applyTheme(value) {
     const clean = window.StudioLabCatalogSchema.validateTheme(value);
+    window.StudioLab.themeEngine?.clearCustomTheme();
     document.body.classList.toggle('light-theme', clean.mode === 'light');
     document.body.classList.toggle('dark-theme', clean.mode === 'dark');
     themePreview.preview(clean);
   }
 
-  window.addEventListener('message', event => {
+  lifetime.on(window, 'message', async event => {
     if (!embedded || event.source !== parent || event.origin !== parentOrigin ||
-        event.data?.type !== 'sl-theme-preview-update' || event.data.requestId !== requestId) return;
+        !['sl-theme-preview-update', 'sl-theme-editor-preview-update'].includes(event.data?.type) || event.data.requestId !== requestId) return;
+    const generation = ++previewGeneration;
     try {
       if (!themePreview) throw new Error('Preview not ready.');
-      applyTheme(event.data.theme);
+      if (event.data.type === 'sl-theme-editor-preview-update') {
+        const clean = await window.StudioLab.themePresets.sanitizeEditorPreview(event.data.config);
+        if (disposed || generation !== previewGeneration) return;
+        const color = clean.mainInterface.uiBase;
+        const rgb = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16));
+        const light = (rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114) / 255 > .6;
+        document.body.classList.toggle('light-theme', light);
+        document.body.classList.toggle('dark-theme', !light);
+        themePreview.endPreview();
+        await window.StudioLab.themeEngine.previewInIsolated(clean);
+        if (disposed || generation !== previewGeneration) return;
+        if (document.body.getAttribute('data-sl-editor-theme') !== 'true') throw new Error('Preview unavailable.');
+      } else applyTheme(event.data.theme);
       reply('sl-theme-preview-applied');
     } catch (_) {
-      reply('sl-theme-preview-error', { error: 'This theme could not be previewed.' });
+      if (!disposed && generation === previewGeneration) reply('sl-theme-preview-error', { error: 'This theme could not be previewed.' });
     }
   });
 
@@ -92,7 +110,7 @@
     else document.body.classList.toggle('sl-preview-nav-collapsed');
   }
 
-  document.addEventListener('DOMContentLoaded', async () => {
+  lifetime.on(document, 'DOMContentLoaded', async () => {
     try {
       if (!modernChat || !window.StudioLabTheme?.start) throw new Error('Preview unavailable.');
       modernChat.init({ state: { modernWebChatEnabled: true }, previewControls: controls });
@@ -100,26 +118,27 @@
       controls.onSettingsToggle(false);
       const standaloneMode = !embedded && new URLSearchParams(location.search).get('appearance') === 'light' ? 'light' : 'dark';
       applyTheme(window.StudioLabCatalogSchema.DEFAULT_THEMES[standaloneMode]);
-      document.querySelectorAll('[aria-label="Open navigation menu"], [aria-label="Collapse navigation menu"]').forEach(button => button.addEventListener('click', toggleNavigation));
-      document.querySelector('[data-preview-thinking]').addEventListener('click', () => document.querySelector('.sl-header-thinking-btn')?.click());
-      document.querySelectorAll('mat-slide-toggle button').forEach(button => button.addEventListener('click', () => {
+      $$('[aria-label="Open navigation menu"], [aria-label="Collapse navigation menu"]').forEach(button => lifetime.on(button, 'click', toggleNavigation));
+      lifetime.on(document.querySelector('[data-preview-thinking]'), 'click', () => document.querySelector('.sl-header-thinking-btn')?.click());
+      lifetime.on(document.querySelector('[aria-label="Close run settings panel"]'), 'click', () => document.querySelector('.sl-header-settings-btn')?.click());
+      $$('mat-slide-toggle button').forEach(button => lifetime.on(button, 'click', () => {
         const on = button.getAttribute('aria-checked') !== 'true';
         button.setAttribute('aria-checked', String(on));
         button.closest('mat-slide-toggle').classList.toggle('mat-mdc-slide-toggle-checked', on);
       }));
       const temperature = document.getElementById('sample-temperature');
-      temperature.addEventListener('input', () => document.querySelector('output[for="sample-temperature"]').textContent = temperature.value);
-      document.querySelector('[data-remove-tool]').addEventListener('click', event => event.currentTarget.closest('.enabled-tool').remove());
+      lifetime.on(temperature, 'input', () => document.querySelector('output[for="sample-temperature"]').textContent = temperature.value);
+      lifetime.on(document.querySelector('[data-remove-tool]'), 'click', event => event.currentTarget.closest('.enabled-tool').remove());
       const runButton = document.querySelector('ms-run-button button');
       runButton.disabled = true;
       runButton.setAttribute('aria-disabled', 'true');
-      document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
+      $$('[data-copy]').forEach(button => lifetime.on(button, 'click', async () => {
         const selectors = { 'sample-prompt': '.chat-turn-container.user .user-chunk', 'sample-code': 'ms-code-block code', 'sample-response': '.chat-turn-container.model ms-text-chunk' };
         const text = document.querySelector(selectors[button.dataset.copy])?.innerText || '';
         try { await navigator.clipboard.writeText(text); feedback('Copied'); }
         catch (_) { feedback('Copy is unavailable in this preview.'); }
       }));
-      document.addEventListener('keydown', event => {
+      lifetime.on(document, 'keydown', event => {
         if (event.key !== 'Escape' || event.defaultPrevented) return;
         if (document.querySelector('.sl-custom-dropdown')) return;
         if (document.body.classList.contains('sl-settings-open')) return;
@@ -128,15 +147,24 @@
       // Ready is sent only after the canonical module and default palette are
       // installed. The parent can then send the draft palette without a flash.
       await document.fonts.ready;
+      const sampleControls = '[data-copy], [data-preview-thinking], [data-remove-tool], mat-slide-toggle button, .sl-header-model-btn, .sl-header-thinking-btn, .sl-header-settings-btn, [aria-label="Open navigation menu"], [aria-label="Collapse navigation menu"], [aria-label="Close run settings panel"]';
+      $$('button').forEach(button => {
+        if (button.matches(sampleControls)) return;
+        button.disabled = true;
+        button.title = 'This action is unavailable in the sample conversation.';
+      });
       reply('sl-theme-preview-ready');
     } catch (_) {
       reply('sl-theme-preview-error', { error: 'Theme preview is unavailable.' });
     }
   }, { once: true });
 
-  window.addEventListener('pagehide', () => {
-    clearTimeout(feedbackTimer);
+  lifetime.on(window, 'pagehide', () => {
+    disposed = true;
+    previewGeneration++;
+    window.StudioLab.themeEngine?.clearCustomTheme();
     themePreview?.endPreview();
     modernChat?.dispose();
+    lifetime.dispose();
   }, { once: true });
 })();

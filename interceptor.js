@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  // SDK: window.StudioLabCore is bundled before this file (MAIN world, no chrome.* here).
+  const { $, $$, el, waitFor } = window.StudioLabCore;
+
   // Capture Angular's internal LView map before bootstrap.
   const _candidateLViewMaps = new Set();
   const _origMapSet = Map.prototype.set;
@@ -117,7 +120,7 @@
         return window.__NG_LVIEW_MAP__;
       }
       // A live DOM context identifies Angular's registry among candidate maps.
-      const probeEls = document.querySelectorAll('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
+      const probeEls = $$('ms-run-settings, ms-prompt-run-settings, ms-system-instructions-panel, app-root, ms-prompt-box');
       for (const el of probeEls) {
         const ctxId = el.__ngContext__;
         if (typeof ctxId === 'number') {
@@ -146,7 +149,7 @@
       const map = this._getMap();
       if (!map) return null;
 
-      const rs = document.querySelector('ms-run-settings, ms-prompt-run-settings');
+      const rs = $('ms-run-settings, ms-prompt-run-settings');
       if (rs && typeof rs.__ngContext__ === 'number' && map.has(rs.__ngContext__)) {
         const lview = map.get(rs.__ngContext__);
         if (Array.isArray(lview)) {
@@ -182,7 +185,7 @@
         if (typeof val === 'string') return val.replace(/^models\//, '');
         if (val && typeof val === 'object' && val.name) return String(val.name).replace(/^models\//, '');
       }
-      const modelSelect = document.querySelector('ms-model-selector span[data-test-id="model-name"]');
+      const modelSelect = $('ms-model-selector span[data-test-id="model-name"]');
       if (modelSelect) return modelSelect.textContent.trim();
       return '';
     },
@@ -224,7 +227,7 @@
         const val = rs.temperature();
         if (typeof val === 'number') return val;
       }
-      const tempInput = document.querySelector('ms-temperature-slider input');
+      const tempInput = $('ms-temperature-slider input');
       if (tempInput) return parseFloat(tempInput.value);
       return 1.0;
     },
@@ -237,7 +240,7 @@
         rs.temperature.set(val);
         return true;
       }
-      const tempInput = document.querySelector('ms-temperature-slider input');
+      const tempInput = $('ms-temperature-slider input');
       if (tempInput) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(tempInput, val);
@@ -261,29 +264,31 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
         return guard() && input.value === text;
       };
-      let textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+      let textarea = $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
       if (textarea) {
         if (callback) callback(apply(textarea));
         else apply(textarea);
         return;
       }
-      const btn = document.querySelector('ms-system-instructions-panel button');
+      const btn = $('ms-system-instructions-panel button');
       if (!btn || !guard()) {
         if (callback) callback(false);
         return;
       }
       btn.click();
-      let attempts = 0;
-      const waitForPanel = () => {
-        if (!guard()) { if (callback) callback(false); return; }
-        textarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
-        if (!textarea && ++attempts < 30) { setTimeout(waitForPanel, 50); return; }
+      const cancelled = {};
+      // Include the initial 50 ms delay in the original 1500 ms deadline.
+      setTimeout(async () => {
+        const result = await waitFor(() => {
+          if (!guard()) return cancelled;
+          return $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+        }, { timeout: 1450, interval: 50 });
+        textarea = result === cancelled ? null : result;
         const applied = apply(textarea);
-        const closeBtn = document.querySelector('button[aria-label="Close panel"]');
+        const closeBtn = $('button[aria-label="Close panel"]');
         if (textarea && guard() && closeBtn) closeBtn.click();
         if (callback) callback(applied);
-      };
-      setTimeout(waitForPanel, 50);
+      }, 50);
     },
 
     getTools() {
@@ -309,7 +314,7 @@
     },
 
     openEditPromptTitleDialog() {
-      const btn = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+      const btn = $('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
       if (btn) {
         try {
           btn.click();
@@ -317,7 +322,7 @@
         } catch (_) {}
       }
       const map = this._getMap();
-      const header = document.querySelector('ms-header');
+      const header = $('ms-header');
       if (map && header && typeof header.__ngContext__ === 'number' && map.has(header.__ngContext__)) {
         const lview = map.get(header.__ngContext__);
         const comp = lview ? lview[8] : null;
@@ -326,7 +331,7 @@
           comp.Ffa.set(true);
           document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           setTimeout(() => {
-            const b = document.querySelector('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
+            const b = $('button[aria-label*="Edit prompt title" i], .page-title button, button[aria-label*="Edit title" i]');
             b?.click();
           }, 30);
           return true;
@@ -396,7 +401,7 @@
     if (signalTools.length > 0) {
       profile.tools = signalTools;
     } else {
-      const toolToggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+      const toolToggles = $$('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
       const toolsState = [];
       toolToggles.forEach(t => {
          const parentRow = t.closest('.ms-run-settings-row') || t.parentElement.parentElement;
@@ -409,11 +414,11 @@
       profile.tools = toolsState;
     }
 
-    const inlineTextarea = document.querySelector('textarea[aria-label="System instructions"], ms-system-instructions textarea');
+    const inlineTextarea = $('textarea[aria-label="System instructions"], ms-system-instructions textarea');
     if (inlineTextarea && inlineTextarea.value) {
       profile.systemInstructions = inlineTextarea.value;
     } else {
-      const panel = document.querySelector('ms-system-instructions-panel');
+      const panel = $('ms-system-instructions-panel');
       const subtitle = panel?.querySelector('.subtitle')?.textContent?.trim();
       if (subtitle && !subtitle.includes('Optional tone and style')) {
         profile.systemInstructions = subtitle;
@@ -480,7 +485,7 @@
       return next();
     }
 
-    const toggles = document.querySelectorAll('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
+    const toggles = $$('ms-prompt-run-settings mat-slide-toggle, ms-run-settings mat-slide-toggle');
     let i = 0;
     function nextToggle() {
       if (i >= toggles.length) return next();
@@ -608,10 +613,33 @@
   }
 
   let responseRecoveryEnabled = true;
+  let interactiveAnswersEnabled = false;
 
   window.addEventListener('__sl_responseRecoveryToggle', (e) => {
     responseRecoveryEnabled = !!e.detail;
   });
+  window.addEventListener('__sl_interactiveAnswersToggle', (event) => {
+    if (typeof event.detail === 'boolean') interactiveAnswersEnabled = event.detail;
+  });
+
+  function interactiveRequestBody(body, rawUrl, method, route) {
+    if (!interactiveAnswersEnabled || typeof body !== 'string' || method !== 'POST' ||
+        route !== window.location.pathname || !/^\/prompts\/(?:new_chat|(?!new_)[A-Za-z0-9_-]+)\/?$/.test(route || '')) return body;
+    try {
+      const url = new URL(rawUrl, 'https://aistudio.google.com');
+      if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return body;
+      const native = ['aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com'].includes(url.hostname) &&
+        /^\/\$rpc\/google\.internal\.alkali\.applications\.makersuite\.v1\.MakerSuiteService\/GenerateContent$/.test(url.pathname);
+      const restModel = /^\/v1(?:beta)?\/models\/([A-Za-z0-9._-]+):(?:generateContent|streamGenerateContent)$/.exec(url.pathname);
+      const rest = url.hostname === 'generativelanguage.googleapis.com' && restModel &&
+        !/(?:image|imagen|video|veo|audio|tts|live)/i.test(restModel[1]);
+      if (!native && !rest) return body;
+      const rewrite = window.StudioLabAnswerGeneration?.rewriteRequest;
+      if (typeof rewrite !== 'function') return body;
+      const next = rewrite(body);
+      return typeof next === 'string' ? next : body;
+    } catch (_) { return body; }
+  }
 
   // Capture native methods before Angular patches them.
   const _origOpen  = XMLHttpRequest.prototype.open;
@@ -894,6 +922,7 @@
     }));
 
     this.__aisuUrl = processedUrl;
+    this.__slRequestMethod = String(method).toUpperCase();
     this.__aisuIsGen = isGenerateContentUrl(processedUrl);
     this.__slPromptOperation = String(method).toUpperCase() === 'POST' ? promptOperation(processedUrl) : null;
     this.__slModelOverride = modelOverride;
@@ -987,6 +1016,7 @@
 
     const request = requestMeta();
     emitRequest(request, modifiedBody);
+    const wireBody = interactiveRequestBody(modifiedBody, this.__aisuUrl, this.__slRequestMethod, request.route);
 
     window.dispatchEvent(new CustomEvent('__sl_generateContentRequest', {
       detail: { url: this.__aisuUrl, model: overrideModelId || DynamicStudioAPI.getModel(), ts: Date.now() }
@@ -1080,7 +1110,7 @@
     });
 
     try {
-      return _origSend.call(this, modifiedBody);
+      return _origSend.call(this, wireBody);
     } catch (error) {
       finish(false);
       throw error;
@@ -1214,7 +1244,7 @@
   window.addEventListener('__sl_download_media', (e) => {
     const detail = e.detail || {};
     const filename = detail.filename || 'download';
-    const target = document.querySelector('[data-sl-dl-target="true"]');
+    const target = $('[data-sl-dl-target="true"]');
     if (!target) return;
     target.removeAttribute('data-sl-dl-target');
 
@@ -1227,10 +1257,9 @@
 
     const img = target.querySelector('img');
     if (img && img.src) {
-      const a = document.createElement('a');
+      const a = el('<a target="_blank"></a>');
       a.href = img.src;
       a.download = filename.includes('.') ? filename : `${filename}.png`;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => a.remove(), 1000);
@@ -1246,9 +1275,10 @@
     let url = typeof input === 'string' ? input
       : (input && (input.url || input.href)) || '';
     const isGen = isGenerateContentUrl(url);
+    const method = String(init?.method || input?.method || 'GET').toUpperCase();
     // Capture ownership before reading a Request body asynchronously.
     const request = isGen ? requestMeta() : null;
-    const operation = String(init?.method || input?.method || 'GET').toUpperCase() === 'POST' ? promptOperation(url) : null;
+    const operation = method === 'POST' ? promptOperation(url) : null;
     const save = operation ? promptSaveMeta(operation) : null;
     const modelOverride = isGen ? currentModelOverride() : null;
     let requestBody = init && typeof init.body === 'string' ? init.body : null;
@@ -1261,21 +1291,21 @@
       } catch (_) { /* A disturbed/unreadable body retains native fetch behavior. */ }
     }
 
+    const rewrittenUrl = modelOverride ? rewriteModelUrl(url, modelOverride) : url;
+    const canonicalBody = modelOverride ? rewriteModelBody(requestBody, modelOverride) : requestBody;
+    const supportedBody = !init || init.body === undefined || typeof init.body === 'string';
+    const wireBody = request && supportedBody ? interactiveRequestBody(canonicalBody, rewrittenUrl, method, request.route) : canonicalBody;
+    if (isRequest && effectiveRequest && (rewrittenUrl !== url || wireBody !== requestBody)) {
+      const redirected = rewrittenUrl !== url ? new Request(rewrittenUrl, effectiveRequest) : effectiveRequest;
+      input = wireBody !== requestBody ? new Request(redirected, { body: wireBody }) : redirected;
+      init = undefined;
+    } else {
+      if (modelOverride && (typeof input === 'string' || typeof URL !== 'undefined' && input instanceof URL)) input = rewrittenUrl;
+      if (init && typeof init.body === 'string' && wireBody !== requestBody) init = { ...init, body: wireBody };
+    }
+    url = rewrittenUrl;
+    requestBody = canonicalBody;
     if (modelOverride) {
-      const rewrittenUrl = rewriteModelUrl(url, modelOverride);
-      const rewrittenBody = rewriteModelBody(requestBody, modelOverride);
-      if (typeof input === 'string') {
-        input = rewrittenUrl;
-      } else if (typeof URL !== 'undefined' && input instanceof URL) {
-        input = rewrittenUrl;
-      } else if (isRequest && effectiveRequest) {
-        const redirected = new Request(rewrittenUrl, effectiveRequest);
-        input = rewrittenBody !== requestBody ? new Request(redirected, { body: rewrittenBody }) : redirected;
-        init = undefined; // The caller's init was merged into effectiveRequest.
-      }
-      url = rewrittenUrl;
-      if (init && typeof init.body === 'string' && rewrittenBody !== requestBody) init = { ...init, body: rewrittenBody };
-      requestBody = rewrittenBody;
       console.log(
         '%c[Studio.lab] 🔄 Model swapped in fetch request: ' + overrideModelId,
         'color:#87a9ff;font-weight:bold'
@@ -1334,7 +1364,7 @@
   function emitBuildInfo() {
     try {
       const toggles = window._F_toggles_default_MakerSuite || null;
-      const scripts = document.querySelectorAll('script[src*="boq-makersuite"]');
+      const scripts = $$('script[src*="boq-makersuite"]');
       let buildId = null;
       if (scripts.length > 0) {
         const src = scripts[0].src;

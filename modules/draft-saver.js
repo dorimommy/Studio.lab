@@ -1,19 +1,25 @@
+
 // Drafts belong to one AI Studio route and use extension-private storage, never host localStorage.
 (function () {
   'use strict';
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, el, onAdded, scope, store, waitFor } = window.StudioLabCore;
+
   const PREFIX = 'sl_draft_v2_';
   const MAX_AGE = 72 * 60 * 60 * 1000;
   const MAX_TEXT = 500000;
   const MAX_DRAFTS = 20;
   const MAX_BYTES = 4 * 1024 * 1024;
-  let ctxRef, activeTextarea, indicatorEl, saveTimer, restoreTimer, pendingSave, observer;
+
+  const io = scope();
+
+  let ctxRef, activeTextarea, indicatorEl, saveTimer, pendingSave, disposeObserver;
   let activeRoute = null;
   let revision = 0;
   let restoring = false;
   let enabled = false;
   let storageQueue = Promise.resolve();
-  const listeners = [];
+  let textareaWait = null;
   const sentAt = new Map();
   const requests = new Map();
 
@@ -23,17 +29,6 @@
   function keyFor(path) { return PREFIX + encodeURIComponent(path); }
   function log(message, type = 'warn') {
     if (window.StudioLab.log) window.StudioLab.log(message, type);
-  }
-  function storage(method, value) {
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.storage.local[method](value, result => {
-          const error = chrome.runtime && chrome.runtime.lastError;
-          if (error) reject(new Error(error.message));
-          else resolve(result);
-        });
-      } catch (error) { reject(error); }
-    });
   }
   function enqueue(work) {
     storageQueue = storageQueue.then(work).catch(() => {
@@ -48,7 +43,7 @@
       Date.now() - value.ts <= MAX_AGE && value.ts > (sentAt.get(path) || 0));
   }
   async function pruneDrafts(incoming) {
-    const all = await storage('get', null);
+    const all = await store.get(null);
     if (incoming) all[keyFor(incoming.route)] = incoming;
     const retained = [], remove = [];
     Object.entries(all || {}).forEach(([key, value]) => {
@@ -62,7 +57,7 @@
       bytes += new Blob([key, JSON.stringify(value)]).size;
       if (index >= MAX_DRAFTS || bytes > MAX_BYTES) remove.push(key);
     });
-    if (remove.length) await storage('remove', remove);
+    if (remove.length) await store.remove(remove);
   }
   function savePending() {
     clearTimeout(saveTimer);
@@ -71,16 +66,18 @@
     pendingSave = null;
     if (!draft) return;
     enqueue(async () => {
-      if (!draft.text.trim()) await storage('remove', keyFor(draft.route));
+      if (!draft.text.trim()) await store.remove(keyFor(draft.route));
       else if (draft.text.length <= MAX_TEXT && draft.ts > (sentAt.get(draft.route) || 0)) {
         // Make room before writing so the new draft does not first hit Chrome's quota.
         await pruneDrafts(draft);
-        await storage('set', { [keyFor(draft.route)]: draft });
+        await store.set({ [keyFor(draft.route)]: draft });
       }
     });
   }
   function onInput(event) {
     if (!enabled || restoring || !isPromptTextarea(event.target) || !route()) return;
+    textareaWait?.abort();
+    textareaWait = null;
     revision++;
     activeTextarea = event.target;
     activeRoute = route();
@@ -92,7 +89,7 @@
       log('Draft is too large to autosave (500,000 character limit).');
       const oversizedRoute = pendingSave.route;
       pendingSave = null;
-      enqueue(() => storage('remove', keyFor(oversizedRoute)));
+      enqueue(() => store.remove(keyFor(oversizedRoute)));
       return;
     }
     saveTimer = setTimeout(savePending, 300);
@@ -118,8 +115,8 @@
     }
     enqueue(async () => {
       const key = keyFor(path);
-      const saved = await storage('get', [key]);
-      if (!submissionTime || !saved?.[key] || saved[key].ts <= submissionTime) await storage('remove', key);
+      const saved = await store.get([key]);
+      if (!submissionTime || !saved?.[key] || saved[key].ts <= submissionTime) await store.remove(key);
     });
     removeLegacyDraft(path);
   }
@@ -139,15 +136,15 @@
     if (!enabled || !request || !data.ok || request.route !== data.route) return;
     // A rerun can generate while an unrelated unsent prompt is still in the
     // editor. Never invalidate that draft, or a newer draft typed mid-stream.
-    const textarea = document.querySelector('ms-prompt-box textarea');
+    const textarea = $('ms-prompt-box textarea');
     if (route() !== request.route || !textarea || textarea.value.trim()) return;
     clearDraft(request.route, request.ts);
   }
   async function readDraft(path) {
     const key = keyFor(path);
-    const values = await storage('get', [key]);
+    const values = await store.get([key]);
     if (validDraft(values && values[key], path)) return values[key];
-    if (values && values[key]) await storage('remove', key);
+    if (values && values[key]) await store.remove(key);
     if (sentAt.has(path)) return null;
     // Migrate only the exact-route legacy record, never the cross-chat "latest".
     let legacy;
@@ -156,28 +153,30 @@
     const migrated = legacy && { version: 2, route: legacy.path, text: legacy.text, ts: legacy.ts };
     if (!validDraft(migrated, path)) return null;
     await pruneDrafts(migrated);
-    await storage('set', { [key]: migrated });
+    await store.set({ [key]: migrated });
     removeLegacyDraft(path);
     return migrated;
   }
   function isPromptTextarea(element) {
     return !!(element && element.tagName === 'TEXTAREA' && element.closest('ms-prompt-box'));
   }
-  function watchTextarea() {
-    clearTimeout(restoreTimer);
+
+  async function watchTextarea() {
+    textareaWait?.abort();
+    textareaWait = null;
     if (!enabled || !route()) return;
+    const controller = new AbortController();
+    textareaWait = controller;
     const expectedRoute = route(), expectedRevision = revision;
-    let attempts = 0;
-    function poll() {
-      if (!enabled || route() !== expectedRoute || revision !== expectedRevision) return;
-      const textarea = document.querySelector('ms-prompt-box textarea');
-      if (textarea) {
-        activeTextarea = textarea;
-        activeRoute = expectedRoute;
-        attemptRestore(textarea, expectedRoute, expectedRevision);
-      } else if (++attempts < 40) restoreTimer = setTimeout(poll, 250);
-    }
-    poll();
+    const textarea = await waitFor(() => {
+      if (!enabled || route() !== expectedRoute || revision !== expectedRevision) return null;
+      return $('ms-prompt-box textarea');
+    }, { timeout: 10000, interval: 250, signal: controller.signal });
+    if (textareaWait === controller) textareaWait = null;
+    if (!textarea || !enabled || route() !== expectedRoute || revision !== expectedRevision) return;
+    activeTextarea = textarea;
+    activeRoute = expectedRoute;
+    attemptRestore(textarea, expectedRoute, expectedRevision);
   }
   function attemptRestore(textarea, expectedRoute, expectedRevision) {
     if (textarea.value && textarea.value.trim()) return;
@@ -203,19 +202,15 @@
     removeIndicator();
     const promptBox = textarea.closest('ms-prompt-box');
     if (!promptBox) return;
-    indicatorEl = document.createElement('div');
-    indicatorEl.className = 'sl-draft-indicator';
-    const icon = document.createElement('span');
-    icon.className = 'material-symbols-outlined notranslate sl-draft-icon';
-    icon.textContent = 'history';
-    const label = document.createElement('span');
-    label.className = 'sl-draft-indicator-text';
-    label.textContent = 'Restored unsaved draft';
-    const discard = document.createElement('button');
-    discard.type = 'button';
-    discard.className = 'sl-draft-discard-btn';
-    discard.textContent = 'Discard';
-    discard.onclick = event => {
+    indicatorEl = el(
+      '<div class="sl-draft-indicator">' +
+      '<span class="material-symbols-outlined notranslate sl-draft-icon">history</span>' +
+      '<span class="sl-draft-indicator-text">Restored unsaved draft</span>' +
+      '<button type="button" class="sl-draft-discard-btn">Discard</button>' +
+      '<button type="button" class="sl-draft-close-btn" title="Dismiss">×</button>' +
+      '</div>'
+    );
+    $('.sl-draft-discard-btn', indicatorEl).onclick = event => {
       event.preventDefault();
       event.stopPropagation();
       clearDraft(route());
@@ -224,39 +219,39 @@
       finally { restoring = false; }
       removeIndicator();
     };
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'sl-draft-close-btn';
-    close.title = 'Dismiss';
-    close.textContent = '\u00d7';
-    close.onclick = event => { event.preventDefault(); event.stopPropagation(); removeIndicator(); };
-    indicatorEl.append(icon, label, discard, close);
+    $('.sl-draft-close-btn', indicatorEl).onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      removeIndicator();
+    };
     promptBox.prepend(indicatorEl);
   }
   function removeIndicator() {
     if (indicatorEl) indicatorEl.remove();
     indicatorEl = null;
   }
+
   function updateEnabled() {
     const next = !!(ctxRef && ctxRef.state.draftSaverEnabled);
     if (next === enabled) return;
     revision++;
     enabled = next;
-    clearTimeout(restoreTimer);
-    if (observer) observer.disconnect();
+    textareaWait?.abort();
+    textareaWait = null;
+    if (disposeObserver) { disposeObserver(); disposeObserver = null; }
     if (!enabled) {
       savePending();
       activeTextarea = null;
       removeIndicator();
       return;
     }
-    observer = new MutationObserver(() => {
-      const textarea = document.querySelector('ms-prompt-box textarea');
-      if (textarea && textarea !== activeTextarea) watchTextarea();
-    });
-    if (document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
+    if (document.documentElement) {
+      disposeObserver = onAdded(document.documentElement, 'ms-prompt-box textarea',
+        node => { if (node !== activeTextarea) watchTextarea(); });
+    }
     watchTextarea();
   }
+
   window.StudioLab.registerModule({
     id: 'draft-saver', group: 'tweaks', order: 25,
     title: 'Draft Crash Protection', subtitle: 'autosave-unsent-prompts', icon: 'storage',
@@ -267,11 +262,10 @@
     ],
     init(ctx) {
       ctxRef = ctx;
-      const listen = (target, name, handler) => { target.addEventListener(name, handler); listeners.push(() => target.removeEventListener(name, handler)); };
-      listen(document, 'input', onInput);
-      listen(window, '__sl_requestPayload', onRequest);
-      listen(window, '__sl_requestFinished', onFinished);
-      listen(window, 'pagehide', savePending);
+      io.on(document, 'input', onInput);
+      io.on(window, '__sl_requestPayload', onRequest);
+      io.on(window, '__sl_requestFinished', onFinished);
+      io.on(window, 'pagehide', savePending);
       enqueue(pruneDrafts);
       updateEnabled();
     },
@@ -290,9 +284,10 @@
       savePending();
       enabled = false;
       revision++;
-      clearTimeout(restoreTimer);
-      if (observer) observer.disconnect();
-      listeners.splice(0).forEach(dispose => dispose());
+      textareaWait?.abort();
+      textareaWait = null;
+      if (disposeObserver) { disposeObserver(); disposeObserver = null; }
+      io.dispose();
       requests.clear();
       removeIndicator();
     }

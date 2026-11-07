@@ -4,6 +4,8 @@
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
 
+  const { $, scope, store } = window.StudioLabCore;
+
   const STORAGE_KEY = 'sl_defaultProfile';
   const LIBRARY_KEY = 'sl_sysInstLibrary';
   const INSTALLED_KEY = 'slInstalledAssets';
@@ -42,13 +44,13 @@
         else resolve(result);
       }
       try {
-        chrome.storage.local[method](value, result => {
-          if (!isActive()) { finish(contextError()); return; }
-          try {
-            const error = chrome.runtime?.lastError;
-            finish(error ? new Error(error.message) : null, result);
-          } catch (error) { finish(error); }
-        });
+        store[method](value).then(
+          result => {
+            if (!isActive()) { finish(contextError()); return; }
+            finish(null, result);
+          },
+          error => finish(error instanceof Error ? error : new Error(String((error && error.message) || error)))
+        );
       } catch (error) { finish(error); }
     });
   }
@@ -268,14 +270,14 @@
     `,
     bindControls: (modalEl, ctx) => {
       if (!isActive()) return () => {};
-      const select = modalEl.querySelector('#sl-profile-instruction');
-      const save = modalEl.querySelector('#sl-profile-save');
-      const clear = modalEl.querySelector('#sl-profile-clear');
-      const syncButton = modalEl.querySelector('#sl-profile-sync');
-      const status = modalEl.querySelector('#sl-profile-status');
-      const fields = modalEl.querySelector('[data-sl-controls-for="default-profile"]');
+      const select = $('#sl-profile-instruction', modalEl);
+      const save = $('#sl-profile-save', modalEl);
+      const clear = $('#sl-profile-clear', modalEl);
+      const syncButton = $('#sl-profile-sync', modalEl);
+      const status = $('#sl-profile-status', modalEl);
+      const fields = $('[data-sl-controls-for="default-profile"]', modalEl);
       const styledSelect = window.StudioLabSelect?.enhance(select);
-      const removers = [];
+      const bindScope = scope();
       let disposed = false;
       let busy = false;
       let pendingClearHide = false;
@@ -286,13 +288,12 @@
       const disposeBinding = lifetime.add(() => {
         disposed = true;
         styledSelect?.dispose();
-        removers.forEach(remove => remove());
+        bindScope.dispose();
         if (rebuildInstructionSelect === rebuildSelect) rebuildInstructionSelect = null;
       });
       function listen(target, type, callback) {
         if (!target) return;
-        target.addEventListener(type, callback);
-        removers.push(() => target.removeEventListener(type, callback));
+        bindScope.on(target, type, callback);
       }
       function report(message) {
         if (disposed) return;
@@ -349,7 +350,7 @@
         const revision = ++statsRevision;
         readStorage([STORAGE_KEY, LIBRARY_KEY, INSTALLED_KEY]).then(data => {
           if (disposed || statsRevision !== revision) return;
-          const stats = modalEl.querySelector('#sl-current-profile-stats');
+          const stats = $('#sl-current-profile-stats', modalEl);
           const profile = data[STORAGE_KEY];
           if (!stats) return;
           if (clear) {
@@ -417,7 +418,7 @@
         };
         try {
           storageChanges.addListener(changed);
-          removers.push(() => {
+          bindScope.add(() => {
             try { storageChanges.removeListener(changed); }
             catch (error) { if (!handleError(error)) throw error; }
           });

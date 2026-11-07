@@ -3,11 +3,17 @@
 
   if (window.__slProgressiveChatRender) return;
 
+  const { $, observe, scope } = window.StudioLabCore;
+
   const PREFERENCE_KEY = 'sl_initialChatRenderEnabled';
   const JUMP_SELECTOR = 'ms-items-scrollbar [data-test-item-id], .sl-toc-dash, .sl-toc-item';
   const SEARCH_SELECTOR = 'button[aria-label="Search (Ctrl /)"]';
   const REMAINING_ATTRIBUTE = 'data-sl-older-turns';
   const BATCH_SIZE = 20;
+  const layouts = [
+    { ids: 'd5', owner: 'Ipa', element: 'Ma', sideBySide: 'zq', agent: 'x_', groupIds: 'nE', unwrap: 'Wg', repeat: 'Fg' },
+    { ids: 'T5', owner: 'Kqa', element: 'Oa', sideBySide: 'Tq', agent: 'j0', groupIds: 'yE', unwrap: 'Tg', repeat: 'Bg' }
+  ];
   const states = new Set();
   const renderIndexes = new WeakMap();
   const scrollChecks = new WeakMap();
@@ -29,7 +35,7 @@
   let materializing = false;
   let materializedRoute = null;
   let removalObserver = null;
-  const bootstrapCleanups = [];
+  const bootstrapScope = scope();
   try { enabled = window.localStorage.getItem(PREFERENCE_KEY) !== 'false'; } catch (_) {}
 
   Object.defineProperty(window, '__slProgressiveChatRender', { configurable: true, value: Object.freeze({
@@ -72,15 +78,15 @@
     cancelPending(state);
     state.observer?.disconnect();
     state.observer = null;
-    state.context.Ma?.nativeElement?.removeAttribute(REMAINING_ATTRIBUTE);
+    state.context[state.layout.element]?.nativeElement?.removeAttribute(REMAINING_ATTRIBUTE);
     state.requested = 0;
     state.olderIntent = false;
     states.delete(state.reference);
-    if (!states.size) { removalObserver?.disconnect(); removalObserver = null; }
+    if (!states.size) { removalObserver?.(); removalObserver = null; }
   }
 
   function current(state) {
-    const connected = state.context.Ma?.nativeElement?.isConnected;
+    const connected = state.context[state.layout.element]?.nativeElement?.isConnected;
     if (state.cancelled || connected === false || state.route !== window.location.href) {
       release(state);
       state.cancelled = true;
@@ -100,14 +106,13 @@
 
   function watchRemoval() {
     if (removalObserver) return;
-    removalObserver = new MutationObserver(records => {
+    removalObserver = observe(document.documentElement || document, { childList: true, subtree: true }, records => {
       if (!records.some(record => record.removedNodes?.length)) return;
-      for (const state of activeStates()) if (!state.context.Ma?.nativeElement?.isConnected) {
+      for (const state of activeStates()) if (!state.context[state.layout.element]?.nativeElement?.isConnected) {
         release(state);
         state.cancelled = true;
       }
     });
-    removalObserver.observe(document.documentElement || document, { childList: true, subtree: true });
   }
 
   function requestOlder(state, count) {
@@ -128,9 +133,9 @@
     state.observer?.disconnect();
     state.observer = null;
     state.nearTop = false;
-    const session = state.context.Ma?.nativeElement;
-    state.scroller = session?.querySelector('ms-autoscroll-container');
-    const oldest = session?.querySelector('ms-chat-turn');
+    const session = state.context[state.layout.element]?.nativeElement;
+    state.scroller = session ? $('ms-autoscroll-container', session) : undefined;
+    const oldest = session ? $('ms-chat-turn', session) : undefined;
     if (!state.scroller || !oldest || typeof IntersectionObserver !== 'function') return;
     const reference = state.reference;
     const observer = new IntersectionObserver(entries => {
@@ -160,7 +165,7 @@
     const session = element?.closest?.('ms-chat-session');
     if (!session) return null;
     for (const state of activeStates()) {
-      if (state.context.Ma?.nativeElement === session && current(state)) return state;
+      if (state.context[state.layout.element]?.nativeElement === session && current(state)) return state;
     }
     return null;
   }
@@ -218,12 +223,12 @@
     if (!(entities instanceof Map)) return null;
     let result = start;
     while (result > 0 && entities.get(ids[result])?.thought && entities.get(ids[result - 1])?.thought) result--;
-    if (state.context.x_?.()) {
+    if (state.context[state.layout.agent]?.()) {
       const groups = state.context.turns?.();
       if (!Array.isArray(groups)) return null;
-      const group = groups.find(item => Array.isArray(item?.nE) && item.nE.includes(ids[result]));
+      const group = groups.find(item => Array.isArray(item?.[state.layout.groupIds]) && item[state.layout.groupIds].includes(ids[result]));
       if (!group) return null;
-      const first = ids.indexOf(group.nE[0]);
+      const first = ids.indexOf(group[state.layout.groupIds][0]);
       if (first < 0 || first > result) return null;
       result = first;
     }
@@ -234,8 +239,8 @@
   function visibleIds(state) {
     state.epoch();
     const tick = state.count();
-    const ids = state.context.d5();
-    const owner = state.context.Ipa();
+    const ids = state.context[state.layout.ids]();
+    const owner = state.context[state.layout.owner]();
     if (!Array.isArray(ids)) return ids;
     if (state.owner !== owner) {
       cancelPending(state);
@@ -255,7 +260,7 @@
     }
     total = ids.length;
     if (!enabled || !savedChat() || state.cancelled || state.full ||
-        materializedRoute === window.location.href || state.context.zq?.()) {
+        materializedRoute === window.location.href || state.context[state.layout.sideBySide]?.()) {
       state.full = true;
       release(state);
       rendered = ids.length;
@@ -402,12 +407,12 @@
     scrollHookActive = true;
   }
 
-  function makeProxy(context, signal) {
+  function makeProxy(context, signal, layout) {
     if (!context || typeof WeakRef !== 'function') return context;
-    const descriptor = Object.getOwnPropertyDescriptor(context, 'd5');
-    if (typeof context.d5 !== 'function' || typeof context.Ipa !== 'function' ||
+    const descriptor = Object.getOwnPropertyDescriptor(context, layout.ids);
+    if (typeof context[layout.ids] !== 'function' || typeof context[layout.owner] !== 'function' ||
         typeof context.A?.F !== 'function' || descriptor && descriptor.configurable === false && descriptor.writable === false) return context;
-    const state = { context, owner: undefined, count: signal(0), epoch: signal(0), base: 0, start: null,
+    const state = { context, layout, owner: undefined, count: signal(0), epoch: signal(0), base: 0, start: null,
       full: false, cancelled: false, route: window.location.href, timer: null, idle: null, frame: null,
       slice: null, work: null, costPerRow: null, frameInterval: 16, revision: 0, requested: 0,
       needsObserver: false, observer: null, scroller: null, nearTop: false, olderIntent: false, touchY: null, pointerScroll: false };
@@ -418,14 +423,14 @@
       catch (_) {
         state.full = true;
         release(state);
-        const ids = context.d5();
+        const ids = context[layout.ids]();
         if (Array.isArray(ids)) total = rendered = ids.length;
         return Array.isArray(ids) ? windowIds(state, ids, 0) : ids;
       }
     };
     const proxy = new Proxy(context, {
       get(target, property) {
-        if (property === 'd5') return read;
+        if (property === layout.ids) return read;
         const value = Reflect.get(target, property, target);
         if (typeof value !== 'function' || Object.hasOwn(target, property)) return value;
         let prototype = Object.getPrototypeOf(target);
@@ -455,6 +460,7 @@
   }
 
   window.addEventListener('__sl_restoreAllTurns', () => materializeAll(false));
+  window.addEventListener('__sl_bulkCleanupStart', () => materializeAll(false));
   window.addEventListener('__sl_requestOlderTurns', event => {
     const count = event.detail?.count;
     if (typeof count !== 'number' || !Number.isFinite(count)) return;
@@ -558,27 +564,32 @@
 
   function compatibleTemplate(metadata) {
     if (!Array.isArray(metadata?.da) || metadata.da.length !== 1 ||
-        JSON.stringify(metadata.da[0]) !== '["ms-chat-session"]' || typeof metadata.template !== 'function') return false;
+        JSON.stringify(metadata.da[0]) !== '["ms-chat-session"]' || typeof metadata.template !== 'function') return null;
     const source = Function.prototype.toString.call(metadata.template).replace(/\s+/g, '');
-    return source.includes('"ms-autoscroll-container"') && /\b([\w$]+)=([\w$]+)\.Wg\(([\w$]+)\.d5\(\)\)/.test(source) &&
-      /\.Fg\([\w$]+\)/.test(source) && source.includes('"scroll"') && source.includes('"keydown"');
+    if (!source.includes('"ms-autoscroll-container"') || !source.includes('"scroll"') || !source.includes('"keydown"')) return null;
+    return layouts.find(layout => new RegExp('\\b([\\w$]+)=([\\w$]+)\\.' + layout.unwrap + '\\(([\\w$]+)\\.' + layout.ids + '\\(\\)\\)').test(source) &&
+      new RegExp('\\.' + layout.repeat + '\\([\\w$]+\\)').test(source)) || null;
   }
 
   function finish(nextStatus) {
     status = nextStatus;
     if (bootstrapTimer !== null) clearTimeout(bootstrapTimer);
     bootstrapTimer = null;
-    for (const cleanup of bootstrapCleanups.splice(0).reverse()) {
-      try { cleanup(); } catch (_) {}
-    }
+    bootstrapScope.dispose();
     retainExport = null;
   }
 
   function watchExport(namespace) {
     if (!namespace || typeof namespace !== 'object') { finish('unsupported'); return; }
-    const descriptor = Object.getOwnPropertyDescriptor(namespace, 'x');
+    const retain = ['x', 'w'].map(name => watchComponentExport(namespace, name)).filter(Boolean);
+    if (!retain.length) { finish('unsupported'); return; }
+    retainExport = () => retain.reduce((active, watch) => watch() || active, false);
+  }
+
+  function watchComponentExport(namespace, name) {
+    const descriptor = Object.getOwnPropertyDescriptor(namespace, name);
     if (descriptor && (!('value' in descriptor) || !descriptor.configurable || !descriptor.writable)) {
-      finish('unsupported'); return;
+      return null;
     }
     let assigned = !!descriptor, original = descriptor?.value, wrapper = null;
     const wrap = native => {
@@ -588,9 +599,9 @@
           try { coalesceScrollChecks(metadata); } catch (_) {}
         }
         if (Array.isArray(metadata?.da) && metadata.da.some(selector => Array.isArray(selector) && selector[0] === 'ms-chat-session')) {
-          let supported = false;
-          try { supported = compatibleTemplate(metadata) && compatibleSignal(namespace.N); } catch (_) {}
-          if (!supported) {
+          let layout = null;
+          try { if (compatibleSignal(namespace.N)) layout = compatibleTemplate(metadata); } catch (_) {}
+          if (!layout) {
             finish('unsupported');
             return Reflect.apply(native, this, arguments);
           }
@@ -601,7 +612,7 @@
             if (!context || typeof context !== 'object') return Reflect.apply(template, this, arguments);
             let proxy = byContext.get(context);
             if (!proxy) {
-              try { proxy = makeProxy(context, signal); } catch (_) { proxy = context; }
+              try { proxy = makeProxy(context, signal, layout); } catch (_) { proxy = context; }
               byContext.set(context, proxy);
             }
             const started = now();
@@ -626,7 +637,7 @@
                   state.commitPending = false;
                   state.revision++;
                   state.needsObserver = state.start > 0 && !state.full;
-                  const session = state.context.Ma?.nativeElement;
+                  const session = state.context[state.layout.element]?.nativeElement;
                   if (state.start > 0 && !state.full && enabled && state.route === window.location.href) {
                     session?.setAttribute(REMAINING_ATTRIBUTE, String(state.start));
                   } else session?.removeAttribute(REMAINING_ATTRIBUTE);
@@ -653,18 +664,18 @@
     let value = wrap(original);
     const getter = () => value;
     const setter = next => { assigned = true; original = next; value = wrap(next); };
-    Object.defineProperty(namespace, 'x', { configurable: true, enumerable: descriptor?.enumerable ?? true, get: getter, set: setter });
-    bootstrapCleanups.push(() => {
-      const current = Object.getOwnPropertyDescriptor(namespace, 'x');
+    Object.defineProperty(namespace, name, { configurable: true, enumerable: descriptor?.enumerable ?? true, get: getter, set: setter });
+    bootstrapScope.add(() => {
+      const current = Object.getOwnPropertyDescriptor(namespace, name);
       if (current?.get !== getter && current?.value !== wrapper) return;
-      if (!assigned) delete namespace.x;
-      else Object.defineProperty(namespace, 'x', { value: original, configurable: true, writable: true, enumerable: descriptor?.enumerable ?? true });
+      if (!assigned) delete namespace[name];
+      else Object.defineProperty(namespace, name, { value: original, configurable: true, writable: true, enumerable: descriptor?.enumerable ?? true });
     });
-    retainExport = () => {
+    return () => {
       if (typeof original !== 'function' || typeof wrapper !== 'function') return false;
-      const current = Object.getOwnPropertyDescriptor(namespace, 'x');
+      const current = Object.getOwnPropertyDescriptor(namespace, name);
       if (current?.get !== getter) return current?.value === wrapper;
-      Object.defineProperty(namespace, 'x', { value: wrapper, configurable: true, writable: true, enumerable: descriptor?.enumerable ?? true });
+      Object.defineProperty(namespace, name, { value: wrapper, configurable: true, writable: true, enumerable: descriptor?.enumerable ?? true });
       return true;
     };
   }
@@ -684,7 +695,7 @@
         watchExport(next);
       };
       Object.defineProperty(window, 'default_MakerSuite', { configurable: true, enumerable: descriptor?.enumerable ?? true, get: getter, set: setter });
-      bootstrapCleanups.push(() => {
+      bootstrapScope.add(() => {
         const current = Object.getOwnPropertyDescriptor(window, 'default_MakerSuite');
         if (current?.get !== getter || current.set !== setter) return;
         const expiredHeightWatch = descriptor?.get && window.__slInitialChatRender?.status === 'unsupported';

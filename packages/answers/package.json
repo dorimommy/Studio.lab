@@ -1,0 +1,10 @@
+{
+  "name": "@studiolab/answers",
+  "version": "0.1.0",
+  "description": "Studio.lab interactive answer protocol and local components.",
+  "type": "module",
+  "exports": {
+    "./schema": "./src/schema.js"
+  },
+  "license": "Apache-2.0"
+}

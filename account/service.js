@@ -88,7 +88,11 @@
     async function applyLocal(settings) {
       // Preference sync changes only this allowlist. Catalog documents have a
       // separate, explicit API and are never implicitly included in a backup.
-      await chrome.storage.local.set({ slState: schema.sanitizeSettings(settings, { strict: true }) });
+      const clean = schema.sanitizeSettings(settings, { strict: true });
+      const stored = await chrome.storage.local.get(['slState']);
+      const current = stored.slState && typeof stored.slState === 'object' && !Array.isArray(stored.slState)
+        ? stored.slState : {};
+      await chrome.storage.local.set({ slState: { ...current, ...clean } });
     }
     function userView(user) {
       if (!user || !UUID.test(user.id || '')) throw failure('invalid_session', 'The account session was invalid. Sign in again.');
@@ -859,7 +863,9 @@
         return { ok: true, removed: true };
       }
       if (message.command === 'catalogResetTheme') {
-        await chrome.storage.local.set({ slActiveTheme: null });
+        const stored = await chrome.storage.local.get(['slState']);
+        const current = stored.slState && typeof stored.slState === 'object' && !Array.isArray(stored.slState) ? stored.slState : {};
+        await chrome.storage.local.set({ slActiveTheme: null, slState: { ...current, activeThemeId: 'original' } });
         return { ok: true, applied: true };
       }
       if (message.command === 'catalogInstall' || message.command === 'catalogUse') {
@@ -891,7 +897,7 @@
           const current = stored.slState && typeof stored.slState === 'object' && !Array.isArray(stored.slState) ? stored.slState : {};
           if (current.modernWebChatEnabled !== true && message.enableModern !== true) throw failure('modern_chat_required', 'Modern Web Chat was disabled. Enable it before using this theme.');
           await chrome.storage.local.set({ slInstalledAssets: items, slActiveTheme: asset,
-            ...(current.modernWebChatEnabled !== true ? { slState: { ...current, modernWebChatEnabled: true } } : {}) });
+            slState: { ...current, modernWebChatEnabled: true, activeThemeId: 'original' } });
         } else await installAsset(asset);
         return { ok: true, asset, installed: true, applied: use, ...(use && asset.kind === 'theme' ? { modernEnabled: true } : {}) };
       }

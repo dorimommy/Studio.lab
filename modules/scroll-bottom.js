@@ -2,13 +2,15 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, $$, el, scope } = window.StudioLabCore;
+  let scrollerScope = null;
+  let cancelStopGenerating = null;
 
   let ctxRef = null;
   let scrollButton = null;
   let activeScroller = null;
   let resizeObserver = null;
   let isGenerating = false;
-  let generatingTimeout = null;
   let startRetryTimeout = null;
   let routeTimeout = null;
 
@@ -30,8 +32,14 @@
       ctxRef = ctx;
       start();
     },
-    onStateChange() {
-      if (!isActive() && scrollButton) scrollButton.classList.remove('visible');
+    onStateChange(ctx) {
+      if (ctx) ctxRef = ctx;
+      if (!isActive()) {
+        if (scrollButton) scrollButton.classList.remove('visible');
+        return;
+      }
+      if (!resizeObserver) start();
+      else tick();
     },
     onRouteChange() {
       if (scrollButton) {
@@ -66,23 +74,22 @@
       return;
     }
 
-    tick();
-
-    resizeObserver = new ResizeObserver((entries) => {
+    resizeObserver = new ResizeObserver(() => {
       if (!isActive()) return;
-      
+
       // Content resizing is a heuristic for generation activity.
       setGenerating(true);
-      clearTimeout(generatingTimeout);
-      generatingTimeout = setTimeout(() => setGenerating(false), 2000);
-      
+      scheduleStopGenerating();
+
       tick();
     });
 
     activeScroller = scroller;
-    activeScroller.addEventListener('scroll', handleScroll, { passive: true });
+    scrollerScope = scope();
+    scrollerScope.on(activeScroller, 'scroll', handleScroll, { passive: true });
     const content = scroller.firstElementChild || scroller;
     resizeObserver.observe(content);
+    tick();
   }
 
   function stopResizeObserver() {
@@ -90,13 +97,19 @@
       resizeObserver.disconnect();
       resizeObserver = null;
     }
-    if (activeScroller) {
-      activeScroller.removeEventListener('scroll', handleScroll);
-    }
+    scrollerScope?.dispose();
+    scrollerScope = null;
+    cancelStopGenerating = null;
     activeScroller = null;
-    clearTimeout(generatingTimeout);
-    generatingTimeout = null;
     setGenerating(false);
+  }
+
+  function scheduleStopGenerating() {
+    cancelStopGenerating?.();
+    cancelStopGenerating = scrollerScope?.timeout(() => {
+      cancelStopGenerating = null;
+      setGenerating(false);
+    }, 2000) || null;
   }
 
   function tick() {
@@ -105,7 +118,7 @@
       return;
     }
 
-    if (!document.querySelector('.sl-scroll-bottom-btn')) {
+    if (!$('.sl-scroll-bottom-btn')) {
       createButton();
     }
 
@@ -114,13 +127,10 @@
 
   function createButton() {
     const promptSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.PROMPT_BOX : 'ms-prompt-box';
-    const anchor = document.querySelector(promptSel);
-    if (!anchor || document.querySelector('.sl-scroll-bottom-btn')) return;
+    const anchor = $(promptSel);
+    if (!anchor || $('.sl-scroll-bottom-btn')) return;
 
-    scrollButton = document.createElement('button');
-    scrollButton.type = 'button';
-    scrollButton.className = 'sl-scroll-bottom-btn';
-    scrollButton.setAttribute('aria-label', 'Scroll to bottom');
+    scrollButton = el('<button type="button" class="sl-scroll-bottom-btn" aria-label="Scroll to bottom"></button>');
     updateButtonIcon(false);
 
     anchor.appendChild(scrollButton);
@@ -181,7 +191,7 @@
 
   function findActiveScroller() {
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const turns = document.querySelectorAll(turnSel);
+    const turns = $$(turnSel);
     if (turns.length > 0) {
       let node = turns[turns.length - 1].parentElement;
       while (node && node !== document.body) {
@@ -191,7 +201,7 @@
     }
 
     const autoSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.AUTOSCROLL_CONTAINER : 'ms-autoscroll-container';
-    const autoscroll = document.querySelector(autoSel);
+    const autoscroll = $(autoSel);
     if (!autoscroll) return null;
 
     return Array.from(autoscroll.querySelectorAll('div'))

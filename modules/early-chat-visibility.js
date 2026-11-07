@@ -3,11 +3,12 @@
 
   if (window.__slEarlyChatVisibility) return;
   Object.defineProperty(window, '__slEarlyChatVisibility', { value: true, configurable: true });
+  const { observe } = window.StudioLabCore;
 
   const ATTRIBUTE = 'data-sl-fast-chat-render';
   const PREFERENCE_KEY = 'sl_initialChatRenderEnabled';
   let enabled = true;
-  let observer = null;
+  let disposeObserver = null;
   let root = null;
   let style = null;
   try { enabled = window.localStorage.getItem(PREFERENCE_KEY) !== 'false'; } catch (_) {}
@@ -25,11 +26,10 @@
     if (!enabled) { stop(); return; }
     try {
       if (mount()) {
-        observer?.disconnect();
-        observer = null;
-      } else if (!observer) {
-        observer = new MutationObserver(sync);
-        observer.observe(document, { childList: true, subtree: true });
+        disposeObserver?.();
+        disposeObserver = null;
+      } else if (!disposeObserver) {
+        disposeObserver = observe(document, { childList: true, subtree: true }, sync);
       }
     } catch (_) { stop(); }
   }
@@ -53,8 +53,8 @@
   }
 
   function stop() {
-    observer?.disconnect();
-    observer = null;
+    disposeObserver?.();
+    disposeObserver = null;
     root?.removeAttribute(ATTRIBUTE);
     style?.remove();
     root = null;

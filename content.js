@@ -3,6 +3,8 @@
 (function () {
   'use strict';
 
+  const { $, $$, el, observe, scope, store } = window.StudioLabCore;
+
   let manifest;
   try {
     if (!chrome.runtime?.id) return;
@@ -12,6 +14,7 @@
   const STORAGE_KEY = 'slState';
   const readyAccountFrames = new WeakSet();
   const readyCatalogFrames = new WeakSet();
+  const privateFrameLoads = new WeakMap();
   const pendingCatalogRefresh = new Set();
   const ICONS = {
     bolt: '<path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/>',
@@ -38,25 +41,30 @@
     tune: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>',
     science: '<path d="M9 3h6M10 3v7L4 20c-.3.6.1 1 1 1h14c.9 0 1.3-.4 1-1l-6-10V3"/><path d="M7 15h10"/>',
     person: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+    palette: '<path d="M12 3a9 9 0 0 0 0 18c1.3 0 2.2-.9 2.2-2.1 0-.5-.2-1-.5-1.4-.3-.3-.4-.8-.4-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.1-4-7.5-9-7.5z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/>',
+    arrow_back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+    add: '<path d="M12 5v14M5 12h14"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+    upload: '<path d="M12 15V3M7 8l5-5 5 5M5 21h14"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>'
   };
 
   const TABS = [
     { id: 'home', label: 'Home', icon: 'home', tone: 'blue', description: 'Google AI Studio and Studio.lab, in one place.' },
-    { id: 'native', label: 'Google AI Studio', icon: 'tune', tone: 'purple', description: 'Appearance, keyboard shortcuts, autocomplete, notifications, and microphone.' },
-    { id: 'all', label: 'Studio.lab', icon: 'science', tone: 'green', description: 'All your Studio.lab preferences.' },
-    { id: 'injection', label: 'Performance', icon: 'bolt', tone: 'orange', description: 'Recover interrupted responses and keep long conversations responsive.' },
-    { id: 'tweaks', label: 'Workspace', icon: 'tune', tone: 'purple', description: 'Choose your interface helpers and what stays visible.' },
-    { id: 'modules', label: 'Tools', icon: 'calculate', tone: 'green', description: 'Manage chat tools, local profiles, exports, and privacy.' },
-    { id: 'market', label: 'Market', icon: 'storage', tone: 'green', description: 'Discover Modern Web Chat themes and system prompts, or create your own.' },
-    { id: 'account', label: 'Account', icon: 'person', tone: 'pink', description: 'Sign in, sync your Studio.lab preferences, and manage your account.' },
-    { id: 'info', label: 'Info', icon: 'info', tone: 'blue', description: 'Updates, compatibility, and information about Studio.lab.' }
+    { id: 'tweaks', label: 'Chat', icon: 'tune', tone: 'purple', description: 'Writing, layout, navigation and response controls.' },
+    { id: 'theme', label: 'Appearance', icon: 'palette', tone: 'pink', description: 'Themes and interface visibility.' },
+    { id: 'injection', label: 'Performance', icon: 'bolt', tone: 'orange', description: 'Open and navigate long conversations.' },
+    { id: 'modules', label: 'Data & tools', icon: 'calculate', tone: 'green', description: 'Manage defaults, drafts, exports, cleanup and privacy.' },
+    { id: 'native', label: 'Google AI Studio', icon: 'tune', tone: 'purple', description: 'Google AI Studio preferences.' },
+    { id: 'market', label: 'Market', icon: 'storage', tone: 'green', description: 'Discover themes and system prompts.' },
+    { id: 'account', label: 'Account', icon: 'person', tone: 'pink', description: 'Sign in and sync Studio.lab preferences.' },
+    { id: 'info', label: 'About', icon: 'info', tone: 'blue', description: 'Updates, compatibility and information about Studio.lab.' }
   ];
 
   const GROUPS = [
     {
       id: 'response-recovery',
-      tabId: 'injection',
+      tabId: 'tweaks',
       title: 'Response recovery',
       description: 'Keep available content visible when a response is interrupted.'
     },
@@ -82,7 +90,7 @@
     },
     {
       id: 'cleaner',
-      tabId: 'tweaks',
+      tabId: 'theme',
       title: 'Interface visibility',
       description: 'Hide selected interface elements without changing your chats.',
       enabledKey: 'cleanerEnabled'
@@ -92,6 +100,12 @@
       tabId: 'modules',
       title: 'Chat tools',
       description: 'Configure your chat tools and the information kept in this browser.'
+    },
+    {
+      id: 'export',
+      tabId: 'modules',
+      title: 'Export',
+      description: 'Download full conversations in Markdown, Text or JSON.'
     },
     {
       id: 'privacy', tabId: 'modules', title: 'Privacy',
@@ -105,10 +119,11 @@
     'scroll-bottom': 'Add a button that returns you to the newest message.',
     'draft-saver': 'Recover unsent prompts after reloading.',
     'text-formatter': 'Show Markdown controls and smart lists for prompts.',
-    'modern-web-chat': 'Use the alternate chat layout with its input bar and media gallery.',
+    'modern-web-chat': 'Use our responsive chat layout, input bar, media gallery, and interactive answers.',
+    'interactive-answers': 'Tables, charts and calculators in your chat.',
     'telemetry-blocker': 'Block supported analytics requests while you use AI Studio.',
     'default-profile': 'Reuse a model and instruction in new chats.',
-    'chat-export': 'Download this conversation as Markdown or JSON.',
+    'chat-export': 'Download the full conversation, including older messages.',
     'optimizer-smart': 'Hide older messages while keeping native chat nodes intact. Restore them when needed.',
     'optimizer-hard': 'Remove older rendered turns from this browser session when you run cleanup.',
     'initial-chat-render': 'Show the latest 20 messages first and load earlier messages in batches as you scroll up or use history controls. Keep the complete conversation available for writing and model context.',
@@ -126,7 +141,8 @@
     'word-counter': 'Word counter',
     'draft-saver': 'Save drafts',
     'text-formatter': 'Formatting toolbar',
-    'modern-web-chat': 'Chat layout',
+    'modern-web-chat': 'New layout',
+    'interactive-answers': 'Interactive answers',
     'telemetry-blocker': 'Block usage analytics',
     'default-profile': 'New chat defaults',
     'chat-export': 'Export conversation',
@@ -152,7 +168,8 @@
     textFormatterEnabled: true,
     modernWebChatEnabled: false,
     cleanerEnabled: false,
-    draftSaverEnabled: true
+    draftSaverEnabled: true,
+    language: 'en', activeThemeId: 'original', customThemes: []
   };
 
   const moduleApi = window.StudioLab || {};
@@ -169,7 +186,7 @@
     getTurnCount,
     refreshLiveStats,
     html,
-    announceSettings
+    announceSettings, saveCustomTheme, applyThemeById, deleteCustomTheme
   };
 
   let initialized = false;
@@ -185,6 +202,10 @@
   let currentRoute = readRoute();
   let activeTab = 'home';
   let browseTab = 'home';
+  let themeEditorState = null;
+  let themeActionSequence = 0;
+  let settingsWriteQueue = Promise.resolve();
+  let marketThemeActive = false;
   let nativeSettings = null;
   let themePreview = null;
   let pendingOwnCreations = false;
@@ -205,6 +226,7 @@
   let feedbackHideTimer = null;
   const moduleErrors = new Map();
   const recentErrors = [];
+  const shellScope = scope();
 
   function extensionActive() {
     return !contextStopped && moduleApi.isExtensionActive();
@@ -220,10 +242,7 @@
     closeUpdatePopup?.();
     closeModal();
     for (const module of [...modules].reverse()) callModule(module, 'dispose');
-    document.removeEventListener('click', handleSettingsEntry, true);
-    window.removeEventListener('__sl_openSettings', handleOpenSettings);
-    try { chrome.storage.onChanged.removeListener(handleStorageChange); } catch (_) {}
-    try { chrome.runtime.onMessage.removeListener(handleContentMessage); } catch (_) {}
+    shellScope.dispose();
   }
 
   moduleApi.onExtensionInvalidated(stopInvalidatedContext);
@@ -260,27 +279,41 @@
   waitForSidebar();
   startRouteWatcher();
 
-  try { chrome.storage.local.get([STORAGE_KEY], (data) => {
+  function finishInitialLoad() {
     if (!extensionActive()) return;
-    const error = chrome.runtime.lastError;
-    if (error && moduleApi.handleExtensionError(error)) return;
-    if (data && data[STORAGE_KEY]) {
-      Object.assign(state, migrateStoredState(data[STORAGE_KEY]));
-      normalizeState();
-      if (Object.prototype.hasOwnProperty.call(data[STORAGE_KEY], 'bypassEnabled')) saveState();
-    }
-
     initialized = true;
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
     initModules();
     refreshLiveStats();
     checkUpdates();
-  }); } catch (error) {
+  }
+  try {
+    store.get([STORAGE_KEY, 'slActiveTheme']).then(data => {
+      if (!extensionActive()) return;
+      marketThemeActive = !!data?.slActiveTheme;
+      if (data && data[STORAGE_KEY]) {
+        Object.assign(state, migrateStoredState(data[STORAGE_KEY]));
+        normalizeState();
+        if (Object.prototype.hasOwnProperty.call(data[STORAGE_KEY], 'bypassEnabled')) saveState();
+      }
+      finishInitialLoad();
+    }, error => {
+      if (!extensionActive()) return;
+      if (moduleApi.handleExtensionError(error)) return;
+      finishInitialLoad();
+    });
+  } catch (error) {
     if (!moduleApi.handleExtensionError(error)) recordError('settings', error, 'load');
   }
 
   function handleStorageChange(changes, area) {
     if (!extensionActive()) return;
-    if (area !== 'local' || !changes[STORAGE_KEY] || !initialized) return;
+    if (area !== 'local' || !initialized) return;
+    if (changes.slActiveTheme) {
+      marketThemeActive = !!changes.slActiveTheme.newValue;
+      if (!themeEditorState) rerenderThemeTabInPlace();
+    }
+    if (!changes[STORAGE_KEY]) return;
 
     const incoming = changes[STORAGE_KEY].newValue || {};
     const incomingJson = JSON.stringify(incoming);
@@ -292,12 +325,13 @@
     const prev = snapshotState();
     Object.assign(state, migrateStoredState(incoming));
     normalizeState();
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
     if (Object.prototype.hasOwnProperty.call(incoming, 'bypassEnabled')) saveState();
     notifyModules(prev);
     updateModalState();
   }
   if (!extensionActive()) return;
-  chrome.storage.onChanged.addListener(handleStorageChange);
+  shellScope.add(store.onChange(handleStorageChange));
 
   let applyingCatalogPrompt = false;
   function handleContentMessage(msg, sender, reply) {
@@ -310,7 +344,7 @@
       reply({ ok: false, error: 'The system prompt request was invalid.' }); return;
     }
     if (applyingCatalogPrompt) { reply({ ok: false, error: 'Another system prompt is being applied. Try again.' }); return; }
-    if (!document.querySelector('ms-prompt-box, ms-system-instructions-panel, textarea[aria-label="System instructions"]')) {
+    if (!$('ms-prompt-box, ms-system-instructions-panel, textarea[aria-label="System instructions"]')) {
       reply({ ok: false, error: 'Open a chat in Google AI Studio before applying this prompt.' }); return;
     }
     applyingCatalogPrompt = true;
@@ -340,8 +374,9 @@
     return true;
   }
   chrome.runtime.onMessage.addListener(handleContentMessage);
+  shellScope.add(() => chrome.runtime.onMessage.removeListener(handleContentMessage));
   function handleOpenSettings() { if (extensionActive()) openModal(); }
-  window.addEventListener('__sl_openSettings', handleOpenSettings);
+  shellScope.on(window, '__sl_openSettings', handleOpenSettings);
 
   function buildInitialState() {
     const initial = Object.assign({}, DEFAULT_STATE);
@@ -377,6 +412,227 @@
     state.modernWebChatEnabled = !!state.modernWebChatEnabled;
     state.cleanerEnabled = !!state.cleanerEnabled;
     state.draftSaverEnabled = state.draftSaverEnabled !== false;
+    state.language = 'en';
+    state.customThemes = Array.isArray(state.customThemes) ? state.customThemes.filter(item => item && typeof item === 'object' && item.id) : [];
+    const themeId = String(state.activeThemeId || 'original');
+    state.activeThemeId = themeId === 'original' || state.customThemes.some(item => item.id === themeId) ? themeId : 'original';
+  }
+
+  function enqueueSettingsWrite(task) {
+    const result = settingsWriteQueue.then(task);
+    settingsWriteQueue = result.catch(() => {});
+    return result;
+  }
+
+  async function commitThemeChange(operation, buildPatch, clearMarketTheme = false) {
+    return enqueueSettingsWrite(async () => {
+      if (!extensionActive() || operation !== themeActionSequence) return false;
+      const patch = buildPatch();
+      if (!patch) return false;
+      const next = { ...state, ...patch };
+      const serialized = JSON.stringify(next);
+      lastLocalSave = serialized;
+      try {
+        await store.set({ [STORAGE_KEY]: next, ...(clearMarketTheme ? { slActiveTheme: null } : {}) });
+      } catch (error) {
+        if (lastLocalSave === serialized) lastLocalSave = '';
+        if (!moduleApi.handleExtensionError(error)) announceSettings('Theme could not be saved in this browser. Check available storage and try again.', true);
+        return false;
+      }
+      if (!extensionActive()) return false;
+      const prev = snapshotState();
+      Object.assign(state, patch);
+      normalizeState();
+      if (clearMarketTheme) marketThemeActive = false;
+      window.StudioLab?.themeEngine?.syncFromState?.(state);
+      notifyModules(prev);
+      updateModalState();
+      return true;
+    }).catch(error => {
+      if (!moduleApi.handleExtensionError(error)) announceSettings('Theme could not be saved in this browser. Check available storage and try again.', true);
+      return false;
+    });
+  }
+
+  async function applyThemeById(themeId) {
+    const operation = ++themeActionSequence;
+    const targetId = String(themeId || 'original');
+    const theme = (state.customThemes || []).find(item => item.id === targetId);
+    if (targetId !== 'original') {
+      if (!theme) { announceSettings('This theme is no longer available.', true); return false; }
+      try {
+        const presets = window.StudioLab?.themePresets;
+        if (!presets?.sanitizeThemeImages || !presets?.validateThemeContrast) throw new Error('Theme validation is unavailable. Reload the extension and try again.');
+        const clean = await presets.sanitizeThemeImages(theme.config);
+        if (operation !== themeActionSequence || !extensionActive() || !(state.customThemes || []).includes(theme)) return false;
+        presets.validateThemeContrast(clean);
+      } catch (error) { if (operation === themeActionSequence) announceSettings(error.message || 'Check the theme colors and try again.', true); return false; }
+    }
+    const saved = await commitThemeChange(operation, () => {
+      if (theme && !(state.customThemes || []).includes(theme)) return null;
+      return { activeThemeId: targetId, ...(targetId !== 'original' ? { modernWebChatEnabled: true } : {}) };
+    }, true);
+    if (!saved) return false;
+    announceSettings('Theme applied.');
+    rerenderThemeTabInPlace();
+    return true;
+  }
+
+  async function saveCustomTheme(themeInput = {}, existingOperation = null) {
+    const operation = existingOperation ?? ++themeActionSequence;
+    const editingId = themeInput.id || (themeEditorState?.mode === 'edit' ? themeEditorState.themeId : null);
+    let finalConfig;
+    try {
+      const presets = window.StudioLab?.themePresets;
+      if (!presets?.sanitizeThemeImages || !presets?.validateThemeContrast) throw new Error('Theme validation is unavailable. Reload the extension and try again.');
+      finalConfig = presets.validateThemeContrast(await presets.sanitizeThemeImages(themeInput.config || {}));
+    } catch (error) { if (operation === themeActionSequence) announceSettings(error.message || 'Check the theme colors and try again.', true); return null; }
+    let savedTheme;
+    const saved = await commitThemeChange(operation, () => {
+      const list = Array.isArray(state.customThemes) ? [...state.customThemes] : [];
+      const now = new Date().toISOString();
+      const idx = editingId ? list.findIndex(item => item.id === editingId) : -1;
+      if (editingId && idx < 0) { announceSettings('This theme is no longer available.', true); return null; }
+      if (idx >= 0) {
+        savedTheme = { ...list[idx], name: String(themeInput.name || list[idx].name || 'Custom Theme').trim(),
+          description: String(themeInput.description ?? list[idx].description ?? '').trim(), updatedAt: now, config: finalConfig };
+        if (!savedTheme.legacySource && themeInput.legacySource && typeof themeInput.legacySource === 'object') {
+          const original = JSON.stringify(themeInput.legacySource);
+          if (original.length > 6 * 1024 * 1024) { announceSettings('The original theme is too large to preserve. Export it before saving changes.', true); return null; }
+          savedTheme.legacySource = JSON.parse(original);
+        }
+        list[idx] = savedTheme;
+      } else {
+        savedTheme = { id: 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),
+          name: String(themeInput.name || `Custom Theme ${list.length + 1}`).trim(),
+          description: String(themeInput.description || '').trim(), createdAt: now, updatedAt: now, config: finalConfig };
+        list.push(savedTheme);
+      }
+      return { customThemes: list };
+    });
+    if (!saved) return null;
+    if (operation === themeActionSequence) { themeEditorState = null; rerenderThemeTabInPlace(); }
+    return savedTheme;
+  }
+
+  async function deleteCustomTheme(themeId) {
+    const operation = ++themeActionSequence;
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const targetId = String(themeId || '');
+    if (!targetId || targetId === 'original') return;
+    const saved = await commitThemeChange(operation, () => {
+      if (!(state.customThemes || []).some(item => item.id === targetId)) return null;
+      return { customThemes: state.customThemes.filter(item => item.id !== targetId),
+        activeThemeId: state.activeThemeId === targetId ? 'original' : state.activeThemeId };
+    });
+    if (!saved) return false;
+    if (themeEditorState?.themeId === targetId) themeEditorState = null;
+    announceSettings(t('theme_deleted_toast', 'Custom theme deleted.'));
+    rerenderThemeTabInPlace();
+    return true;
+  }
+
+  function exportCustomTheme(themeId) {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const targetId = String(themeId || '');
+    const item = (state.customThemes || []).find(th => th.id === targetId);
+    if (!item) return;
+
+    const serializeFn = window.StudioLab?.themePresets?.serializeThemelab;
+    const contentStr = serializeFn
+      ? serializeFn(item)
+      : JSON.stringify({
+          format: 'studiolab-themelab',
+          version: '2.2.2',
+          exportedAt: new Date().toISOString(),
+          theme: {
+            name: item.name || 'Custom Theme',
+            description: item.description || '',
+            config: item.config || {}
+          }
+        }, null, 2);
+
+    const rawSlug = String(item.name || 'custom-theme')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u00C0-\u1EF9_-]+/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'custom-theme';
+
+    const blob = new Blob([contentStr], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${rawSlug}.themelab`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    announceSettings(t('theme_exported_toast', 'Exported .themelab file!'));
+  }
+
+  function exportOriginalTheme(themeId) {
+    const item = (state.customThemes || []).find(theme => theme.id === String(themeId || ''));
+    const original = item?.legacySource || (window.StudioLab?.themePresets?.hasUnsupportedThemeData?.(item?.config) ? item.config : null);
+    if (!original) return;
+    const content = JSON.stringify({ format: 'studiolab-themelab', version: '2.2.2', theme: {
+      name: item.name, description: item.description || '', config: original
+    } }, null, 2);
+    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = 'original-theme.themelab'; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    announceSettings('Original theme exported. It may contain unsupported references.');
+  }
+
+  async function importCustomThemeFromText(rawText, fallbackName = 'Imported Theme') {
+    const operation = ++themeActionSequence;
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    try {
+      const parseFn = window.StudioLab?.themePresets?.parseThemelab;
+      const parsed = parseFn
+        ? parseFn(rawText, fallbackName)
+        : (() => {
+            const obj = JSON.parse(rawText);
+            const node = obj.theme || obj;
+            if (!node || typeof node !== 'object' || (!node.config && !node.mainInterface)) {
+              throw new Error('Invalid .themelab');
+            }
+            return {
+              name: String(node.name || fallbackName || 'Imported Theme').trim(),
+              description: String(node.description || '').trim(),
+              config: node.config || node
+            };
+          })();
+
+      if (!window.StudioLab?.themePresets?.sanitizeThemeImages) throw new Error('Theme image validation is unavailable. Reload the extension and try again.');
+      const clean = await window.StudioLab.themePresets.sanitizeThemeImages(parsed.config);
+      if (!extensionActive() || operation !== themeActionSequence) return null;
+      const saved = await saveCustomTheme({
+        name: parsed.name,
+        description: parsed.description,
+        config: clean
+      }, operation);
+      if (!saved) return null;
+      announceSettings('Theme imported. Select Use to apply it.');
+      return saved;
+    } catch (error) {
+      if (operation === themeActionSequence) announceSettings(error?.message || t('theme_import_error_toast', 'Invalid or corrupted .themelab file.'), true);
+      return null;
+    }
+  }
+
+  if (window.StudioLab) {
+    window.StudioLab.themeManager = {
+      saveCustomTheme,
+      applyThemeById,
+      deleteCustomTheme,
+      exportCustomTheme,
+      importCustomThemeFromText,
+      getActiveThemeId: () => state.activeThemeId || 'original',
+      getCustomThemes: () => [...(state.customThemes || [])]
+    };
   }
 
   function snapshotState() {
@@ -385,11 +641,13 @@
 
   function setState(patch, options = {}) {
     if (!extensionActive()) return;
+    if (Object.prototype.hasOwnProperty.call(patch, 'modernWebChatEnabled')) themeActionSequence++;
     const prev = snapshotState();
     Object.assign(state, patch);
     normalizeState();
 
-    if (options.save !== false) saveState();
+    if (options.save !== false) saveState(options.clearMarketTheme);
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
     notifyModules(prev);
 
     // Settings controls are persistent DOM nodes. State changes must not replace
@@ -397,22 +655,24 @@
     updateModalState();
   }
 
-  function saveState() {
-    try {
+  function saveState(clearMarketTheme = false) {
+    if (!extensionActive()) return;
+    const sequence = ++saveSequence;
+    void enqueueSettingsWrite(async () => {
       if (!extensionActive()) return;
-      const sequence = ++saveSequence;
-      lastLocalSave = JSON.stringify(state);
-      Promise.resolve(chrome.storage.local.set({ [STORAGE_KEY]: state })).then(() => {
+      const snapshot = { ...state };
+      const serialized = JSON.stringify(snapshot);
+      lastLocalSave = serialized;
+      try {
+        await store.set({ [STORAGE_KEY]: snapshot, ...(clearMarketTheme ? { slActiveTheme: null } : {}) });
+        if (clearMarketTheme) marketThemeActive = false;
         if (extensionActive() && sequence === saveSequence) announceSettings('Settings saved in this browser.');
-      }).catch(error => {
+      } catch (error) {
+        if (lastLocalSave === serialized) lastLocalSave = '';
         if (moduleApi.handleExtensionError(error)) return;
         if (sequence === saveSequence) announceSettings('Settings could not be saved. Try again.', true);
-      });
-    } catch (error) {
-      if (moduleApi.handleExtensionError(error)) return;
-      announceSettings('Reload AI Studio to reconnect the extension.', true);
-      if (window.StudioLab && window.StudioLab.log) window.StudioLab.log('Extension context invalidated. Hard refresh AI Studio.', 'warn');
-    }
+      }
+    });
   }
 
   function announceSettings(message, isError = false) {
@@ -476,10 +736,10 @@
   }
 
   function waitForSidebar() {
-    document.querySelectorAll('.sl-sidebar-btn, .sl-user-settings-item').forEach(button => button.remove());
+    $$('.sl-sidebar-btn, .sl-user-settings-item').forEach(button => button.remove());
     if (settingsEntryBound) return;
     settingsEntryBound = true;
-    document.addEventListener('click', handleSettingsEntry, true);
+    shellScope.on(document, 'click', handleSettingsEntry, true);
   }
 
   function handleSettingsEntry(event) {
@@ -496,14 +756,13 @@
   }
 
   function showHealthCheckWarning() {
-    if (document.querySelector('.sl-health-check-toast')) return;
-    const toast = document.createElement('div');
-    toast.className = 'sl-health-check-toast';
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-family:sans-serif;font-size:14px;display:flex;align-items:center;gap:12px;';
-    toast.innerHTML = `
-      <span>⚠️ Можливо, Google оновив інтерфейс. Деякі функції Studio.lab можуть не працювати.</span>
-      <button style="background:none;border:none;color:#fff;cursor:pointer;padding:4px;" aria-label="Close">✕</button>
-    `;
+    if ($('.sl-health-check-toast')) return;
+    const toast = el(`
+      <div class="sl-health-check-toast" role="status">
+        <span>Google may have updated its interface. Some Studio.lab features may not work.</span>
+        <button type="button" aria-label="Close">×</button>
+      </div>
+    `);
     toast.querySelector('button').addEventListener('click', () => toast.remove());
     document.body.appendChild(toast);
     setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 15000);
@@ -566,8 +825,7 @@
       // Studio.lab remains usable when Google changes or delays its native settings.
     }
 
-    modalEl = document.createElement('div');
-    modalEl.className = 'sl-overlay';
+    modalEl = el('<div class="sl-overlay"></div>');
     modalEl.addEventListener('click', (event) => {
       if (event.target === modalEl) closeModal();
     });
@@ -637,7 +895,7 @@
         if (!extensionActive()) return;
         updateStatus = result || { ok: false };
         if (!result?.updateAvailable || !result.latestVersion || !result.releaseUrl) return;
-        const stored = await chrome.storage.local.get(['slDismissedUpdateTag']);
+        const stored = await store.get(['slDismissedUpdateTag']);
         if (!extensionActive()) return;
         if (stored.slDismissedUpdateTag !== result.latestVersion) showUpdatePopup(result);
       })
@@ -648,28 +906,22 @@
   }
 
   function showUpdatePopup(release) {
-    if (!extensionActive() || modalEl || document.querySelector('.sl-update-overlay')) return;
-    const overlay = document.createElement('div');
-    overlay.className = 'sl-update-overlay';
-    const popup = document.createElement('div');
-    popup.className = 'sl-update-popup';
-    popup.style.setProperty('--sl-update-background', `url("${chrome.runtime.getURL('images/update-space.webp')}")`);
-    popup.setAttribute('role', 'dialog');
-    popup.setAttribute('aria-modal', 'true');
-    popup.setAttribute('aria-labelledby', 'sl-update-title');
-    popup.setAttribute('aria-describedby', 'sl-update-description');
-    popup.tabIndex = -1;
-    popup.innerHTML = `
-      <div class="sl-update-popup-content">
-        <span class="sl-update-popup-brand"><img src="${chrome.runtime.getURL('images/SL_logotype.svg')}" alt="" aria-hidden="true">Studio.lab</span>
-        <h2 id="sl-update-title">A new version <span>is here!</span></h2>
-        <p id="sl-update-description">Studio.lab <strong data-sl-latest-version></strong> is ready. See what's new before you update.</p>
-        <div class="sl-update-popup-actions">
-          <button type="button">Dismiss</button>
-          <a target="_blank" rel="noopener noreferrer">View release ${renderIcon('arrow_outward', 'detail')}</a>
+    if (!extensionActive() || modalEl || $('.sl-update-overlay')) return;
+    const overlay = el('<div class="sl-update-overlay"></div>');
+    const popup = el(`
+      <div class="sl-update-popup" role="dialog" aria-modal="true" aria-labelledby="sl-update-title" aria-describedby="sl-update-description" tabindex="-1">
+        <div class="sl-update-popup-content">
+          <span class="sl-update-popup-brand"><img src="${chrome.runtime.getURL('images/SL_logotype.svg')}" alt="" aria-hidden="true">Studio.lab</span>
+          <h2 id="sl-update-title">A new version <span>is here!</span></h2>
+          <p id="sl-update-description">Studio.lab <strong data-sl-latest-version></strong> is ready. See what's new before you update.</p>
+          <div class="sl-update-popup-actions">
+            <button type="button">Dismiss</button>
+            <a target="_blank" rel="noopener noreferrer">View release ${renderIcon('arrow_outward', 'detail')}</a>
+          </div>
         </div>
       </div>
-      `;
+    `);
+    popup.style.setProperty('--sl-update-background', `url("${chrome.runtime.getURL('images/update-space.webp')}")`);
     popup.querySelector('[data-sl-latest-version]').textContent = `v${String(release.latestVersion).replace(/^v/i, '')}`;
     const releaseLink = popup.querySelector('.sl-update-popup-actions a');
     releaseLink.href = release.releaseUrl;
@@ -677,7 +929,7 @@
     const closePopup = (rememberDismissal = false) => {
       if (rememberDismissal && extensionActive()) {
         Promise.resolve().then(() => {
-          if (extensionActive()) return chrome.storage.local.set({ slDismissedUpdateTag: release.latestVersion });
+          if (extensionActive()) return store.set({ slDismissedUpdateTag: release.latestVersion });
         }).catch(error => { moduleApi.handleExtensionError(error); });
       }
       document.removeEventListener('keydown', onKeyDown, true);
@@ -711,7 +963,16 @@
     popup.focus();
   }
 
+  function discardThemeDraft() {
+    if (!themeEditorState) return;
+    themeEditorState = null;
+    window.StudioLab?.themeEditorUI?.resetDraftSession?.();
+    window.StudioLab?.themeEngine?.syncFromState?.(state);
+  }
+
   function closeModal(nativeClosed = false) {
+    themeActionSequence++;
+    discardThemeDraft();
     finishThemePreview('return', false);
     pendingOwnCreations = false;
     closeSettingsMenu(false);
@@ -736,7 +997,7 @@
     searchResultsSignature = '';
     document.removeEventListener('keydown', escHandler);
     const focusTarget = returnFocus?.isConnected && returnFocus !== document.body ? returnFocus
-      : document.querySelector('ms-settings-menu button[data-test-id="settings-menu"], ms-settings-menu button[aria-label="Settings"]');
+      : $('ms-settings-menu button[data-test-id="settings-menu"], ms-settings-menu button[aria-label="Settings"]');
     focusTarget?.focus({ preventScroll: true });
     returnFocus = null;
   }
@@ -819,8 +1080,8 @@
     };
     disableSiblings();
     if (modalScope && !backgroundInertObserver) {
-      backgroundInertObserver = new MutationObserver(disableSiblings);
-      modalScope.observe(backgroundInertObserver, document.body, { childList: true });
+      backgroundInertObserver = observe(document.body, { childList: true }, disableSiblings);
+      modalScope.add(backgroundInertObserver);
     }
   }
 
@@ -849,6 +1110,7 @@
             <div class="sl-dialog-body" id="sl-settings-content" tabindex="0" role="region" aria-labelledby="sl-settings-page-title">
                 ${renderHomeTab()}
                 ${renderNativeTab()}
+                ${renderThemeTab()}
                 ${renderAccountTab()}
                 ${renderCatalogTab('market')}
                 ${GROUPS.map(renderGroupTab).join('')}
@@ -889,8 +1151,8 @@
   }
 
   function readVisibleGaisProfile() {
-    const account = document.querySelector('ms-account-switcher .account-switcher-button') ||
-      document.querySelector('button[aria-label^="Google Account:"]');
+    const account = $('ms-account-switcher .account-switcher-button') ||
+      $('button[aria-label^="Google Account:"]');
     const image = account?.querySelector('img');
     const name = image?.getAttribute('alt')?.trim().slice(0, 80) || '';
     let source = '';
@@ -906,7 +1168,7 @@
     const profile = readVisibleGaisProfile();
     const shortcuts = [
       ['native', 'Google AI Studio', 'Appearance, keyboard shortcuts, and input.', 'tune', 'tweaks'],
-      ['all', 'Studio.lab', 'Chat tools, workspace, and performance.', 'science', 'injection'],
+      ['tweaks', 'Chat', 'Writing, layout, and response controls.', 'science', 'injection'],
       ['market', 'Themes and prompts', 'Discover community creations or make your own.', 'storage', 'modules'],
       ['account', 'Your account', 'Manage your sign-in and settings sync.', 'person', 'account']
     ];
@@ -947,6 +1209,226 @@
     if (loading) loading.hidden = !pending || !!nativeSettings?.getHost();
   }
 
+  function renderThemeTab() {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const isVisible = activeTab === 'theme';
+    return `
+      <section class="sl-settings-page sl-settings-theme-page" data-sl-tab-content="theme" data-sl-section="theme" aria-label="${html(t('tab_theme', 'Theme'))}" ${isVisible ? '' : 'hidden'}>
+        ${renderThemeTabInner()}
+      </section>
+    `;
+  }
+
+  function renderThemeTabInner() {
+    const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+    const activeThemeId = state.activeThemeId || 'original';
+    const customThemes = Array.isArray(state.customThemes) ? state.customThemes : [];
+
+    if (themeEditorState && window.StudioLab?.themeEditorUI?.renderEditorWorkspace) {
+      return '<h2 class="sl-theme-section-heading">Theme editor</h2>' + window.StudioLab.themeEditorUI.renderEditorWorkspace({
+        editorState: themeEditorState,
+        customThemes,
+        renderIcon
+      });
+    }
+
+    const isOriginalActive = activeThemeId === 'original' && !marketThemeActive;
+
+    const customThemeCardsHtml = customThemes.map(item => {
+      const isActive = state.modernWebChatEnabled && !marketThemeActive && activeThemeId === item.id;
+      const hasOriginal = !!item.legacySource || !!window.StudioLab?.themePresets?.hasUnsupportedThemeData?.(item.config);
+      const presetKey = item.config?.mainInterface?.presetKey || 'purple';
+      const presetObj = window.StudioLab?.themePresets?.PRESET_PALETTES?.[presetKey];
+      const rp = item.config?.roleplay;
+      const stylePreset = item.config?.style?.stylePreset || 'default';
+      const summaryParts = [];
+      if (presetObj?.label) summaryParts.push(presetObj.label);
+      if (stylePreset === 'cartoon-pixel') {
+        summaryParts.push(`${t('te_style_pixel_title', 'Cartoon Pixel')}`);
+      } else if (stylePreset === 'noble-fantasy') {
+        summaryParts.push(t('te_style_noble_title', 'Noble Fantasy'));
+      }
+      if (rp?.enableNameCustom && (rp.modelName || rp.userName)) {
+        summaryParts.push(`${rp.modelName || 'Model'} · ${rp.userName || 'User'}`);
+      }
+      const desc = item.description || summaryParts.join(' • ') || t('theme_custom_badge', 'Custom Theme');
+      return `
+        <div class="sl-setting-row sl-theme-card ${isActive ? 'is-active' : ''}" data-sl-theme-card="${html(item.id)}" data-sl-search-item data-sl-search="${html(item.name + ' ' + desc + ' Custom Theme .themelab')}">
+          <div class="sl-theme-card-start">
+            <span class="sl-theme-card-avatar" data-tone="pink">${renderIcon('palette', 'plain')}</span>
+            <div class="sl-setting-copy">
+              <div class="sl-theme-card-title-row">
+                <h3 class="sl-setting-label">${html(item.name)}</h3>
+                ${isActive ? `<span class="sl-theme-badge sl-theme-badge--active">${html(t('theme_active_badge', 'Active'))}</span>` : ''}
+              </div>
+              <p class="sl-setting-help">${html(desc)}</p>
+            </div>
+          </div>
+          <div class="sl-setting-actions sl-theme-card-actions">
+            ${isActive
+              ? `<button type="button" class="sl-settings-button sl-theme-active-btn" disabled>${renderIcon('check', 'plain')}<span>${html(t('theme_active_badge', 'Active'))}</span></button>`
+              : `<button type="button" class="sl-settings-button primary" data-sl-apply-theme="${html(item.id)}">${state.modernWebChatEnabled ? 'Use theme' : 'Enable New layout and apply'}</button>`
+            }
+            <button type="button" class="sl-settings-button" data-sl-edit-theme="${html(item.id)}" title="${html(t('theme_edit_btn', 'Edit'))}">
+              ${renderIcon('edit', 'plain')}
+              <span>${html(t('theme_edit_btn', 'Edit'))}</span>
+            </button>
+            <button type="button" class="sl-settings-button" data-sl-export-theme="${html(item.id)}" title="${html(t('theme_export_btn_title', 'Export as .themelab file'))}">
+              ${renderIcon('download', 'plain')}
+              <span>${html(t('theme_export_btn', 'Export .themelab'))}</span>
+            </button>
+            ${hasOriginal ? `<button type="button" class="sl-settings-button" data-sl-export-original-theme="${html(item.id)}" title="Export the original theme, which may contain unsupported references">Export original</button>` : ''}
+            <button type="button" class="sl-settings-button destructive" data-sl-delete-theme="${html(item.id)}" title="${html(t('theme_delete_btn', 'Delete'))}">
+              ${renderIcon('delete', 'plain')}
+              <span>${html(t('theme_delete_btn', 'Delete'))}</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <h2 class="sl-theme-section-heading">Your themes</h2>
+      <div class="sl-theme-manager" data-sl-theme-manager>
+        <div class="sl-settings-list sl-theme-list" role="region" aria-label="${html(t('theme_section_available', 'Available themes'))}">
+          <div class="sl-setting-row sl-theme-card ${isOriginalActive ? 'is-active' : ''}" data-sl-theme-card="original" data-sl-search-item data-sl-search="Original Theme default interface">
+            <div class="sl-theme-card-start">
+              <span class="sl-theme-card-avatar" data-tone="blue">${renderIcon('palette', 'plain')}</span>
+              <div class="sl-setting-copy">
+                <div class="sl-theme-card-title-row">
+                  <h3 class="sl-setting-label">${html(t('theme_original_title', 'Original Theme'))}</h3>
+                  ${isOriginalActive ? `<span class="sl-theme-badge sl-theme-badge--active">${html(t('theme_active_badge', 'Active'))}</span>` : ''}
+                </div>
+                <p class="sl-setting-help">${html(t('theme_original_desc', 'Default original interface of the Studio.lab extension.'))}</p>
+              </div>
+            </div>
+            <div class="sl-setting-actions sl-theme-card-actions">
+              ${isOriginalActive
+                ? `<button type="button" class="sl-settings-button sl-theme-active-btn" disabled>${renderIcon('check', 'plain')}<span>${html(t('theme_active_badge', 'Active'))}</span></button>`
+                : `<button type="button" class="sl-settings-button primary" data-sl-apply-theme="original">${html(t('theme_apply_btn', 'Apply theme'))}</button>`
+              }
+            </div>
+          </div>
+          ${customThemeCardsHtml}
+        </div>
+
+        <div class="sl-settings-list sl-theme-create-section">
+          <div class="sl-setting-row sl-theme-create-card" data-sl-create-theme-card data-sl-search-item data-sl-search="Create Theme Custom Theme Import .themelab">
+            <div class="sl-theme-card-start">
+              <span class="sl-theme-card-avatar" data-tone="pink">${renderIcon('add', 'plain')}</span>
+              <div class="sl-setting-copy">
+                <h3 class="sl-setting-label">${html(t('theme_create_title', 'Create Theme / Custom Theme'))}</h3>
+                <p class="sl-setting-help">Create a custom theme or import a .themelab file. Choose Use to apply it.</p>
+              </div>
+            </div>
+            <div class="sl-setting-actions sl-theme-card-actions">
+              <button type="button" class="sl-settings-button" data-sl-import-theme-btn title="Import a .themelab file">
+                ${renderIcon('upload', 'plain')}
+                <span>${html(t('theme_import_btn', 'Import .themelab'))}</span>
+              </button>
+              <input type="file" accept=".themelab,application/json" data-sl-import-theme-input hidden>
+              <button type="button" class="sl-settings-button primary" data-sl-open-theme-creator>
+                ${renderIcon('add', 'plain')}
+                <span>${html(t('theme_create_btn', 'Create Theme'))}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function rerenderThemeTabInPlace() {
+    if (!modalEl) return;
+    const section = modalEl.querySelector('[data-sl-tab-content="theme"]');
+    if (!section) return;
+    section.innerHTML = renderThemeTabInner();
+    bindThemeTabEvents(section);
+  }
+
+  function bindThemeTabEvents(root) {
+    if (!root) return;
+    const editorRoot = root.querySelector('[data-sl-theme-editor-view]');
+    if (editorRoot && window.StudioLab?.themeEditorUI?.bindEditorEvents) {
+      window.StudioLab.themeEditorUI.bindEditorEvents(editorRoot, {
+        onSave: async ({ name, config, legacySource }) => !!(await saveCustomTheme({ name, config, legacySource })),
+        onPreview: ({ editorConfig, control }) => {
+          startThemePreview(null, { editorConfig, requestId: 'editor-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) }, control);
+        },
+        onBack: () => {
+          discardThemeDraft();
+          rerenderThemeTabInPlace();
+        },
+        announce: announceSettings
+      });
+      return;
+    }
+
+    root.querySelectorAll('[data-sl-apply-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-apply-theme') || 'original';
+        applyThemeById(themeId);
+      });
+    });
+    root.querySelectorAll('[data-sl-open-theme-creator]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        themeEditorState = { mode: 'create', themeId: null };
+        rerenderThemeTabInPlace();
+      });
+    });
+    root.querySelectorAll('[data-sl-edit-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-edit-theme');
+        if (!themeId) return;
+        themeEditorState = { mode: 'edit', themeId };
+        rerenderThemeTabInPlace();
+      });
+    });
+    root.querySelectorAll('[data-sl-export-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-export-theme');
+        if (!themeId) return;
+        exportCustomTheme(themeId);
+      });
+    });
+    root.querySelectorAll('[data-sl-export-original-theme]').forEach(btn => {
+      btn.addEventListener('click', () => exportOriginalTheme(btn.getAttribute('data-sl-export-original-theme')));
+    });
+    root.querySelectorAll('[data-sl-delete-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-sl-delete-theme');
+        if (!themeId) return;
+        deleteCustomTheme(themeId);
+      });
+    });
+
+    const importFileInput = root.querySelector('[data-sl-import-theme-input]');
+    root.querySelectorAll('[data-sl-import-theme-btn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        importFileInput?.click();
+      });
+    });
+    if (importFileInput) {
+      importFileInput.addEventListener('change', async () => {
+        const file = importFileInput.files?.[0];
+        if (!file) return;
+        try {
+          if (file.size > 6 * 1024 * 1024) throw new Error('Theme files must be 6 MB or smaller.');
+          const rawText = await file.text();
+          const fallbackName = String(file.name || 'Imported Theme')
+            .replace(/\.themelab$/i, '')
+            .replace(/\.json$/i, '')
+            .trim() || 'Imported Theme';
+          await importCustomThemeFromText(rawText, fallbackName);
+        } catch (_) {
+          const t = (key, fb) => window.StudioLab?.i18n?.t ? window.StudioLab.i18n.t(key, fb || key) : (fb || key);
+          announceSettings(t('theme_import_error_toast', 'Invalid or corrupted .themelab file.'), true);
+        }
+        importFileInput.value = '';
+      });
+    }
+  }
+
   function renderTabButton(tab) {
     return `
       <li><button type="button" class="sl-settings-nav-item ${activeTab === tab.id ? 'active' : ''}" data-sl-tab="${tab.id}" aria-controls="sl-settings-content" ${activeTab === tab.id ? 'aria-current="page"' : ''}>
@@ -956,6 +1438,8 @@
   }
 
   function selectTab(tabId, focusContent = true) {
+    if (tabId !== 'theme') themeActionSequence++;
+    if (themeEditorState && tabId !== 'theme') { discardThemeDraft(); rerenderThemeTabInPlace(); }
     if (tabId === 'library') tabId = 'market';
     if (tabId === 'market') pendingCatalogRefresh.add(tabId);
     if (!TABS.some(tab => tab.id === tabId)) return;
@@ -978,9 +1462,66 @@
   function renderAccountTab() {
     return `
       <section class="sl-settings-page" data-sl-tab-content="account" aria-label="Studio.lab account settings" ${activeTab === 'account' ? '' : 'hidden'}>
+        ${renderPrivateFrameStatus('account')}
         <iframe class="sl-account-frame" data-sl-account-frame title="Studio.lab Account and settings sync" data-src="${html(chrome.runtime.getURL('account/account.html'))}" referrerpolicy="no-referrer"></iframe>
       </section>
     `;
+  }
+
+  function renderPrivateFrameStatus(page) {
+    const name = page === 'account' ? 'Account' : 'Market';
+    return `<div data-sl-private-frame-status="${page}" role="status" aria-live="polite" tabindex="-1">
+      <p class="sl-native-settings-loading" data-sl-private-loading>Loading ${name}…</p>
+      <div class="sl-settings-empty" data-sl-private-error hidden><h2>${name} could not load</h2>
+        <p>Reload Studio.lab and refresh this tab. If it remains blank, open AI Studio in Chrome or Edge with Studio.lab installed.</p>
+        <button type="button" class="sl-btn-secondary" data-sl-private-frame-retry="${page}">Try again</button>
+      </div></div>`;
+  }
+
+  function privateFrameStatus(frame) {
+    return frame.closest('[data-sl-tab-content]')?.querySelector('[data-sl-private-frame-status]');
+  }
+
+  function markPrivateFrameReady(frame) {
+    const loading = privateFrameLoads.get(frame);
+    loading?.cancel?.();
+    if (loading) { loading.cancel = null; loading.failed = false; }
+    const status = privateFrameStatus(frame);
+    const restoreFocus = status?.contains(document.activeElement) && frame.closest('[data-sl-tab-content]')?.dataset.slTabContent === activeTab;
+    if (status) status.hidden = true;
+    frame.removeAttribute('aria-busy');
+    if (restoreFocus) frame.focus({ preventScroll: true });
+  }
+
+  function updatePrivateFrameLoading() {
+    if (!modalEl || !modalScope) return;
+    for (const frame of modalEl.querySelectorAll('[data-sl-account-frame], [data-sl-catalog-frame]')) {
+      const status = privateFrameStatus(frame);
+      if (!status) continue;
+      const ready = readyAccountFrames.has(frame) || readyCatalogFrames.has(frame);
+      if (ready) { markPrivateFrameReady(frame); continue; }
+      let loading = privateFrameLoads.get(frame);
+      if (!loading) { loading = { cancel: null, failed: false }; privateFrameLoads.set(frame, loading); }
+      const visible = frame.closest('[data-sl-tab-content]')?.dataset.slTabContent === activeTab;
+      if (!visible || !frame.getAttribute('src')) {
+        loading.cancel?.(); loading.cancel = null;
+        continue;
+      }
+      status.hidden = false;
+      status.querySelector('[data-sl-private-loading]').hidden = loading.failed;
+      status.querySelector('[data-sl-private-error]').hidden = !loading.failed;
+      if (loading.failed || loading.cancel) continue;
+      frame.setAttribute('aria-busy', 'true');
+      loading.cancel = modalScope.timeout(() => {
+        loading.cancel = null;
+        if (!frame.isConnected || frame.closest('[data-sl-tab-content]')?.dataset.slTabContent !== activeTab ||
+            readyAccountFrames.has(frame) || readyCatalogFrames.has(frame)) return;
+        loading.failed = true;
+        status.querySelector('[data-sl-private-loading]').hidden = true;
+        status.querySelector('[data-sl-private-error]').hidden = false;
+        frame.removeAttribute('aria-busy');
+      }, 5000);
+    }
   }
 
   function updateAccountFrame() {
@@ -1029,6 +1570,7 @@
 
   function renderCatalogTab(view) {
     return `<section class="sl-settings-page" data-sl-tab-content="${view}" aria-label="${view === 'market' ? 'Studio.lab community market' : 'Your themes and system prompts'}" ${activeTab === view ? '' : 'hidden'}>
+      ${renderPrivateFrameStatus(view)}
       <iframe class="sl-account-frame" data-sl-catalog-frame="${view}" title="${view === 'market' ? 'Studio.lab Market' : 'Studio.lab Themes and prompts'}" data-src="${html(chrome.runtime.getURL('account/catalog.html') + '#' + view)}" referrerpolicy="no-referrer"></iframe>
     </section>`;
   }
@@ -1080,35 +1622,30 @@
       !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   }
 
-  function startThemePreview(frame, data) {
+  function startThemePreview(frame, data, editorControl = null) {
     const origin = new URL(chrome.runtime.getURL('account/catalog.html')).origin;
     const requestId = data.requestId;
     if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId)) return;
-    const reply = (action, error) => frame.contentWindow?.postMessage({ type: 'slCatalogPreview', requestId, action,
-      ...(error ? { error } : {}) }, origin);
-    let palette;
-    try { palette = window.StudioLabCatalogSchema.validateTheme(data.palette); }
+    const reply = (action, error) => {
+      if (frame) frame.contentWindow?.postMessage({ type: 'slCatalogPreview', requestId, action,
+        ...(error ? { error } : {}) }, origin);
+      else if (error) announceSettings(error, true);
+    };
+    let palette, editorConfig;
+    try {
+      if (editorControl) editorConfig = window.StudioLab.themePresets.validateEditorPreview(data.editorConfig);
+      else palette = window.StudioLabCatalogSchema.validateTheme(data.palette);
+    }
     catch (_) { reply('error', 'Choose a valid theme palette before previewing.'); return; }
     if (!modalEl || themePreview) {
       reply('error', 'Close the current preview, then try again.'); return;
     }
     closeSettingsMenu(false);
     // The preview uses production MWC controls with public sample messages and leaves the live chat untouched.
-    const stage = document.createElement('section');
-    stage.className = 'sl-theme-preview-stage';
-    stage.setAttribute('role', 'dialog');
-    stage.setAttribute('aria-modal', 'true');
-    stage.setAttribute('aria-label', 'Modern Web Chat theme preview');
-    const bar = document.createElement('section');
-    bar.className = 'sl-theme-preview-bar';
-    bar.setAttribute('role', 'region');
-    bar.setAttribute('aria-label', 'Google AI Studio theme preview');
-    bar.innerHTML = `<div class="sl-theme-preview-copy"><strong>Theme preview</strong></div><div class="sl-theme-preview-actions"><button type="button" data-sl-preview-back>Back to Market</button></div>`;
-    const previewFrame = document.createElement('iframe');
-    previewFrame.className = 'sl-theme-preview-frame';
-    previewFrame.title = 'Modern Web Chat with your theme';
-    previewFrame.setAttribute('aria-busy', 'true');
-    previewFrame.referrerPolicy = 'no-referrer';
+    const stage = el('<section class="sl-theme-preview-stage" role="dialog" aria-modal="true" aria-label="Modern Web Chat theme preview"></section>');
+    const bar = el('<section class="sl-theme-preview-bar" role="region" aria-label="Google AI Studio theme preview"><div class="sl-theme-preview-copy"><strong>Theme preview</strong></div><div class="sl-theme-preview-actions"><button type="button" data-sl-preview-back>Back to Market</button></div></section>');
+    if (editorControl) bar.querySelector('[data-sl-preview-back]').textContent = 'Back to editor';
+    const previewFrame = el('<iframe class="sl-theme-preview-frame" title="Modern Web Chat with your theme" aria-busy="true" referrerpolicy="no-referrer"></iframe>');
     previewFrame.src = chrome.runtime.getURL('account/theme-preview.html') + '#request=' + encodeURIComponent(requestId) +
       '&parent=' + encodeURIComponent(location.origin);
     stage.append(bar, previewFrame);
@@ -1131,19 +1668,20 @@
         node.inert = true;
       }
     }
-    const observer = new MutationObserver(park);
     function onPreviewMessage(event) {
       if (!event.isTrusted || event.origin !== origin || event.source !== previewFrame.contentWindow ||
           event.data?.requestId !== requestId || themePreview?.stage !== stage) return;
       if (event.data.type === 'sl-theme-preview-ready') {
-        previewFrame.contentWindow.postMessage({ type: 'sl-theme-preview-update', requestId, theme: palette }, origin);
+        previewFrame.contentWindow.postMessage(editorControl
+          ? { type: 'sl-theme-editor-preview-update', requestId, config: editorConfig }
+          : { type: 'sl-theme-preview-update', requestId, theme: palette }, origin);
       } else if (event.data.type === 'sl-theme-preview-applied') {
         clearTimeout(themePreview.readyTimeout);
         previewFrame.setAttribute('aria-busy', 'false');
       } else if (event.data.type === 'sl-theme-preview-close') finishThemePreview('return');
       else if (event.data.type === 'sl-theme-preview-error') finishThemePreview('error');
     }
-    themePreview = { frame, requestId, bar, stage, previewFrame, parked, inert, park, reply, observer, onPreviewMessage,
+    themePreview = { frame, editorControl, requestId, bar, stage, previewFrame, parked, inert, park, reply, onPreviewMessage,
       nativeHosted: !!nativeSettings?.getHost() };
     try {
       nativeSettings?.setPreviewActive?.(true);
@@ -1158,7 +1696,7 @@
       themePreview.readyTimeout = setTimeout(() => {
         if (themePreview?.stage === stage) finishThemePreview('error');
       }, 15000);
-      observer.observe(document.body, { childList: true, subtree: true });
+      themePreview.observer = observe(document.body, { childList: true, subtree: true }, park);
       bar.querySelector('[data-sl-preview-back]').addEventListener('click', () => finishThemePreview('return'));
       bar.querySelector('[data-sl-preview-back]').focus({ preventScroll: true });
     } catch (_) { finishThemePreview('error'); }
@@ -1169,7 +1707,7 @@
     if (!current) return;
     themePreview = null;
     clearTimeout(current.readyTimeout);
-    current.observer.disconnect();
+    current.observer?.();
     window.removeEventListener('message', current.onPreviewMessage);
     current.stage.remove();
     for (const [node, existed] of current.parked) if (!existed) node.classList.remove('sl-theme-preview-hidden');
@@ -1181,13 +1719,17 @@
       updateNativeAvailability(); makeBackgroundInert();
     } else nativeSettings?.setPreviewActive?.(false);
     if (modalEl && restoreFocus) {
-      current.frame.focus({ preventScroll: true });
-      sendCatalogViewport(true);
+      if (current.editorControl?.isConnected) current.editorControl.focus({ preventScroll: true });
+      else if (current.frame) { current.frame.focus({ preventScroll: true }); sendCatalogViewport(true); }
     }
     current.reply(action, action === 'error' ? 'Google AI Studio could not open the preview. Try again.' : undefined);
   }
 
   function settingsGroup(module) {
+    if (module.id === 'response-history') return 'response-recovery';
+    if (module.id === 'interactive-answers') return 'tweaks';
+    if (module.id === 'chat-export') return 'export';
+    if (['draft-saver', 'chat-cleanup'].includes(module.id)) return 'modules';
     if (['text-formatter', 'modern-web-chat'].includes(module.id)) return 'tweaks';
     if (module.id === 'telemetry-blocker') return 'privacy';
     return module.group;
@@ -1195,7 +1737,7 @@
 
   function renderGroupTab(group) {
     const groupModules = modules.filter(module => settingsGroup(module) === group.id);
-    const visible = activeTab === group.tabId || activeTab === 'all';
+    const visible = activeTab === group.tabId;
     const controls = group.id === 'optimizer'
       ? renderOptimizerModes(groupModules) + (callModule(moduleById.get('optimizer-hard'), 'renderControls', ctx) || '')
       : groupModules.map(renderModuleItem).join('');
@@ -1225,11 +1767,15 @@
   function renderModuleItem(module) {
     const description = SETTING_HELP[module.id] || (module.details || []).map(detail => detail.text).join(' ') || module.subtitle || '';
     const title = SETTING_TITLES[module.id] || module.title;
-    if (module.stateKey) return renderCheckboxRow({
+    if (module.stateKey) {
+      const row = renderCheckboxRow({
       id: module.id, title, description, key: module.stateKey,
       extra: `data-sl-module-id="${html(module.id)}"`, moduleId: module.id,
       heading: module.id === 'response-recovery' ? 'h2' : '', card: false
-    });
+      });
+      const controls = callModule(module, 'renderControls', ctx) || '';
+      return row + controls;
+    }
     return `<div class="sl-setting-tool ${module.id === 'chat-export' ? 'sl-setting-export' : ''}" data-sl-module-item="${html(module.id)}" data-sl-search-item data-sl-search="${html(module.title + ' ' + title + ' ' + description)}">
       <div class="sl-setting-copy"><h3 class="sl-setting-label" id="sl-setting-${html(module.id)}">${html(title)}</h3><p class="${module.id === 'default-profile' ? 'sl-sr-only' : 'sl-setting-help'}" id="sl-help-${html(module.id)}">${html(description)}</p></div>
       ${callModule(module, 'renderControls', ctx) || ''}
@@ -1286,6 +1832,7 @@
   }
 
   function bindModalEvents() {
+    bindThemeTabEvents(modalEl?.querySelector('[data-sl-tab-content="theme"]'));
     if (!modalEl) return;
     let navOwnsFocus = false;
     modalEl.addEventListener('focusin', event => {
@@ -1392,11 +1939,24 @@
 
     const accountFrame = modalEl.querySelector('[data-sl-account-frame]');
     const catalogFrames = [...modalEl.querySelectorAll('[data-sl-catalog-frame]')];
+    modalEl.querySelectorAll('[data-sl-private-frame-retry]').forEach(button => {
+      modalScope?.listen(button, 'click', () => {
+        const page = button.closest('[data-sl-tab-content]');
+        if (page?.dataset.slTabContent !== activeTab) return;
+        const frame = page.querySelector('iframe');
+        if (!frame || readyAccountFrames.has(frame) || readyCatalogFrames.has(frame)) return;
+        const loading = privateFrameLoads.get(frame);
+        if (loading) { loading.cancel?.(); loading.cancel = null; loading.failed = false; }
+        frame.setAttribute('src', frame.dataset.src);
+        updatePrivateFrameLoading();
+        privateFrameStatus(frame)?.focus({ preventScroll: true });
+      });
+    });
     if (catalogFrames.length && modalScope) {
       const origin = new URL(chrome.runtime.getURL('account/catalog.html')).origin;
       modalScope.listen(window, 'message', event => {
         if (!event.isTrusted || event.origin !== origin || event.data?.type !== 'slCatalogUi') return;
-        const frame = catalogFrames.find(item => item.dataset.slCatalogFrame === activeTab && event.source === item.contentWindow);
+        const frame = catalogFrames.find(item => (item.dataset.slCatalogFrame === activeTab || event.data.action === 'resize') && event.source === item.contentWindow);
         if (!frame) return;
         const action = event.data.action;
         if (action === 'preview-theme') { startThemePreview(frame, event.data); return; }
@@ -1409,6 +1969,7 @@
           const height = event.data.height;
           if (!Number.isInteger(height) || height < 1 || height > 10000) return;
           readyCatalogFrames.add(frame);
+          markPrivateFrameReady(frame);
           frame.style.height = height + 'px';
           sendCatalogViewport();
           sendCatalogSearch();
@@ -1426,15 +1987,15 @@
         }
       });
       catalogFrames.forEach(frame => modalScope.listen(frame, 'load', sendCatalogViewport));
-      const observer = new MutationObserver(updateAccountFrame);
-      modalScope.observe(observer, document.body, { attributes: true, attributeFilter: ['class'] });
+      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
       modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendCatalogViewport, { passive: true });
       modalScope.listen(window, 'resize', sendCatalogViewport);
     }
     if (accountFrame && modalScope) {
       const accountOrigin = new URL(chrome.runtime.getURL('account/account.html')).origin;
       modalScope.listen(window, 'message', event => {
-        if (!event.isTrusted || activeTab !== 'account' || event.source !== accountFrame.contentWindow || event.origin !== accountOrigin || event.data?.type !== 'slAccountUi') return;
+        if (!event.isTrusted || event.source !== accountFrame.contentWindow || event.origin !== accountOrigin || event.data?.type !== 'slAccountUi' ||
+            activeTab !== 'account' && event.data.action !== 'resize') return;
         if (isSettingsMenuOpen() && ['close', 'focus-next', 'focus-previous'].includes(event.data.action)) {
           if (event.data.action === 'close') closeSettingsMenu();
           return;
@@ -1449,6 +2010,7 @@
           const height = event.data.height;
           if (!Number.isInteger(height) || height < 1 || height > 10000) return;
           readyAccountFrames.add(accountFrame);
+          markPrivateFrameReady(accountFrame);
           accountFrame.style.height = height + 'px';
           sendAccountViewport();
         } else if (event.data.action === 'dialog-open' || event.data.action === 'dialog-close') {
@@ -1463,8 +2025,7 @@
           focusable[(index + step + focusable.length) % focusable.length]?.focus();
         }
       });
-      const themeObserver = new MutationObserver(updateAccountFrame);
-      modalScope.observe(themeObserver, document.body, { attributes: true, attributeFilter: ['class'] });
+      modalScope.add(observe(document.body, { attributes: true, attributeFilter: ['class'] }, updateAccountFrame));
       modalScope.listen(accountFrame, 'load', sendAccountViewport);
       modalScope.listen(modalEl.querySelector('.sl-dialog-body'), 'scroll', sendAccountViewport, { passive: true });
       modalScope.listen(window, 'resize', () => {
@@ -1556,8 +2117,7 @@
     });
     modalEl.querySelectorAll('[data-sl-tab-content]').forEach(content => {
       const page = content.dataset.slTabContent;
-      const studio = GROUPS.some(group => group.tabId === page);
-      content.hidden = !(page === activeTab || (activeTab === 'all' && studio));
+      content.hidden = page !== activeTab;
     });
     const shell = modalEl.querySelector('.sl-dialog');
     shell?.classList.toggle('sl-settings-home', activeTab === 'home');
@@ -1580,6 +2140,7 @@
     if (title) title.textContent = tab?.label || 'Search results';
     if (description) description.textContent = tab?.description || 'Search across Google AI Studio and Studio.lab.';
     updateAccountFrame();
+    updatePrivateFrameLoading();
   }
 
   function scrollActiveTabIntoView() {
@@ -1636,13 +2197,13 @@
   function settingsSearchIndex() {
     const entries = [], seen = new Set();
     const aliases = {
-      'response-recovery': 'recovery interrupted відповідь відновлення', optimizer: 'optimizer optimization turns chat оптимізація ліміт повідомлення чат',
-      'optimizer-hard': 'automatic manual turn limit keep turns ліміт повідомлень автоматичний',
-      'modern-web-chat': 'layout appearance chat інтерфейс вигляд чат',
-      'chat-export': 'download conversation markdown json export завантажити експорт чат',
-      'default-profile': 'model system prompt instruction default profile defaults модель інструкція промпт',
-      'draft-saver': 'draft save чернетка зберегти', 'word-counter': 'words characters counter слова символи',
-      'text-formatter': 'markdown formatting текст форматування', 'telemetry-blocker': 'privacy analytics телеметрія приватність'
+      'response-recovery': 'recovery interrupted', optimizer: 'optimizer optimization turns chat',
+      'optimizer-hard': 'automatic manual turn limit keep turns',
+      'modern-web-chat': 'layout appearance chat',
+      'chat-export': 'download conversation markdown json export',
+      'default-profile': 'model system prompt instruction default profile defaults',
+      'draft-saver': 'draft save', 'word-counter': 'words characters counter',
+      'text-formatter': 'markdown formatting', 'telemetry-blocker': 'privacy analytics'
     };
     const add = (tab, title, help, target, words = '') => {
       if (!title) return;
@@ -1662,7 +2223,9 @@
       }
       if (hidden) continue;
       const title = label?.textContent?.trim();
-      const help = item.querySelector('.sl-setting-help, .sl-sr-only')?.textContent?.trim() || '';
+      const helpNode = [...item.querySelectorAll('.sl-setting-help, .sl-sr-only')]
+        .find(node => node.closest('[data-sl-search-item], .sl-setting-row') === item);
+      const help = helpNode?.textContent?.trim() || '';
       const module = item.dataset.slModuleItem || section.dataset.slSection;
       add(section.dataset.slTabContent, title, help, item,
         `${item.dataset.slSearch || ''} ${aliases[module] || ''} ${section.dataset.slSection} Studio.lab`);
@@ -1679,16 +2242,16 @@
       const title = item.querySelector('.setting-label, .title, label')?.textContent?.trim();
       const help = item.querySelector('.setting-description')?.textContent?.trim() || '';
       add('native', title, help, item, 'Google AI Studio GAIS ' +
-        (/theme/i.test(title || '') ? 'appearance light dark system тема вигляд світла темна' :
-          /submit/i.test(title || '') ? 'shortcut enter keyboard клавіатура клавіша' :
-            /autocomplete/i.test(title || '') ? 'completion text автодоповнення' :
-              /notification/i.test(title || '') ? 'сповіщення' : /microphone/i.test(title || '') ? 'мікрофон' : ''));
+        (/theme/i.test(title || '') ? 'appearance light dark system' :
+          /submit/i.test(title || '') ? 'shortcut enter keyboard' :
+            /autocomplete/i.test(title || '') ? 'completion text' :
+              /notification/i.test(title || '') ? '' : /microphone/i.test(title || '') ? '' : ''));
     }
     // Private-frame contents and account identity never become host-page search data.
     for (const tab of TABS.filter(tab => ['market', 'account', 'info', 'native'].includes(tab.id))) {
-      const words = tab.id === 'market' ? 'theme themes colors create library install download community system prompts instructions тема теми кольори створити бібліотека маркет промпт інструкції'
-        : tab.id === 'account' ? 'Google sign in sync cloud backup security sign out delete account акаунт вхід синхронізація безпека видалити'
-          : tab.id === 'info' ? 'version diagnostics privacy updates версія діагностика приватність оновлення' : 'GAIS Google preferences';
+      const words = tab.id === 'market' ? 'theme themes colors create library install download community system prompts instructions'
+        : tab.id === 'account' ? 'Google sign in sync cloud backup security sign out delete account'
+          : tab.id === 'info' ? 'version diagnostics privacy updates' : 'GAIS Google preferences';
       add(tab.id, tab.label, tab.description, null, words);
     }
     return entries;
@@ -1703,10 +2266,9 @@
     const focusedKey = document.activeElement?.dataset?.slSearchResult;
     list.replaceChildren();
     for (const entry of entries) {
-      const li = document.createElement('li'), button = document.createElement('button');
+      const li = el('<li></li>');
+      const button = el('<button type="button" class="sl-settings-result"></button>');
       const page = TABS.find(tab => tab.id === entry.tab)?.label || 'Studio.lab';
-      button.type = 'button';
-      button.className = 'sl-settings-result';
       button.dataset.slSearchResult = entry.key;
       button.dataset.slSearchDestination = entry.tab;
       button.innerHTML = `<span class="sl-setting-copy"><span class="sl-setting-result-page">${html(page)}</span><span class="sl-setting-label">${html(entry.title)}</span>${entry.help ? `<span class="sl-setting-help">${html(entry.help)}</span>` : ''}</span>${renderIcon('arrow_outward', 'plain')}`;
@@ -1765,12 +2327,12 @@
     const sel = (window.StudioLab && window.StudioLab.SELECTORS) 
       ? window.StudioLab.SELECTORS.CHAT_TURN 
       : 'ms-chat-turn';
-    return Array.from(document.querySelectorAll(sel)).filter(turn => !turn.hasAttribute('data-sl-buffered-turn')).length;
+    return $$(sel).filter(turn => !turn.hasAttribute('data-sl-buffered-turn')).length;
   }
 
   function getDiagnostics() {
-    const ngVersion = document.querySelector('[ng-version]')?.getAttribute('ng-version') || 
-                      document.querySelector('app-root')?.getAttribute('ng-version') || 
+    const ngVersion = $('[ng-version]')?.getAttribute('ng-version') ||
+                      $('app-root')?.getAttribute('ng-version') ||
                       'Not detected';
 
     const criticalSelectors = {
@@ -1788,7 +2350,7 @@
     const domCheck = {};
     let missingCount = 0;
     for (const [name, sel] of Object.entries(criticalSelectors)) {
-      const foundNodes = document.querySelectorAll(sel);
+      const foundNodes = $$(sel);
       domCheck[name] = {
         selector: sel,
         found: foundNodes.length > 0,
@@ -1891,7 +2453,7 @@
     if (handleSettingsMenuKey(event)) return;
     // A native popup or a second CDK dialog owns its own Escape and focus trap.
     const nativeHost = nativeSettings?.getHost()?.container;
-    const nativePopup = [...document.querySelectorAll('.cdk-overlay-container [role="listbox"], .cdk-overlay-container [role="menu"], .cdk-overlay-container [role="dialog"], .sl-update-popup')]
+    const nativePopup = $$('.cdk-overlay-container [role="listbox"], .cdk-overlay-container [role="menu"], .cdk-overlay-container [role="dialog"], .sl-update-popup')
       .some(node => node !== nativeHost && !modalEl?.contains(node) && node.getClientRects().length);
     if (nativePopup) return;
     if (event.key === 'Escape') closeModal();

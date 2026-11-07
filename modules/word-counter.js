@@ -2,9 +2,10 @@
   'use strict';
 
   if (!window.StudioLab || typeof window.StudioLab.registerModule !== 'function') return;
+  const { $, $$, el, observe } = window.StudioLabCore;
 
   let ctxRef = null;
-  let observer = null;
+  let disposeObserver = null;
   let bodyTimer = null;
   let routeTimer = null;
   let frameId = null;
@@ -51,7 +52,7 @@
   }
 
   function startObserver() {
-    if (observer || bodyTimer !== null) return;
+    if (disposeObserver || bodyTimer !== null) return;
 
     const run = () => {
       bodyTimer = null;
@@ -61,7 +62,11 @@
         return;
       }
 
-      observer = new MutationObserver((mutations) => {
+      disposeObserver = observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      }, (mutations) => {
         if (!isActive()) return;
 
         const targets = new Set();
@@ -77,17 +82,11 @@
             if (node.nodeType !== 1) continue;
             const addedTurn = node.closest?.(turnSel);
             if (addedTurn) targets.add(addedTurn);
-            node.querySelectorAll?.(turnSel).forEach(item => targets.add(item));
+            $$(turnSel, node).forEach(item => targets.add(item));
           }
         });
 
         targets.forEach(turn => queueTurnUpdate(turn));
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
       });
 
       updateAllTurns();
@@ -136,8 +135,10 @@
   }
 
   function stop() {
-    if (observer) observer.disconnect();
-    observer = null;
+    if (disposeObserver) {
+      disposeObserver();
+      disposeObserver = null;
+    }
     clearTimeout(bodyTimer);
     bodyTimer = null;
     clearTimeout(routeTimer);
@@ -148,7 +149,7 @@
 
   function updateAllTurns() {
     const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
-    const turns = document.querySelectorAll(turnSel);
+    const turns = $$(turnSel);
     for (let index = turns.length - 1; index >= 0; index--) {
       if (!priorityTurns.has(turns[index])) pendingTurns.add(turns[index]);
     }
@@ -156,7 +157,7 @@
   }
 
   function removeCounters() {
-    document.querySelectorAll('.sl-word-counter').forEach(element => element.remove());
+    $$('.sl-word-counter').forEach(element => element.remove());
   }
 
   function readChunkText(chunk) {
@@ -182,39 +183,39 @@
     if (!isActive()) return;
 
     // The container retains the role when .author-label is missing.
-    const container = turnNode.querySelector('.chat-turn-container');
+    const container = $('.chat-turn-container', turnNode);
     if (!container) return;
     const isModel = container.classList.contains('model');
     const isUser = !isModel && (container.classList.contains('user') ||
-      container.querySelector('[data-turn-role="User"]'));
+      $('[data-turn-role="User"]', container));
     if (!isModel && !isUser) return;
 
-    let header = turnNode.querySelector('.author-label');
+    let header = $('.author-label', turnNode);
     if (!header && isModel) {
       // A preceding thinking turn may own the model's author label.
       const prev = turnNode.previousElementSibling;
       const turnSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.CHAT_TURN : 'ms-chat-turn';
       if (prev && prev.tagName === turnSel.toUpperCase()) {
-        header = prev.querySelector('.author-label');
+        header = $('.author-label', prev);
       }
     }
     if (!header) return;
 
     const next = turnNode.nextElementSibling;
-    if (isModel && next?.matches?.('ms-chat-turn') && !next.querySelector('.author-label') &&
-        next.querySelector('.chat-turn-container')?.classList.contains('model')) {
+    if (isModel && next?.matches?.('ms-chat-turn') && !$('.author-label', next) &&
+        $('.chat-turn-container', next)?.classList.contains('model')) {
       // The following answer owns the label shared with its thinking turn.
-      if (!header.querySelector('.sl-word-counter')) queueTurnUpdate(next);
+      if (!$('.sl-word-counter', header)) queueTurnUpdate(next);
       return;
     }
 
     const textSel = window.StudioLab.SELECTORS ? window.StudioLab.SELECTORS.TEXT_CHUNK : 'ms-text-chunk';
-    const textChunks = turnNode.querySelectorAll(textSel);
+    const textChunks = $$(textSel, turnNode);
     const parts = [];
     textChunks.forEach(chunk => {
       // Native ms-prompt-chunk.text-chunk can wrap ms-text-chunk. Count only
       // the innermost matching chunk so the wrapper's text is not duplicated.
-      if (chunk.querySelector?.(textSel)) return;
+      if ($(textSel, chunk)) return;
       const t = readChunkText(chunk);
       if (t) parts.push(t);
     });
@@ -227,27 +228,24 @@
     const charsCount = trimmed.length;
 
     if (wordsCount === 0 && charsCount === 0) {
-      const existing = header.querySelector('.sl-word-counter');
+      const existing = $('.sl-word-counter', header);
       if (existing) existing.remove();
       return;
     }
 
-    let badge = header.querySelector('.sl-word-counter');
+    let badge = $('.sl-word-counter', header);
     if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'sl-word-counter';
+      badge = el('<span class="sl-word-counter"></span>');
       header.appendChild(badge);
     }
 
-    let wordsElement = badge.querySelector('.sl-word-counter-words');
-    let charsElement = badge.querySelector('.sl-word-counter-chars');
+    let wordsElement = $('.sl-word-counter-words', badge);
+    let charsElement = $('.sl-word-counter-chars', badge);
     if (!wordsElement || !charsElement) {
       // Migrate older text-only badges without leaving a literal bullet in copied text.
       badge.textContent = '';
-      wordsElement = document.createElement('span');
-      wordsElement.className = 'sl-word-counter-words';
-      charsElement = document.createElement('span');
-      charsElement.className = 'sl-word-counter-chars';
+      wordsElement = el('<span class="sl-word-counter-words"></span>');
+      charsElement = el('<span class="sl-word-counter-chars"></span>');
       badge.append(wordsElement, charsElement);
     }
 
